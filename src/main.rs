@@ -1,16 +1,24 @@
-use sqlparser::dialect::GenericDialect;
-use sqlparser::parser::Parser;
+mod db;
+mod parser;
 
-fn test_sql_parser() {
-    let dialect = GenericDialect {};
-    let sql = "SELECT a, b, 123, myfunc(b) \
-           FROM table_1 \
-           WHERE a > b AND b < 100 \
-           ORDER BY a DESC, b";
-    let ast = Parser::parse_sql(&dialect, sql).unwrap();
-    println!("AST: {:?}", ast);
-}
+use crate::db::NaiveDB;
+use std::io::{self, Write};
 
 fn main() {
-    test_sql_parser();
+    env_logger::init();
+    let db = NaiveDB {};
+    loop {
+        print!("navie_db > ");
+        io::stdout().flush().unwrap();
+        let mut sql = String::new();
+        io::stdin().read_line(&mut sql).unwrap();
+        match db.run(&sql) {
+            Ok(()) => {
+                todo!();
+            }
+            Err(err) => {
+                println!("Error: {}", err.to_string());
+            }
+        }
+    }
 }
