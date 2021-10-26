@@ -33,6 +33,7 @@ impl DiskManager {
         self.file.write_all(&page.buffer)?;
         Ok(())
     }
+    // TODO: support deallocate
     #[allow(dead_code)]
     pub fn allocate(&mut self) -> Result<page::Page, StorageError> {
         let meta = self.file.metadata()?;
@@ -54,5 +55,38 @@ impl DiskManager {
         let len = meta.len();
         assert_eq!(len % (PAGE_SIZE as u64), 0);
         Ok((len / (PAGE_SIZE as u64)) as usize)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::remove_file;
+    use rand::Rng;
+
+    #[test]
+    fn create_write_read_test() {
+        // clear the fs
+        let _ = remove_file(DEFAULT_DB_FILE);
+        // create disk manager
+        let mut disk_manager = DiskManager::create().unwrap();
+        // allocate three pages
+        let mut page1 = disk_manager.allocate().unwrap();
+        let mut page2 = disk_manager.allocate().unwrap();
+        let mut page3 = disk_manager.allocate().unwrap();
+        // write random values
+        let mut rng = rand::thread_rng();
+        for i in 0..PAGE_SIZE {
+            let p1 = rng.gen::<u8>(); 
+            let p2 = rng.gen::<u8>();
+            page1.buffer[i] = p1;
+            page2.buffer[i] = p2;
+            page3.buffer[i] = p1 ^ p2;
+        }
+        // write back
+        disk_manager.write(&page1).unwrap();
+        disk_manager.write(&page2).unwrap();
+        disk_manager.write(&page3).unwrap();
+        // TODO impl read and check
     }
 }

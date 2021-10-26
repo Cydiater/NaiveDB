@@ -5,3 +5,5 @@ pub struct Page {
     pub is_dirty: bool,
     pub buffer: [u8; PAGE_SIZE],
 }
+
+// TODO impl reset mem

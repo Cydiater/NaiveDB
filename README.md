@@ -4,6 +4,8 @@ Yet another simple relational database written in rust.
 
 ## Architecture
 
+The NaiveDB is designed to be running in one single thread, so I do not need to worry about things like lock and concurrency control.
+
 TBD
 
 ## Storage
