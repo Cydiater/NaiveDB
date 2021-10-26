@@ -1,5 +1,6 @@
 mod db;
 mod parser;
+mod storage;
 
 use crate::db::NaiveDB;
 use std::io::{self, Write};

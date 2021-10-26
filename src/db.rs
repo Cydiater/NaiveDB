@@ -7,10 +7,7 @@ pub struct NaiveDB;
 
 impl NaiveDB {
     pub fn run(&self, sql: &str) -> Result<(), NaiveDBError> {
-        let ast = match parse(sql) {
-            Ok(ast) => ast,
-            Err(parse_err) => return Err(NaiveDBError::Parse(parse_err)),
-        };
+        let ast = parse(sql)?;
         info!("Parse to AST {:?}", ast);
         Ok(())
     }
