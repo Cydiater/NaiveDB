@@ -1,6 +1,6 @@
 # NaiveDB
 
-Yet another simple relational database written in rust.
+Yet another simple relational disk-oriented database written in rust.
 
 ## Architecture
 
