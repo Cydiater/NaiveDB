@@ -61,8 +61,8 @@ impl DiskManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs::remove_file;
     use rand::Rng;
+    use std::fs::remove_file;
 
     #[test]
     fn create_write_read_test() {
@@ -77,7 +77,7 @@ mod tests {
         // write random values
         let mut rng = rand::thread_rng();
         for i in 0..PAGE_SIZE {
-            let p1 = rng.gen::<u8>(); 
+            let p1 = rng.gen::<u8>();
             let p2 = rng.gen::<u8>();
             page1.buffer[i] = p1;
             page2.buffer[i] = p2;
@@ -85,8 +85,26 @@ mod tests {
         }
         // write back
         disk_manager.write(&page1).unwrap();
+        let id1 = page1.id;
+        page1.clear();
         disk_manager.write(&page2).unwrap();
+        let id2 = page2.id;
+        page2.clear();
         disk_manager.write(&page3).unwrap();
-        // TODO impl read and check
+        let id3 = page3.id;
+        page3.clear();
+        // read again
+        disk_manager.read(id1, &mut page1).unwrap();
+        disk_manager.read(id2, &mut page2).unwrap();
+        disk_manager.read(id3, &mut page3).unwrap();
+        // validate
+        for i in 0..PAGE_SIZE {
+            let p1 = page1.buffer[i];
+            let p2 = page2.buffer[i];
+            let p3 = page3.buffer[i];
+            assert_eq!(p1 ^ p2, p3);
+        }
+        // clear
+        remove_file(DEFAULT_DB_FILE).unwrap();
     }
 }

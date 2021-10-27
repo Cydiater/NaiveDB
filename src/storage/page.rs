@@ -6,4 +6,11 @@ pub struct Page {
     pub buffer: [u8; PAGE_SIZE],
 }
 
-// TODO impl reset mem
+impl Page {
+    #[allow(dead_code)]
+    pub fn clear(&mut self) {
+        self.id = 0;
+        self.buffer.fill(0);
+        self.is_dirty = false;
+    }
+}
