@@ -9,7 +9,7 @@ pub struct DiskManager {
 
 impl DiskManager {
     #[allow(dead_code)]
-    pub fn create() -> Result<Self, StorageError> {
+    pub fn new() -> Result<Self, StorageError> {
         let file = OpenOptions::new()
             .read(true)
             .write(true)
@@ -23,14 +23,14 @@ impl DiskManager {
         self.file.seek(SeekFrom::Start(offset as u64))?;
         page.page_id = page_id;
         page.is_dirty = false;
-        self.file.read_exact(&mut page.buffer)?;
+        self.file.read_exact(page.buffer.as_mut())?;
         Ok(())
     }
     #[allow(dead_code)]
-    pub fn write(&mut self, page: &page::Page) -> Result<(), StorageError> {
+    pub fn write(&mut self, page: &mut page::Page) -> Result<(), StorageError> {
         let offset = page.page_id * PAGE_SIZE;
         self.file.seek(SeekFrom::Start(offset as u64))?;
-        self.file.write_all(&page.buffer)?;
+        self.file.write_all(page.buffer.as_mut())?;
         Ok(())
     }
     // TODO: support deallocate
@@ -42,10 +42,11 @@ impl DiskManager {
         self.file.set_len((len + PAGE_SIZE) as u64)?;
         let page_id = len / PAGE_SIZE;
         let mut buffer = [0u8; PAGE_SIZE];
-        self.file.read_exact(&mut buffer)?;
+        self.file.read_exact(buffer.as_mut())?;
         Ok(page::Page {
             page_id,
             is_dirty: false,
+            pin_count: 0,
             buffer,
         })
     }
@@ -69,7 +70,7 @@ mod tests {
         // clear the fs
         let _ = remove_file(DEFAULT_DB_FILE);
         // create disk manager
-        let mut disk_manager = DiskManager::create().unwrap();
+        let mut disk_manager = DiskManager::new().unwrap();
         // allocate three pages
         let mut page1 = disk_manager.allocate().unwrap();
         let mut page2 = disk_manager.allocate().unwrap();
@@ -84,13 +85,13 @@ mod tests {
             page3.buffer[i] = p1 ^ p2;
         }
         // write back
-        disk_manager.write(&page1).unwrap();
+        disk_manager.write(&mut page1).unwrap();
         let id1 = page1.page_id;
         page1.clear();
-        disk_manager.write(&page2).unwrap();
+        disk_manager.write(&mut page2).unwrap();
         let id2 = page2.page_id;
         page2.clear();
-        disk_manager.write(&page3).unwrap();
+        disk_manager.write(&mut page3).unwrap();
         let id3 = page3.page_id;
         page3.clear();
         // read again
