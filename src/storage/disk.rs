@@ -21,14 +21,14 @@ impl DiskManager {
     pub fn read(&mut self, page_id: PageID, page: &mut page::Page) -> Result<(), StorageError> {
         let offset = (page_id as usize) * PAGE_SIZE;
         self.file.seek(SeekFrom::Start(offset as u64))?;
-        page.id = page_id;
+        page.page_id = page_id;
         page.is_dirty = false;
         self.file.read_exact(&mut page.buffer)?;
         Ok(())
     }
     #[allow(dead_code)]
     pub fn write(&mut self, page: &page::Page) -> Result<(), StorageError> {
-        let offset = (page.id as usize) * PAGE_SIZE;
+        let offset = page.page_id * PAGE_SIZE;
         self.file.seek(SeekFrom::Start(offset as u64))?;
         self.file.write_all(&page.buffer)?;
         Ok(())
@@ -37,14 +37,14 @@ impl DiskManager {
     #[allow(dead_code)]
     pub fn allocate(&mut self) -> Result<page::Page, StorageError> {
         let meta = self.file.metadata()?;
-        let len = meta.len();
-        assert_eq!(len % (PAGE_SIZE as u64), 0);
-        self.file.set_len(len + PAGE_SIZE as u64)?;
-        let id = len / (PAGE_SIZE as u64);
+        let len = meta.len() as usize;
+        assert_eq!(len % PAGE_SIZE, 0);
+        self.file.set_len((len + PAGE_SIZE) as u64)?;
+        let page_id = len / PAGE_SIZE;
         let mut buffer = [0u8; PAGE_SIZE];
         self.file.read_exact(&mut buffer)?;
         Ok(page::Page {
-            id,
+            page_id,
             is_dirty: false,
             buffer,
         })
@@ -85,13 +85,13 @@ mod tests {
         }
         // write back
         disk_manager.write(&page1).unwrap();
-        let id1 = page1.id;
+        let id1 = page1.page_id;
         page1.clear();
         disk_manager.write(&page2).unwrap();
-        let id2 = page2.id;
+        let id2 = page2.page_id;
         page2.clear();
         disk_manager.write(&page3).unwrap();
-        let id3 = page3.id;
+        let id3 = page3.page_id;
         page3.clear();
         // read again
         disk_manager.read(id1, &mut page1).unwrap();
