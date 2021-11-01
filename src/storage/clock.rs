@@ -2,9 +2,9 @@ use super::{FrameID, PageID, StorageError};
 
 #[derive(Clone, Default)]
 struct ClockItem {
-    /// mark wheather this frame is unpinned after last handle slided
+    /// mark whether this frame is unpinned after last handle slide
     ref_bit: bool,
-    /// mark wheather the frame is under using
+    /// mark whether the frame is under using
     pinned: bool,
 }
 
@@ -53,6 +53,12 @@ impl ClockReplacer {
         }
     }
 
+    pub fn erase(&mut self) {
+        self.handle = 0;
+        self.num_unpinned = self.clock.len();
+        self.clock.fill(ClockItem::default());
+    }
+
     /// we only unpin a frame when the pin count is 0
     pub fn unpin(&mut self, frame_id: FrameID) {
         assert!(frame_id < self.clock.len());
@@ -68,7 +74,7 @@ impl ClockReplacer {
         }
     }
 
-    /// advane the clock handle, return the old handle
+    /// advance the clock handle, return the old handle
     fn advance(&mut self) -> usize {
         let handle = self.handle;
         self.handle += 1;
