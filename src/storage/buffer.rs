@@ -137,9 +137,9 @@ mod tests {
         bpm.unpin(page_id2).unwrap();
         bpm.unpin(page_id3).unwrap();
         // refetch, but in reverse order
-        let page1 = bpm.fetch(page_id1).unwrap();
-        let page2 = bpm.fetch(page_id2).unwrap();
         let page3 = bpm.fetch(page_id3).unwrap();
+        let page2 = bpm.fetch(page_id2).unwrap();
+        let page1 = bpm.fetch(page_id1).unwrap();
         // validate
         for i in 0..PAGE_SIZE {
             let p1 = page1.borrow().buffer[i];
