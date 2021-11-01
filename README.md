@@ -19,6 +19,13 @@ The most basic job of our database is to manage the storage, including the user 
 - `data` store the raw binary of the page, sized about 4KB
 - `is_dirty` used by Buffer Pool Manager, to mark wheather this page is needed to write back to disk
 - `page_id` the id of this page, from this id we can calculate the offset of this page in disk
+- `pin_count` the number of times the database engine using this page
+
+`PageRef` is essitially the `Rc<RefCell<Page>>`, we use this form to maintain the shared mutable refernece. For more information about shared mutable reference, please refer to https://doc.rust-lang.org/std/cell/index.html#introducing-mutability-inside-of-something-immutable.
+
+### Buffer Pool Manager
+
+Buffer Pool Manager(BPM) manage the page in memory. You can see this as the cache between the disk and our execution engine.
 
 ### Disk Manager
 
