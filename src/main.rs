@@ -5,6 +5,10 @@ mod storage;
 use crate::db::NaiveDB;
 use std::io::{self, Write};
 
+#[macro_use]
+extern crate lalrpop_util;
+lalrpop_mod!(pub sql);
+
 fn main() {
     env_logger::init();
     let db = NaiveDB {};

@@ -1,8 +1,12 @@
-use sqlparser::ast::Statement;
-use sqlparser::dialect::GenericDialect;
-use sqlparser::parser::{Parser, ParserError};
+#[cfg(test)]
+mod tests {
+    use crate::sql;
 
-pub fn parse(sql: &str) -> Result<Vec<Statement>, ParserError> {
-    let dialect = GenericDialect {};
-    Parser::parse_sql(&dialect, sql)
+    #[test]
+    fn sql() {
+        assert!(sql::TermParser::new().parse("22").is_ok());
+        assert!(sql::TermParser::new().parse("(22)").is_ok());
+        assert!(sql::TermParser::new().parse("((((22))))").is_ok());
+        assert!(sql::TermParser::new().parse("((22)").is_err());
+    }
 }
