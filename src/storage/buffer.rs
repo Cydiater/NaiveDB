@@ -36,6 +36,10 @@ impl BufferPoolManager {
         Ok(())
     }
 
+    pub fn clear(&mut self) -> Result<(), StorageError> {
+        self.disk.clear()
+    }
+
     pub fn fetch(&mut self, page_id: PageID) -> Result<PageRef, StorageError> {
         // if we can find this page in buffer
         if let Some(&frame_id) = self.page_table.get(&page_id) {
@@ -111,14 +115,18 @@ mod tests {
 
     #[test]
     fn write_read_test() {
-        // clear the fs
-        let _ = DiskManager::erase();
         // new a BPM
         let mut bpm = BufferPoolManager::new(5);
+        // clear content
+        bpm.clear().unwrap();
         // alloc 3 pages
         let page1 = bpm.alloc().unwrap();
         let page2 = bpm.alloc().unwrap();
         let page3 = bpm.alloc().unwrap();
+        // since it's empty, page_id should increase from 0
+        assert_eq!(page1.borrow().page_id.unwrap(), 0);
+        assert_eq!(page2.borrow().page_id.unwrap(), 1);
+        assert_eq!(page3.borrow().page_id.unwrap(), 2);
         // write random values
         let mut rng = rand::thread_rng();
         for i in 0..PAGE_SIZE {
@@ -147,5 +155,7 @@ mod tests {
             let p3 = page3.borrow().buffer[i];
             assert_eq!(p3, p1 ^ p2);
         }
+        // erase test file
+        let _ = DiskManager::erase();
     }
 }

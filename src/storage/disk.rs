@@ -1,11 +1,18 @@
 use super::*;
 use crate::storage::page::PageRef;
+use fs2::FileExt;
 use std::fs::{remove_file, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 
 #[allow(dead_code)]
 pub struct DiskManager {
     file: File,
+}
+
+impl Drop for DiskManager {
+    fn drop(&mut self) {
+        let _ = self.file.unlock();
+    }
 }
 
 #[allow(dead_code)]
@@ -16,10 +23,15 @@ impl DiskManager {
             .write(true)
             .create(true)
             .open(DEFAULT_DB_FILE)?;
+        file.lock_exclusive()?;
+
         Ok(DiskManager { file })
     }
     pub fn erase() -> Result<(), StorageError> {
         remove_file(DEFAULT_DB_FILE).map_err(StorageError::IOError)
+    }
+    pub fn clear(&mut self) -> Result<(), StorageError> {
+        self.file.set_len(0).map_err(StorageError::IOError)
     }
     pub fn read(&mut self, page_id: PageID, page: PageRef) -> Result<(), StorageError> {
         let offset = (page_id as usize) * PAGE_SIZE;
@@ -62,15 +74,14 @@ mod tests {
     use crate::storage::page::Page;
     use rand::Rng;
     use std::cell::RefCell;
-    use std::fs::remove_file;
     use std::rc::Rc;
 
     #[test]
     fn create_write_read_test() {
-        // clear the fs
-        let _ = DiskManager::erase();
-        // create disk manager
+        // new a disk manager
         let mut disk_manager = DiskManager::new().unwrap();
+        // clear content
+        disk_manager.clear().unwrap();
         // allocate three pages
         let page1 = Rc::new(RefCell::new(Page::new()));
         let page2 = Rc::new(RefCell::new(Page::new()));
@@ -78,6 +89,10 @@ mod tests {
         disk_manager.allocate(page1.clone()).unwrap();
         disk_manager.allocate(page2.clone()).unwrap();
         disk_manager.allocate(page3.clone()).unwrap();
+        // since it's empty, page_id should increase from 0
+        assert_eq!(page1.borrow().page_id.unwrap(), 0);
+        assert_eq!(page2.borrow().page_id.unwrap(), 1);
+        assert_eq!(page3.borrow().page_id.unwrap(), 2);
         // write random values
         let mut rng = rand::thread_rng();
         for i in 0..PAGE_SIZE {
@@ -108,7 +123,7 @@ mod tests {
             let p3 = page3.borrow_mut().buffer[i];
             assert_eq!(p1 ^ p2, p3);
         }
-        // clear
-        remove_file(DEFAULT_DB_FILE).unwrap();
+        // erase test file
+        let _ = DiskManager::erase();
     }
 }
