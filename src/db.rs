@@ -1,20 +1,18 @@
-use crate::parser::parse;
-use log::info;
-use sqlparser::parser::ParserError;
 use thiserror::Error;
+use crate::parser::parse;
 
 pub struct NaiveDB;
 
 impl NaiveDB {
     pub fn run(&self, sql: &str) -> Result<(), NaiveDBError> {
-        let ast = parse(sql)?;
-        info!("Parse to AST {:?}", ast);
+        parse(sql)?;
         Ok(())
     }
 }
 
+#[allow(dead_code)]
 #[derive(Error, Debug)]
 pub enum NaiveDBError {
-    #[error("{0}")]
-    Parse(#[from] ParserError),
+    #[error("ParseError: {0}")]
+    Parse(String),
 }
