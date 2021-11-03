@@ -1,5 +1,7 @@
 # NaiveDB
 
+![](./img/logo.jpg)
+
 Yet another simple relational disk-oriented database written in rust.
 
 ## Architecture
