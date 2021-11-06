@@ -41,6 +41,8 @@ impl DatabasePageBuffer {
                 return Err(PageError::OutOfRange);
             }
         }
+        // set end
+        buf[offset..(offset + 4)].copy_from_slice(&[0u8; 4]);
         Ok(Self { buf })
     }
     pub fn into_raw(self) -> [u8; PAGE_SIZE] {
@@ -59,18 +61,26 @@ impl DatabasePageBuffer {
         }
     }
     /// insert an record for database
-    pub fn insert(&mut self, _page_id: PageID, _db_name: String) -> Result<(), PageError> {
-        todo!()
+    pub fn insert(&mut self, page_id: PageID, db_name: String) -> Result<(), PageError> {
+        let mut last = 0;
+        for offset in self.iter() {
+            last = offset;
+        }
+        let len = db_name.len();
+        self.buf[last..last + 4].copy_from_slice(&(len as u32).to_le_bytes());
+        self.buf[last + 4..last + 8].copy_from_slice(&(page_id as u32).to_le_bytes());
+        self.buf[last + 8..last + 8 + len].copy_from_slice(db_name.as_bytes());
+        Ok(())
     }
     /// search the page_id for a database name
     pub fn find(&self, db_name: String) -> Option<PageID> {
         for offset in self.iter() {
-            let len = u32::from_be_bytes(self.buf[offset..offset + 4].try_into().unwrap());
+            let len = u32::from_le_bytes(self.buf[offset..offset + 4].try_into().unwrap());
             let this_db_name =
                 String::from_utf8_lossy(&self.buf[offset + 8..offset + 8 + len as usize]);
             if db_name == this_db_name {
                 let page_id =
-                    u32::from_be_bytes(self.buf[offset + 4..offset + 8].try_into().unwrap())
+                    u32::from_le_bytes(self.buf[offset + 4..offset + 8].try_into().unwrap())
                         as PageID;
                 return Some(page_id);
             }
@@ -89,12 +99,13 @@ impl Iterator for DatabasePageIter<'_> {
     type Item = usize;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let len = u32::from_be_bytes(self.buf[self.offset..self.offset + 4].try_into().unwrap());
+        let len = u32::from_le_bytes(self.buf[self.offset..self.offset + 4].try_into().unwrap());
         match len {
             0 => None,
             len => {
+                let offset = self.offset;
                 self.offset += 4 + 4 + len as usize;
-                Some(self.offset)
+                Some(offset)
             }
         }
     }
@@ -104,4 +115,25 @@ impl Iterator for DatabasePageIter<'_> {
 pub enum PageError {
     #[error("Out of Range")]
     OutOfRange,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_insert_find() {
+        let mut db_page = DatabasePageBuffer::from_slice(&[
+            (0usize, "sample_0".to_string()),
+            (1usize, "sample_1".to_string()),
+            (2usize, "sample_2".to_string()),
+        ])
+        .unwrap();
+        assert_eq!(db_page.find("sample_0".to_string()), Some(0usize));
+        assert_eq!(db_page.find("sample_1".to_string()), Some(1usize));
+        assert_eq!(db_page.find("sample_2".to_string()), Some(2usize));
+        assert_eq!(db_page.find("sample_3".to_string()), None);
+        db_page.insert(3usize, "sample_3".to_string()).unwrap();
+        assert_eq!(db_page.find("sample_3".to_string()), Some(3usize));
+    }
 }
