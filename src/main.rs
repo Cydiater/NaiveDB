@@ -1,3 +1,5 @@
+#![feature(vec_into_raw_parts)]
+
 mod db;
 mod parser;
 mod storage;
@@ -7,7 +9,7 @@ use std::io::{self, Write};
 
 #[macro_use]
 extern crate lalrpop_util;
-lalrpop_mod!(pub sql);
+lalrpop_mod!(#[allow(clippy::all)] pub sql);
 
 fn main() {
     env_logger::init();

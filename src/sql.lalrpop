@@ -15,17 +15,17 @@ Semicolon<T>: Vec<T> = {
     },
 };
 
-Statement: Box<Statement> = {
+Statement: Statement = {
     CreateDatabaseStmt,
     ShowDatabaseStmt,
 }
 
-CreateDatabaseStmt: Box<Statement> = {
-    CreateDatabaseToken <database_name:Identifier> ";" => Box::new(Statement::CreateDatabase { database_name }),
+CreateDatabaseStmt: Statement = {
+    CreateDatabaseToken <database_name:Identifier> ";" => Statement::CreateDatabase { database_name },
 };
 
-ShowDatabaseStmt: Box<Statement> = {
-    ShowDatabaseToken ";" => Box::new(Statement::ShowDatabase),
+ShowDatabaseStmt: Statement = {
+    ShowDatabaseToken ";" => Statement::ShowDatabase,
 }
 
 CreateDatabaseToken: Tok = {

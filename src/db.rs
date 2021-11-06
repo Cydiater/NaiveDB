@@ -1,5 +1,5 @@
-use thiserror::Error;
 use crate::parser::parse;
+use thiserror::Error;
 
 pub struct NaiveDB;
 

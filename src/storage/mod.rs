@@ -7,6 +7,7 @@ mod page;
 
 const PAGE_SIZE: usize = 4096;
 const DEFAULT_DB_FILE: &str = "naive.db";
+
 /// `PageID` is used to fetch page from disk, it's
 /// used internally as offset for disk.
 pub type PageID = usize;

@@ -33,6 +33,9 @@ impl DiskManager {
     pub fn clear(&mut self) -> Result<(), StorageError> {
         self.file.set_len(0).map_err(StorageError::IOError)
     }
+    /// Fetch content from disk to memory, the actual data should be
+    /// hold in the buffer pool, so we should NOT allocate memory in this
+    /// stage.
     pub fn read(&mut self, page_id: PageID, page: PageRef) -> Result<(), StorageError> {
         let offset = (page_id as usize) * PAGE_SIZE;
         self.file.seek(SeekFrom::Start(offset as u64))?;
@@ -44,7 +47,7 @@ impl DiskManager {
     pub fn write(&mut self, page: PageRef) -> Result<(), StorageError> {
         let offset = page.borrow_mut().page_id.unwrap() * PAGE_SIZE;
         self.file.seek(SeekFrom::Start(offset as u64))?;
-        self.file.write_all(page.borrow_mut().buffer.as_mut())?;
+        self.file.write_all(page.borrow_mut().buffer.as_raw())?;
         Ok(())
     }
     // TODO: support deallocate
@@ -98,9 +101,9 @@ mod tests {
         for i in 0..PAGE_SIZE {
             let p1 = rng.gen::<u8>();
             let p2 = rng.gen::<u8>();
-            page1.borrow_mut().buffer[i] = p1;
-            page2.borrow_mut().buffer[i] = p2;
-            page3.borrow_mut().buffer[i] = p1 ^ p2;
+            page1.borrow_mut().buffer.as_mut()[i] = p1;
+            page2.borrow_mut().buffer.as_mut()[i] = p2;
+            page3.borrow_mut().buffer.as_mut()[i] = p1 ^ p2;
         }
         // write back
         disk_manager.write(page1.clone()).unwrap();
@@ -118,9 +121,9 @@ mod tests {
         disk_manager.read(id3, page3.clone()).unwrap();
         // validate
         for i in 0..PAGE_SIZE {
-            let p1 = page1.borrow_mut().buffer[i];
-            let p2 = page2.borrow_mut().buffer[i];
-            let p3 = page3.borrow_mut().buffer[i];
+            let p1 = page1.borrow_mut().buffer.as_mut()[i];
+            let p2 = page2.borrow_mut().buffer.as_mut()[i];
+            let p3 = page3.borrow_mut().buffer.as_mut()[i];
             assert_eq!(p1 ^ p2, p3);
         }
         // erase test file

@@ -132,9 +132,9 @@ mod tests {
         for i in 0..PAGE_SIZE {
             let p1 = rng.gen::<u8>();
             let p2 = rng.gen::<u8>();
-            page1.borrow_mut().buffer[i] = p1;
-            page2.borrow_mut().buffer[i] = p2;
-            page3.borrow_mut().buffer[i] = p1 ^ p2;
+            page1.borrow_mut().buffer.as_mut()[i] = p1;
+            page2.borrow_mut().buffer.as_mut()[i] = p2;
+            page3.borrow_mut().buffer.as_mut()[i] = p1 ^ p2;
         }
         // save ids
         let page_id1 = page1.borrow().page_id.unwrap();
@@ -150,9 +150,9 @@ mod tests {
         let page1 = bpm.fetch(page_id1).unwrap();
         // validate
         for i in 0..PAGE_SIZE {
-            let p1 = page1.borrow().buffer[i];
-            let p2 = page2.borrow().buffer[i];
-            let p3 = page3.borrow().buffer[i];
+            let p1 = page1.borrow().buffer.as_raw()[i];
+            let p2 = page2.borrow().buffer.as_raw()[i];
+            let p3 = page3.borrow().buffer.as_raw()[i];
             assert_eq!(p3, p1 ^ p2);
         }
         // erase test file
