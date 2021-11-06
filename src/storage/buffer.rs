@@ -36,6 +36,10 @@ impl BufferPoolManager {
         Ok(())
     }
 
+    pub fn clear(&mut self) -> Result<(), StorageError> {
+        self.disk.clear()
+    }
+
     pub fn fetch(&mut self, page_id: PageID) -> Result<PageRef, StorageError> {
         // if we can find this page in buffer
         if let Some(&frame_id) = self.page_table.get(&page_id) {
@@ -111,22 +115,26 @@ mod tests {
 
     #[test]
     fn write_read_test() {
-        // clear the fs
-        let _ = DiskManager::erase();
         // new a BPM
         let mut bpm = BufferPoolManager::new(5);
+        // clear content
+        bpm.clear().unwrap();
         // alloc 3 pages
         let page1 = bpm.alloc().unwrap();
         let page2 = bpm.alloc().unwrap();
         let page3 = bpm.alloc().unwrap();
+        // since it's empty, page_id should increase from 0
+        assert_eq!(page1.borrow().page_id.unwrap(), 0);
+        assert_eq!(page2.borrow().page_id.unwrap(), 1);
+        assert_eq!(page3.borrow().page_id.unwrap(), 2);
         // write random values
         let mut rng = rand::thread_rng();
         for i in 0..PAGE_SIZE {
             let p1 = rng.gen::<u8>();
             let p2 = rng.gen::<u8>();
-            page1.borrow_mut().buffer[i] = p1;
-            page2.borrow_mut().buffer[i] = p2;
-            page3.borrow_mut().buffer[i] = p1 ^ p2;
+            page1.borrow_mut().buffer.as_mut()[i] = p1;
+            page2.borrow_mut().buffer.as_mut()[i] = p2;
+            page3.borrow_mut().buffer.as_mut()[i] = p1 ^ p2;
         }
         // save ids
         let page_id1 = page1.borrow().page_id.unwrap();
@@ -142,10 +150,12 @@ mod tests {
         let page1 = bpm.fetch(page_id1).unwrap();
         // validate
         for i in 0..PAGE_SIZE {
-            let p1 = page1.borrow().buffer[i];
-            let p2 = page2.borrow().buffer[i];
-            let p3 = page3.borrow().buffer[i];
+            let p1 = page1.borrow().buffer.as_raw()[i];
+            let p2 = page2.borrow().buffer.as_raw()[i];
+            let p3 = page3.borrow().buffer.as_raw()[i];
             assert_eq!(p3, p1 ^ p2);
         }
+        // erase test file
+        let _ = DiskManager::erase();
     }
 }
