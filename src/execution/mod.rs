@@ -1,19 +1,18 @@
 use crate::planner::Plan;
-use crate::storage::BufferPoolManager;
+use crate::storage::BufferPoolManagerRef;
 use catalog::Catalog;
 
 mod catalog;
 
-#[allow(dead_code)]
 pub struct Engine {
-    pub bpm: BufferPoolManager,
+    pub bpm: BufferPoolManagerRef,
     pub catalog: Catalog,
 }
 
 impl Engine {
-    pub fn new(buffer_size: usize) -> Self {
+    pub fn new(bpm: BufferPoolManagerRef) -> Self {
         Self {
-            bpm: BufferPoolManager::new(buffer_size),
+            bpm,
             catalog: Catalog {},
         }
     }

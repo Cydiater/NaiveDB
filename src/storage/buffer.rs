@@ -15,6 +15,8 @@ pub struct BufferPoolManager {
     page_table: HashMap<PageID, FrameID>,
 }
 
+pub type BufferPoolManagerRef = Rc<RefCell<BufferPoolManager>>;
+
 #[allow(dead_code)]
 impl BufferPoolManager {
     pub fn new(size: usize) -> Self {
