@@ -1,5 +1,5 @@
 use std::str::FromStr;
-use crate::parser::ast::{Statement, Tok};
+use crate::parser::ast::{Statement, Tok, CreateDatabaseStmt};
 
 grammar;
 
@@ -21,7 +21,7 @@ Statement: Statement = {
 }
 
 CreateDatabaseStmt: Statement = {
-    CreateDatabaseToken <database_name:Identifier> ";" => Statement::CreateDatabase { database_name },
+    CreateDatabaseToken <database_name:Identifier> ";" => Statement::CreateDatabase(CreateDatabaseStmt { database_name }),
 };
 
 ShowDatabaseStmt: Statement = {

@@ -2,6 +2,7 @@
 
 mod db;
 mod parser;
+mod planner;
 mod storage;
 
 use crate::db::NaiveDB;
