@@ -1,6 +1,7 @@
 #![feature(vec_into_raw_parts)]
 
 mod db;
+mod execution;
 mod parser;
 mod planner;
 mod storage;
@@ -14,9 +15,9 @@ lalrpop_mod!(#[allow(clippy::all)] pub sql);
 
 fn main() {
     env_logger::init();
-    let db = NaiveDB {};
+    let mut db = NaiveDB::new();
     loop {
-        print!("navie_db > ");
+        print!("naive_db > ");
         io::stdout().flush().unwrap();
         let mut sql = String::new();
         io::stdin().read_line(&mut sql).unwrap();
@@ -25,7 +26,7 @@ fn main() {
                 todo!();
             }
             Err(err) => {
-                println!("Error: {}", err.to_string());
+                println!("Error: {}", err);
             }
         }
     }

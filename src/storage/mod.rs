@@ -5,6 +5,8 @@ mod clock;
 mod disk;
 mod page;
 
+pub use buffer::BufferPoolManager;
+
 const PAGE_SIZE: usize = 4096;
 const DEFAULT_DB_FILE: &str = "naive.db";
 
