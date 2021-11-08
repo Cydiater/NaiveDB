@@ -87,7 +87,6 @@ impl BufferPoolManager {
         }
         Ok(())
     }
-
     pub fn alloc(&mut self) -> Result<PageRef, StorageError> {
         // ask replacer for a new frame_id
         let frame_id = self.replacer.victim()?;
@@ -109,7 +108,9 @@ impl BufferPoolManager {
         println!("alloc #{}", page.borrow().page_id.unwrap());
         Ok(page)
     }
-
+    pub fn num_pages(&self) -> Result<usize, StorageError> {
+        self.disk.num_pages()
+    }
     // TODO impl deallocate
 }
 

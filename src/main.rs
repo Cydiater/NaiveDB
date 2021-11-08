@@ -1,11 +1,13 @@
 #![feature(vec_into_raw_parts)]
 
 mod catalog;
-mod db;
 mod execution;
 mod parser;
 mod planner;
 mod storage;
+mod table;
+
+mod db;
 
 use crate::db::NaiveDB;
 use std::io::{self, Write};
