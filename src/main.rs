@@ -1,5 +1,6 @@
 #![feature(vec_into_raw_parts)]
 
+mod catalog;
 mod db;
 mod execution;
 mod parser;

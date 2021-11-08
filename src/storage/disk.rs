@@ -47,7 +47,7 @@ impl DiskManager {
     pub fn write(&mut self, page: PageRef) -> Result<(), StorageError> {
         let offset = page.borrow_mut().page_id.unwrap() * PAGE_SIZE;
         self.file.seek(SeekFrom::Start(offset as u64))?;
-        self.file.write_all(page.borrow_mut().buffer.as_raw())?;
+        self.file.write_all(&page.borrow_mut().buffer)?;
         Ok(())
     }
     // TODO: support deallocate

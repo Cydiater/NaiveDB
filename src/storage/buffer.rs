@@ -30,6 +30,9 @@ impl BufferPoolManager {
             page_table: HashMap::new(),
         }
     }
+    pub fn new_shared(size: usize) -> Rc<RefCell<Self>> {
+        Rc::new(RefCell::new(Self::new(size)))
+    }
 
     pub fn erase(&mut self) -> Result<(), StorageError> {
         DiskManager::erase()?;
@@ -103,6 +106,7 @@ impl BufferPoolManager {
         // update page table
         self.page_table
             .insert(page.borrow().page_id.unwrap(), frame_id);
+        println!("alloc #{}", page.borrow().page_id.unwrap());
         Ok(page)
     }
 
@@ -152,9 +156,9 @@ mod tests {
         let page1 = bpm.fetch(page_id1).unwrap();
         // validate
         for i in 0..PAGE_SIZE {
-            let p1 = page1.borrow().buffer.as_raw()[i];
-            let p2 = page2.borrow().buffer.as_raw()[i];
-            let p3 = page3.borrow().buffer.as_raw()[i];
+            let p1 = page1.borrow().buffer[i];
+            let p2 = page2.borrow().buffer[i];
+            let p3 = page3.borrow().buffer[i];
             assert_eq!(p3, p1 ^ p2);
         }
         // erase test file

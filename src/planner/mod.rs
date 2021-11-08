@@ -5,7 +5,7 @@ mod create_database;
 
 pub enum Plan {
     CreateDatabase(CreateDatabasePlan),
-    ShowDatabase,
+    ShowDatabases,
 }
 
 pub struct Planner;
@@ -19,7 +19,7 @@ impl Planner {
     pub fn plan(&self, stmt: Statement) -> Plan {
         match stmt {
             Statement::CreateDatabase(stmt) => self.plan_create_database(stmt),
-            Statement::ShowDatabase => Plan::ShowDatabase,
+            Statement::ShowDatabases => Plan::ShowDatabases,
         }
     }
 }

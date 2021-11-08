@@ -25,6 +25,8 @@ mod tests {
             .parse("create_database sample;")
             .is_err());
         // show database
-        assert!(sql::StatementsParser::new().parse("show database;").is_ok());
+        assert!(sql::StatementsParser::new()
+            .parse("show databases;")
+            .is_ok());
     }
 }

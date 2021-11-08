@@ -1,6 +1,6 @@
 pub enum Statement {
     CreateDatabase(CreateDatabaseStmt),
-    ShowDatabase,
+    ShowDatabases,
 }
 
 pub struct CreateDatabaseStmt {
@@ -9,5 +9,5 @@ pub struct CreateDatabaseStmt {
 
 pub enum Tok {
     CreateDatabase,
-    ShowDatabase,
+    ShowDatabases,
 }
