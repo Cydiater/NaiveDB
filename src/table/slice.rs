@@ -1,5 +1,6 @@
-use crate::storage::{BufferPoolManagerRef, PageID, PAGE_SIZE};
+use crate::storage::{BufferPoolManagerRef, PageID, PageRef, PAGE_SIZE};
 use crate::table::{DataType, Schema, TableError};
+use std::convert::TryInto;
 
 #[allow(dead_code)]
 pub enum Datum {
@@ -10,7 +11,13 @@ pub enum Datum {
 
 #[allow(dead_code)]
 /// one slice is fitted precisely in one page,
-/// we have multiple tuples in one slice.
+/// we have multiple tuples in one slice. One Slice is organized as
+///
+///     |offset1|offset2|......
+///                      ......|data2|data1|
+///
+/// we mark offset = PAGE_SIZE as the end sign
+///
 pub struct Slice {
     page_id: Option<PageID>,
     next_page_id: Option<PageID>,
@@ -18,6 +25,39 @@ pub struct Slice {
     schema: Schema,
     head: usize,
     tail: usize,
+}
+
+#[allow(dead_code)]
+pub struct SliceIter {
+    bpm: BufferPoolManagerRef,
+    page: PageRef,
+    idx: usize,
+}
+
+impl Iterator for SliceIter {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let offset = u32::from_le_bytes(
+            self.page.borrow_mut().buffer[self.idx * 4..(self.idx + 1) * 4]
+                .try_into()
+                .unwrap(),
+        ) as usize;
+        if offset == PAGE_SIZE {
+            None
+        } else {
+            Some(offset)
+        }
+    }
+}
+
+impl Drop for SliceIter {
+    fn drop(&mut self) {
+        self.bpm
+            .borrow_mut()
+            .unpin(self.page.borrow_mut().page_id.unwrap())
+            .unwrap()
+    }
 }
 
 #[allow(dead_code)]
@@ -31,6 +71,17 @@ impl Slice {
             head: 0usize,
             tail: PAGE_SIZE,
         }
+    }
+    pub fn iter(&mut self) -> SliceIter {
+        SliceIter {
+            bpm: self.bpm.clone(),
+            page: self.bpm.borrow_mut().fetch(self.page_id.unwrap()).unwrap(),
+            idx: 0usize,
+        }
+    }
+    pub fn attach(&mut self, page_id: PageID) {
+        let _page = self.bpm.borrow_mut().fetch(page_id).unwrap();
+        todo!();
     }
     pub fn shrink_head_and_tail(
         &mut self,
@@ -56,6 +107,8 @@ impl Slice {
         if datums.len() != self.schema.len() {
             return Err(TableError::DatumSchemaNotMatch);
         }
+        let page = self.bpm.borrow_mut().alloc().unwrap();
+        self.page_id = Some(page.borrow_mut().page_id.unwrap());
         self.schema
             .iter()
             .zip(datums.iter())
