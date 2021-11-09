@@ -1,5 +1,5 @@
 use crate::storage::{BufferPoolManagerRef, PageID, PageRef, PAGE_SIZE};
-use crate::table::{DataType, Schema, TableError, Column};
+use crate::table::{Column, DataType, Schema, TableError};
 use pad::PadStr;
 use std::convert::TryInto;
 
@@ -144,14 +144,16 @@ impl Slice {
                     ));
                 }
                 DataType::VarChar => {
-                    let start = end - u32::from_le_bytes(
-                        page.borrow().buffer[offset..offset + 4].try_into().unwrap(),
-                    ) as usize;
-                    let end = end - u32::from_le_bytes(
-                        page.borrow().buffer[offset + 4..offset + 8]
-                            .try_into()
-                            .unwrap(),
-                    ) as usize;
+                    let start = end
+                        - u32::from_le_bytes(
+                            page.borrow().buffer[offset..offset + 4].try_into().unwrap(),
+                        ) as usize;
+                    let end = end
+                        - u32::from_le_bytes(
+                            page.borrow().buffer[offset + 4..offset + 8]
+                                .try_into()
+                                .unwrap(),
+                        ) as usize;
                     tuple.push(Datum::VarChar(
                         String::from_utf8_lossy(
                             page.borrow().buffer[start..end].try_into().unwrap(),
@@ -202,7 +204,7 @@ impl Slice {
         // fill the external data
         for (idx, offset) in not_inlined_indexes {
             let end = last_tail - self.tail;
-            let tail =  match &datums[idx] {
+            let tail = match &datums[idx] {
                 Datum::VarChar(dat) => self.push(dat.as_bytes())?,
                 _ => {
                     return Err(TableError::DatumSchemaNotMatch);
