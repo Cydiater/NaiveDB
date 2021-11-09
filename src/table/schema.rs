@@ -4,12 +4,20 @@ use std::slice::{Iter, IterMut};
 pub struct Column {
     pub offset: usize,
     pub data_type: DataType,
+    pub desc: String,
 }
 
 #[allow(dead_code)]
 impl Column {
-    pub fn new(offset: usize, data_type: DataType) -> Self {
-        Column { offset, data_type }
+    pub fn new(offset: usize, data_type: DataType, desc: String) -> Self {
+        Column {
+            offset,
+            data_type,
+            desc,
+        }
+    }
+    pub fn from_slice(_type_and_names: &[(DataType, String)]) -> Vec<Self> {
+        todo!();
     }
 }
 

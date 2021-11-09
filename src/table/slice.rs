@@ -69,10 +69,10 @@ impl Drop for SliceIter {
 impl Slice {
     pub fn new_simple_message(
         _bpm: BufferPoolManagerRef,
-        _header: String,
+        header: String,
         _message: String,
     ) -> Self {
-        let _schema = Schema::new(vec![Column::new(0, DataType::VarChar)]);
+        let _schema = Schema::new(vec![Column::new(8, DataType::VarChar, header)]);
         todo!();
     }
     pub fn new(bpm: BufferPoolManagerRef, schema: Schema) -> Self {
@@ -237,8 +237,8 @@ mod tests {
         let bpm = BufferPoolManager::new_shared(5);
         bpm.borrow_mut().clear().unwrap();
         let columns = vec![
-            Column::new(4, DataType::Int),
-            Column::new(24, DataType::Char(CharType::new(20))),
+            Column::new(4, DataType::Int, "v1".to_string()),
+            Column::new(24, DataType::Char(CharType::new(20)), "v2".to_string()),
         ];
         let schema = Schema::new(columns);
         let mut slice = Slice::new(bpm.clone(), schema);
@@ -255,8 +255,8 @@ mod tests {
         let bpm = BufferPoolManager::new_shared(5);
         bpm.borrow_mut().clear().unwrap();
         let columns = vec![
-            Column::new(4, DataType::Int),
-            Column::new(12, DataType::VarChar),
+            Column::new(4, DataType::Int, "v1".to_string()),
+            Column::new(12, DataType::VarChar, "v2".to_string()),
         ];
         let schema = Schema::new(columns);
         let mut slice = Slice::new(bpm.clone(), schema);
