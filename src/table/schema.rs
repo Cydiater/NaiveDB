@@ -6,12 +6,22 @@ pub struct Column {
     pub data_type: DataType,
 }
 
+#[allow(dead_code)]
+impl Column {
+    pub fn new(offset: usize, data_type: DataType) -> Self {
+        Column { offset, data_type }
+    }
+}
+
 pub struct Schema {
     columns: Vec<Column>,
 }
 
 #[allow(dead_code)]
 impl Schema {
+    pub fn new(columns: Vec<Column>) -> Self {
+        Self { columns }
+    }
     pub fn len(&self) -> usize {
         self.columns.len()
     }

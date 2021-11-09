@@ -4,6 +4,7 @@ use pad::PadStr;
 use std::convert::TryInto;
 
 #[allow(dead_code)]
+#[derive(Debug, PartialEq)]
 pub enum Datum {
     Int(i32),
     Char(String),
@@ -92,28 +93,13 @@ impl Slice {
         self.head = head;
         self.tail = tail;
     }
-    /// we do not modify head and tail here, this is to satisfy rust compiler borrow check
-    pub fn push(&self, data: &[u8]) -> Result<(usize, usize), TableError> {
-        assert!(self.page_id.is_some());
-        // fetch page from bpm
-        let page_id = self.page_id.unwrap();
-        let page = self.bpm.borrow_mut().fetch(page_id).unwrap();
-        let next_head = self.head + std::mem::size_of::<u32>();
-        let next_tail = self.tail - data.len();
-        if next_head >= next_tail {
-            return Err(TableError::SliceOutOfSpace);
-        }
-        page.borrow_mut().buffer[self.head..next_head].copy_from_slice(&next_tail.to_le_bytes());
-        page.borrow_mut().buffer[next_tail..self.tail].copy_from_slice(data);
-        self.bpm.borrow_mut().unpin(page_id)?;
-        Ok((next_head, next_tail))
-    }
-    pub fn push_external_data(&self, data: &[u8]) -> Result<usize, TableError> {
+    pub fn push(&self, data: &[u8]) -> Result<usize, TableError> {
         // fetch page from bpm
         let page_id = self.page_id.unwrap();
         let page = self.bpm.borrow_mut().fetch(page_id).unwrap();
         let next_tail = self.tail - data.len();
         page.borrow_mut().buffer[next_tail..self.tail].copy_from_slice(data);
+        // unpin page
         self.bpm.borrow_mut().unpin(page_id)?;
         Ok(next_tail)
     }
@@ -121,13 +107,18 @@ impl Slice {
         // fetch page
         let page = self.bpm.borrow_mut().fetch(self.page_id.unwrap())?;
         let start = u32::from_le_bytes(
-            page.borrow().buffer[idx * 4..(idx + 1) * 4]
+            page.borrow().buffer
+                [idx * std::mem::size_of::<u32>()..(idx + 1) * std::mem::size_of::<u32>()]
                 .try_into()
                 .unwrap(),
         ) as usize;
+        assert!(start < PAGE_SIZE);
+        println!("idx = {} start = {}", idx, start);
         let mut tuple = Vec::<Datum>::new();
         for col in self.schema.iter() {
             let offset = start + col.offset;
+            assert!(offset < PAGE_SIZE);
+            println!("offset = {}", offset);
             match col.data_type {
                 DataType::Int => {
                     tuple.push(Datum::Int(i32::from_le_bytes(
@@ -141,6 +132,8 @@ impl Slice {
                                 .try_into()
                                 .unwrap(),
                         )
+                        .to_string()
+                        .trim_end()
                         .to_string(),
                     ));
                 }
@@ -166,7 +159,7 @@ impl Slice {
         self.bpm.borrow_mut().unpin(self.page_id.unwrap())?;
         Ok(tuple)
     }
-    pub fn add(&mut self, datums: Vec<Datum>) -> Result<(), TableError> {
+    pub fn add(&mut self, datums: &[Datum]) -> Result<(), TableError> {
         if datums.len() != self.schema.len() {
             return Err(TableError::DatumSchemaNotMatch);
         }
@@ -174,37 +167,36 @@ impl Slice {
         let page = if self.page_id.is_none() {
             let page = self.bpm.borrow_mut().alloc().unwrap();
             // mark end
-            page.borrow_mut().buffer[0..4].copy_from_slice(&PAGE_SIZE.to_le_bytes());
+            page.borrow_mut().buffer[0..4].copy_from_slice(&(PAGE_SIZE as u32).to_le_bytes());
             self.page_id = Some(page.borrow_mut().page_id.unwrap());
             page
         } else {
             self.bpm.borrow_mut().fetch(self.page_id.unwrap()).unwrap()
         };
         let mut not_inlined_indexes = Vec::<(usize, usize)>::new();
-        for (idx, (col, dat)) in self.schema.iter().zip(datums.iter()).enumerate() {
-            let (head, tail) = match (dat, col.data_type) {
+        for (idx, (col, dat)) in self.schema.iter().zip(datums.iter()).enumerate().rev() {
+            let tail = match (dat, col.data_type) {
                 (Datum::Int(dat), DataType::Int) => self.push(&dat.to_le_bytes())?,
                 (Datum::Char(dat), DataType::Char(char_type)) => {
                     self.push(dat.with_exact_width(char_type.width).as_bytes())?
                 }
                 // put placeholder first, we fill offset and length later
                 (Datum::VarChar(_), DataType::VarChar) => {
-                    let (head, tail) = self.push(&[0u8; 8])?;
+                    let tail = self.push(&[0u8; 8])?;
                     not_inlined_indexes.push((idx, tail));
-                    (head, tail)
+                    tail
                 }
                 _ => {
                     return Err(TableError::DatumSchemaNotMatch);
                 }
             };
-            self.head = head;
             self.tail = tail;
         }
         // fill the external data
         for (idx, offset) in not_inlined_indexes {
             let end = self.tail;
             let start = match &datums[idx] {
-                Datum::VarChar(dat) => self.push_external_data(dat.as_bytes())?,
+                Datum::VarChar(dat) => self.push(dat.as_bytes())?,
                 _ => {
                     return Err(TableError::DatumSchemaNotMatch);
                 }
@@ -215,9 +207,36 @@ impl Slice {
             page.borrow_mut().buffer[offset + 4..offset + 8]
                 .copy_from_slice(&(end as u32).to_le_bytes());
         }
-        self.bpm
-            .borrow_mut()
-            .unpin(page.borrow().page_id.unwrap())?;
+        let next_head = self.head + std::mem::size_of::<u32>();
+        page.borrow_mut().buffer[self.head..next_head]
+            .copy_from_slice(&(self.tail as u32).to_le_bytes());
+        self.head = next_head;
+        self.bpm.borrow_mut().unpin(self.page_id.unwrap())?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::storage::BufferPoolManager;
+    use crate::table::{CharType, Column, DataType, Schema};
+
+    #[test]
+    fn test_simple_add_get() {
+        let bpm = BufferPoolManager::new_shared(5);
+        bpm.borrow_mut().clear().unwrap();
+        let columns = vec![
+            Column::new(0, DataType::Int),
+            Column::new(4, DataType::Char(CharType::new(20))),
+        ];
+        let schema = Schema::new(columns);
+        let mut slice = Slice::new(bpm.clone(), schema);
+        let tuple1 = vec![Datum::Int(20), Datum::Char("hello".to_string())];
+        let tuple2 = vec![Datum::Int(30), Datum::Char("world".to_string())];
+        slice.add(&tuple1).unwrap();
+        slice.add(&tuple2).unwrap();
+        assert_eq!(slice.at(0).unwrap(), tuple1);
+        assert_eq!(slice.at(1).unwrap(), tuple2);
     }
 }

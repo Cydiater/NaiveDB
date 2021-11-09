@@ -6,9 +6,9 @@ mod schema;
 mod slice;
 mod types;
 
-pub use schema::Schema;
+pub use schema::{Column, Schema};
 pub use slice::Slice;
-pub use types::DataType;
+pub use types::{CharType, DataType};
 
 #[allow(dead_code)]
 #[derive(Error, Debug)]

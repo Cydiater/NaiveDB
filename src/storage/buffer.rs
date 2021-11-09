@@ -105,7 +105,6 @@ impl BufferPoolManager {
         // update page table
         self.page_table
             .insert(page.borrow().page_id.unwrap(), frame_id);
-        println!("alloc #{}", page.borrow().page_id.unwrap());
         Ok(page)
     }
     pub fn num_pages(&self) -> Result<usize, StorageError> {
