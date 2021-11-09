@@ -117,6 +117,55 @@ impl Slice {
         self.bpm.borrow_mut().unpin(page_id)?;
         Ok(next_tail)
     }
+    pub fn at(&mut self, idx: usize) -> Result<Vec<Datum>, TableError> {
+        // fetch page
+        let page = self.bpm.borrow_mut().fetch(self.page_id.unwrap())?;
+        let start = u32::from_le_bytes(
+            page.borrow().buffer[idx * 4..(idx + 1) * 4]
+                .try_into()
+                .unwrap(),
+        ) as usize;
+        let mut tuple = Vec::<Datum>::new();
+        for col in self.schema.iter() {
+            let offset = start + col.offset;
+            match col.data_type {
+                DataType::Int => {
+                    tuple.push(Datum::Int(i32::from_le_bytes(
+                        page.borrow().buffer[offset..offset + 4].try_into().unwrap(),
+                    )));
+                }
+                DataType::Char(char_type) => {
+                    tuple.push(Datum::Char(
+                        String::from_utf8_lossy(
+                            page.borrow().buffer[offset..offset + char_type.width]
+                                .try_into()
+                                .unwrap(),
+                        )
+                        .to_string(),
+                    ));
+                }
+                DataType::VarChar => {
+                    let start = u32::from_le_bytes(
+                        page.borrow().buffer[offset..offset + 4].try_into().unwrap(),
+                    ) as usize;
+                    let end = u32::from_le_bytes(
+                        page.borrow().buffer[offset + 4..offset + 8]
+                            .try_into()
+                            .unwrap(),
+                    ) as usize;
+                    tuple.push(Datum::Char(
+                        String::from_utf8_lossy(
+                            page.borrow().buffer[start..end].try_into().unwrap(),
+                        )
+                        .to_string(),
+                    ));
+                }
+            }
+        }
+        // unpin page
+        self.bpm.borrow_mut().unpin(self.page_id.unwrap())?;
+        Ok(tuple)
+    }
     pub fn add(&mut self, datums: Vec<Datum>) -> Result<(), TableError> {
         if datums.len() != self.schema.len() {
             return Err(TableError::DatumSchemaNotMatch);
@@ -151,6 +200,7 @@ impl Slice {
             self.head = head;
             self.tail = tail;
         }
+        // fill the external data
         for (idx, offset) in not_inlined_indexes {
             let end = self.tail;
             let start = match &datums[idx] {
@@ -165,6 +215,9 @@ impl Slice {
             page.borrow_mut().buffer[offset + 4..offset + 8]
                 .copy_from_slice(&(end as u32).to_le_bytes());
         }
+        self.bpm
+            .borrow_mut()
+            .unpin(page.borrow().page_id.unwrap())?;
         Ok(())
     }
 }
