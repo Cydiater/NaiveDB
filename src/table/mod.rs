@@ -1,5 +1,6 @@
 use thiserror::Error;
 
+mod rid;
 mod schema;
 mod slice;
 mod types;

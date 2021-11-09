@@ -1,5 +1,6 @@
 use crate::storage::{BufferPoolManagerRef, PageID, PageRef, PAGE_SIZE};
 use crate::table::{DataType, Schema, TableError};
+use pad::PadStr;
 use std::convert::TryInto;
 
 #[allow(dead_code)]
@@ -80,47 +81,53 @@ impl Slice {
         }
     }
     pub fn attach(&mut self, page_id: PageID) {
-        let _page = self.bpm.borrow_mut().fetch(page_id).unwrap();
-        todo!();
+        let page = self.bpm.borrow_mut().fetch(page_id).unwrap();
+        self.page_id = Some(page.borrow().page_id.unwrap());
+        let (head, tail) = self
+            .iter()
+            .fold((0, PAGE_SIZE), |(head, _), offset| (head + 4, offset));
+        self.head = head;
+        self.tail = tail;
     }
-    pub fn shrink_head_and_tail(
-        &mut self,
-        head_data: &[u8],
-        tail_data: &[u8],
-    ) -> Result<(), TableError> {
+    /// we do not modify head and tail here, this is to satisfy rust compiler borrow check
+    pub fn push(&self, data: &[u8]) -> Result<(usize, usize), TableError> {
         assert!(self.page_id.is_some());
         // fetch page from bpm
         let page_id = self.page_id.unwrap();
         let page = self.bpm.borrow_mut().fetch(page_id).unwrap();
-        let next_head = self.head + head_data.len();
-        let next_tail = self.tail - tail_data.len();
+        let next_head = self.head + std::mem::size_of::<u32>();
+        let next_tail = self.tail - data.len();
         if next_head >= next_tail {
             return Err(TableError::SliceOutOfSpace);
         }
-        page.borrow_mut().buffer[self.head..next_head].copy_from_slice(head_data);
-        page.borrow_mut().buffer[next_tail..self.tail].copy_from_slice(tail_data);
-        self.head = next_head;
-        self.tail = next_tail;
-        Ok(())
+        page.borrow_mut().buffer[self.head..next_head].copy_from_slice(&next_tail.to_le_bytes());
+        page.borrow_mut().buffer[next_tail..self.tail].copy_from_slice(data);
+        Ok((next_head, next_tail))
     }
     pub fn add(&mut self, datums: Vec<Datum>) -> Result<(), TableError> {
         if datums.len() != self.schema.len() {
             return Err(TableError::DatumSchemaNotMatch);
         }
-        let page = self.bpm.borrow_mut().alloc().unwrap();
-        self.page_id = Some(page.borrow_mut().page_id.unwrap());
-        self.schema
-            .iter()
-            .zip(datums.iter())
-            .for_each(|(col, dat)| match dat {
-                Datum::Int(_) => {
-                    if matches!(col.data_type, DataType::Int) {
-                        todo!()
-                    }
+        // don't have page, allocate first
+        if self.page_id.is_none() {
+            let page = self.bpm.borrow_mut().alloc().unwrap();
+            // mark end
+            page.borrow_mut().buffer[0..4].copy_from_slice(&PAGE_SIZE.to_le_bytes());
+            self.page_id = Some(page.borrow_mut().page_id.unwrap());
+        }
+        for (col, dat) in self.schema.iter().zip(datums.iter()) {
+            let (head, tail) = match (dat, col.data_type) {
+                (Datum::Int(dat), DataType::Int) => self.push(&dat.to_le_bytes())?,
+                (Datum::Char(dat), DataType::Char(char_type)) => {
+                    self.push(dat.with_exact_width(char_type.width).as_bytes())?
                 }
-                Datum::Char(_) => todo!(),
-                _ => {}
-            });
-        todo!();
+                _ => {
+                    return Err(TableError::DatumSchemaNotMatch);
+                }
+            };
+            self.head = head;
+            self.tail = tail;
+        }
+        Ok(())
     }
 }
