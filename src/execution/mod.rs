@@ -1,4 +1,4 @@
-use crate::catalog::Catalog;
+use crate::catalog::{Catalog, CatalogError};
 use crate::planner::Plan;
 use crate::storage::BufferPoolManagerRef;
 use crate::table::Slice;
@@ -30,10 +30,13 @@ impl Engine {
         }
     }
     pub fn execute(&mut self, _plan: Plan) -> Result<Slice, ExecutionError> {
-        let executor = self.build();
+        let mut executor = self.build();
         executor.execute()
     }
 }
 
 #[derive(Error, Debug)]
-pub enum ExecutionError {}
+pub enum ExecutionError {
+    #[error("CatalogError: {0}")]
+    Catalog(#[from] CatalogError),
+}

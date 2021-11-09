@@ -1,7 +1,7 @@
 use crate::execution::Engine;
+use crate::execution::ExecutionError;
 use crate::parser::parse;
 use crate::planner::Planner;
-use crate::execution::ExecutionError;
 use crate::storage::{BufferPoolManager, BufferPoolManagerRef};
 use std::cell::RefCell;
 use std::rc::Rc;

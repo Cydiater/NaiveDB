@@ -5,7 +5,7 @@ use create_database::CreateDatabaseExecutor;
 mod create_database;
 
 pub trait Executor {
-    fn execute() -> Result<Slice, ExecutionError>;
+    fn execute(&mut self) -> Result<Slice, ExecutionError>;
 }
 
 #[allow(dead_code)]
@@ -14,7 +14,7 @@ pub enum ExecutorImpl {
 }
 
 impl ExecutorImpl {
-    pub fn execute(&self) -> Result<Slice, ExecutionError> {
+    pub fn execute(&mut self) -> Result<Slice, ExecutionError> {
         todo!()
     }
 }

@@ -19,7 +19,10 @@ impl CreateDatabaseExecutor {
 }
 
 impl Executor for CreateDatabaseExecutor {
-    fn execute() -> Result<Slice, ExecutionError> {
+    fn execute(&mut self) -> Result<Slice, ExecutionError> {
+        self.database_catalog
+            .borrow_mut()
+            .insert(0, self.db_name.clone())?;
         todo!();
     }
 }
