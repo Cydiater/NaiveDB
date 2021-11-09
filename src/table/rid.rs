@@ -1,13 +1,13 @@
 use crate::storage::PageID;
 use std::convert::TryInto;
 
-pub struct TupleID {
+pub struct RecordID {
     page_id: PageID,
     offset: usize,
 }
 
 #[allow(dead_code)]
-impl TupleID {
+impl RecordID {
     pub fn new(page_id: PageID, offset: usize) -> Self {
         Self { page_id, offset }
     }

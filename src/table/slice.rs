@@ -17,7 +17,10 @@ pub enum Datum {
 ///     |offset1|offset2|......
 ///                      ......|data2|data1|
 ///
-/// we mark offset = PAGE_SIZE as the end sign
+/// we mark offset = PAGE_SIZE as the end sign, there are two type of
+/// columns, the inlined and un-inlined. for the inlined column, we just
+/// put the original data in the page, for the un-inlined column, you should
+/// put RecordID in to link the original data.
 ///
 pub struct Slice {
     page_id: Option<PageID>,
@@ -102,24 +105,44 @@ impl Slice {
         }
         page.borrow_mut().buffer[self.head..next_head].copy_from_slice(&next_tail.to_le_bytes());
         page.borrow_mut().buffer[next_tail..self.tail].copy_from_slice(data);
+        self.bpm.borrow_mut().unpin(page_id)?;
         Ok((next_head, next_tail))
+    }
+    pub fn push_external_data(&self, data: &[u8]) -> Result<usize, TableError> {
+        // fetch page from bpm
+        let page_id = self.page_id.unwrap();
+        let page = self.bpm.borrow_mut().fetch(page_id).unwrap();
+        let next_tail = self.tail - data.len();
+        page.borrow_mut().buffer[next_tail..self.tail].copy_from_slice(data);
+        self.bpm.borrow_mut().unpin(page_id)?;
+        Ok(next_tail)
     }
     pub fn add(&mut self, datums: Vec<Datum>) -> Result<(), TableError> {
         if datums.len() != self.schema.len() {
             return Err(TableError::DatumSchemaNotMatch);
         }
         // don't have page, allocate first
-        if self.page_id.is_none() {
+        let page = if self.page_id.is_none() {
             let page = self.bpm.borrow_mut().alloc().unwrap();
             // mark end
             page.borrow_mut().buffer[0..4].copy_from_slice(&PAGE_SIZE.to_le_bytes());
             self.page_id = Some(page.borrow_mut().page_id.unwrap());
-        }
-        for (col, dat) in self.schema.iter().zip(datums.iter()) {
+            page
+        } else {
+            self.bpm.borrow_mut().fetch(self.page_id.unwrap()).unwrap()
+        };
+        let mut not_inlined_indexes = Vec::<(usize, usize)>::new();
+        for (idx, (col, dat)) in self.schema.iter().zip(datums.iter()).enumerate() {
             let (head, tail) = match (dat, col.data_type) {
                 (Datum::Int(dat), DataType::Int) => self.push(&dat.to_le_bytes())?,
                 (Datum::Char(dat), DataType::Char(char_type)) => {
                     self.push(dat.with_exact_width(char_type.width).as_bytes())?
+                }
+                // put placeholder first, we fill offset and length later
+                (Datum::VarChar(_), DataType::VarChar) => {
+                    let (head, tail) = self.push(&[0u8; 8])?;
+                    not_inlined_indexes.push((idx, tail));
+                    (head, tail)
                 }
                 _ => {
                     return Err(TableError::DatumSchemaNotMatch);
@@ -127,6 +150,20 @@ impl Slice {
             };
             self.head = head;
             self.tail = tail;
+        }
+        for (idx, offset) in not_inlined_indexes {
+            let end = self.tail;
+            let start = match &datums[idx] {
+                Datum::VarChar(dat) => self.push_external_data(dat.as_bytes())?,
+                _ => {
+                    return Err(TableError::DatumSchemaNotMatch);
+                }
+            };
+            self.tail = start;
+            page.borrow_mut().buffer[offset..offset + 4]
+                .copy_from_slice(&(start as u32).to_le_bytes());
+            page.borrow_mut().buffer[offset + 4..offset + 8]
+                .copy_from_slice(&(end as u32).to_le_bytes());
         }
         Ok(())
     }

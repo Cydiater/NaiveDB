@@ -1,3 +1,4 @@
+use crate::storage::StorageError;
 use thiserror::Error;
 
 mod rid;
@@ -16,4 +17,6 @@ pub enum TableError {
     DatumSchemaNotMatch,
     #[error("slice out of space")]
     SliceOutOfSpace,
+    #[error("storage error: {0}")]
+    Storage(#[from] StorageError),
 }
