@@ -1,11 +1,15 @@
 use crate::storage::{BufferPoolManagerRef, PageID, PageRef, StorageError, PAGE_SIZE};
+use std::cell::RefCell;
 use std::convert::TryInto;
+use std::rc::Rc;
 use thiserror::Error;
 
 pub struct Catalog {
     bpm: BufferPoolManagerRef,
     page_id: PageID,
 }
+
+pub type CatalogRef = Rc<RefCell<Catalog>>;
 
 pub struct CatalogIter {
     pub offset: usize,

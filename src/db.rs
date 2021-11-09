@@ -1,6 +1,7 @@
 use crate::execution::Engine;
 use crate::parser::parse;
 use crate::planner::Planner;
+use crate::execution::ExecutionError;
 use crate::storage::{BufferPoolManager, BufferPoolManagerRef};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -26,7 +27,7 @@ impl NaiveDB {
         let statements = parse(sql)?;
         for stmt in statements.into_iter() {
             let plan = self.planner.plan(stmt);
-            self.engine.execute(plan);
+            self.engine.execute(plan)?;
         }
         Ok(())
     }
@@ -37,4 +38,6 @@ impl NaiveDB {
 pub enum NaiveDBError {
     #[error("ParseError: {0}")]
     Parse(String),
+    #[error("ExecutionError: {0}")]
+    Execution(#[from] ExecutionError),
 }

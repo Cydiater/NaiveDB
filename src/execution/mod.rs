@@ -1,6 +1,12 @@
 use crate::catalog::Catalog;
 use crate::planner::Plan;
 use crate::storage::BufferPoolManagerRef;
+use crate::table::Slice;
+use thiserror::Error;
+
+mod executor;
+
+pub use executor::{Executor, ExecutorImpl};
 
 #[allow(dead_code)]
 pub struct Engine {
@@ -9,6 +15,9 @@ pub struct Engine {
 }
 
 impl Engine {
+    fn build(&self) -> ExecutorImpl {
+        todo!();
+    }
     pub fn new(bpm: BufferPoolManagerRef) -> Self {
         let num_pages = bpm.borrow().num_pages().unwrap();
         // allocate database catalog
@@ -20,7 +29,11 @@ impl Engine {
             database_catalog: Catalog::new_database_catalog(bpm),
         }
     }
-    pub fn execute(&mut self, _plan: Plan) {
-        todo!()
+    pub fn execute(&mut self, _plan: Plan) -> Result<Slice, ExecutionError> {
+        let executor = self.build();
+        executor.execute()
     }
 }
+
+#[derive(Error, Debug)]
+pub enum ExecutionError {}
