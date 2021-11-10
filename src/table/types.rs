@@ -1,4 +1,4 @@
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct CharType {
     pub width: usize,
 }
@@ -11,7 +11,7 @@ impl CharType {
 }
 
 #[allow(dead_code)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum DataType {
     Int,
     Char(CharType),
