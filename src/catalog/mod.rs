@@ -50,11 +50,11 @@ impl Drop for CatalogIter {
     }
 }
 
-#[allow(dead_code)]
 impl Catalog {
     pub fn new_database_catalog(bpm: BufferPoolManagerRef) -> CatalogRef {
         Rc::new(RefCell::new(Self { bpm, page_id: 0 }))
     }
+    #[allow(dead_code)]
     pub fn new_table_catalog(bpm: BufferPoolManagerRef, page_id: PageID) -> Self {
         Self { bpm, page_id }
     }
@@ -104,9 +104,18 @@ mod tests {
         bpm.borrow_mut().clear().unwrap();
         let _ = bpm.borrow_mut().alloc().unwrap();
         let db_catalog = Catalog::new_database_catalog(bpm.clone());
-        db_catalog.borrow_mut().insert(0, "sample_0".to_string()).unwrap();
-        db_catalog.borrow_mut().insert(1, "sample_1".to_string()).unwrap();
-        db_catalog.borrow_mut().insert(2, "sample_2".to_string()).unwrap();
+        db_catalog
+            .borrow_mut()
+            .insert(0, "sample_0".to_string())
+            .unwrap();
+        db_catalog
+            .borrow_mut()
+            .insert(1, "sample_1".to_string())
+            .unwrap();
+        db_catalog
+            .borrow_mut()
+            .insert(2, "sample_2".to_string())
+            .unwrap();
         let res = db_catalog.borrow_mut().iter().collect_vec();
         assert_eq!(
             res,
@@ -116,7 +125,10 @@ mod tests {
                 (8, 2, "sample_2".to_string()),
             ]
         );
-        db_catalog.borrow_mut().insert(3, "sample_3".to_string()).unwrap();
+        db_catalog
+            .borrow_mut()
+            .insert(3, "sample_3".to_string())
+            .unwrap();
         let res = db_catalog.borrow().iter().collect_vec();
         assert_eq!(
             res,

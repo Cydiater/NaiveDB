@@ -1,7 +1,10 @@
 use crate::storage::{BufferPoolManagerRef, PageID, PageRef, PAGE_SIZE};
 use crate::table::{DataType, Schema, TableError};
+use itertools::Itertools;
 use pad::PadStr;
+use prettytable::{Cell, Row, Table};
 use std::convert::TryInto;
+use std::fmt;
 
 #[allow(dead_code)]
 #[derive(Debug, PartialEq)]
@@ -9,6 +12,20 @@ pub enum Datum {
     Int(i32),
     Char(String),
     VarChar(String),
+}
+
+impl fmt::Display for Datum {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Int(d) => d.to_string(),
+                Self::Char(s) => s.to_string(),
+                Self::VarChar(s) => s.to_string(),
+            }
+        )
+    }
 }
 
 #[allow(dead_code)]
@@ -226,6 +243,30 @@ impl Slice {
         self.head = next_head;
         self.bpm.borrow_mut().unpin(self.page_id.unwrap())?;
         Ok(())
+    }
+    pub fn len(&self) -> usize {
+        self.head / std::mem::size_of::<u32>()
+    }
+}
+
+impl fmt::Display for Slice {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut table = Table::new();
+        let header = self
+            .schema
+            .iter()
+            .map(|c| Cell::new(c.desc.as_str()))
+            .collect_vec();
+        table.add_row(Row::new(header));
+        for idx in 0..self.len() {
+            let tuple = self.at(idx).unwrap();
+            let tuple = tuple
+                .iter()
+                .map(|d| Cell::new(d.to_string().as_str()))
+                .collect_vec();
+            table.add_row(Row::new(tuple));
+        }
+        write!(f, "{}", table)
     }
 }
 

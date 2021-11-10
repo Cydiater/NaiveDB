@@ -8,7 +8,6 @@ mod executor;
 
 pub use executor::{CreateDatabaseExecutor, Executor, ExecutorImpl};
 
-#[allow(dead_code)]
 pub struct Engine {
     bpm: BufferPoolManagerRef,
     database_catalog: CatalogRef,

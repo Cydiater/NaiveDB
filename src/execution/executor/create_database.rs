@@ -3,14 +3,12 @@ use crate::execution::{ExecutionError, Executor};
 use crate::storage::BufferPoolManagerRef;
 use crate::table::Slice;
 
-#[allow(dead_code)]
 pub struct CreateDatabaseExecutor {
     database_catalog: CatalogRef,
     bpm: BufferPoolManagerRef,
     db_name: String,
 }
 
-#[allow(dead_code)]
 impl CreateDatabaseExecutor {
     pub fn new(database_catalog: CatalogRef, bpm: BufferPoolManagerRef, db_name: String) -> Self {
         Self {
