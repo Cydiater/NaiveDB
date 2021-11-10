@@ -1,22 +1,31 @@
-use crate::catalog::{Catalog, CatalogError};
+use crate::catalog::{Catalog, CatalogError, CatalogRef};
 use crate::planner::Plan;
 use crate::storage::BufferPoolManagerRef;
-use crate::table::Slice;
+use crate::table::{Slice, TableError};
 use thiserror::Error;
 
 mod executor;
 
-pub use executor::{Executor, ExecutorImpl};
+pub use executor::{CreateDatabaseExecutor, Executor, ExecutorImpl};
 
 #[allow(dead_code)]
 pub struct Engine {
     bpm: BufferPoolManagerRef,
-    database_catalog: Catalog,
+    database_catalog: CatalogRef,
 }
 
 impl Engine {
-    fn build(&self) -> ExecutorImpl {
-        todo!();
+    fn build(&self, plan: Plan) -> ExecutorImpl {
+        match plan {
+            Plan::CreateDatabase(plan) => {
+                ExecutorImpl::CreateDatabase(CreateDatabaseExecutor::new(
+                    self.database_catalog.clone(),
+                    self.bpm.clone(),
+                    plan.database_name,
+                ))
+            }
+            _ => todo!(),
+        }
     }
     pub fn new(bpm: BufferPoolManagerRef) -> Self {
         let num_pages = bpm.borrow().num_pages().unwrap();
@@ -29,8 +38,8 @@ impl Engine {
             database_catalog: Catalog::new_database_catalog(bpm),
         }
     }
-    pub fn execute(&mut self, _plan: Plan) -> Result<Slice, ExecutionError> {
-        let mut executor = self.build();
+    pub fn execute(&mut self, plan: Plan) -> Result<Slice, ExecutionError> {
+        let mut executor = self.build(plan);
         executor.execute()
     }
 }
@@ -39,4 +48,6 @@ impl Engine {
 pub enum ExecutionError {
     #[error("CatalogError: {0}")]
     Catalog(#[from] CatalogError),
+    #[error("TableError: {0}")]
+    Table(#[from] TableError),
 }

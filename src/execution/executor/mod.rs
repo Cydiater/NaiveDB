@@ -1,6 +1,7 @@
 use crate::execution::ExecutionError;
 use crate::table::Slice;
-use create_database::CreateDatabaseExecutor;
+
+pub use create_database::CreateDatabaseExecutor;
 
 mod create_database;
 
