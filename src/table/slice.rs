@@ -1,5 +1,5 @@
 use crate::storage::{BufferPoolManagerRef, PageID, PageRef, PAGE_SIZE};
-use crate::table::{Column, DataType, Schema, TableError};
+use crate::table::{DataType, Schema, TableError};
 use pad::PadStr;
 use std::convert::TryInto;
 
@@ -68,13 +68,16 @@ impl Drop for SliceIter {
 #[allow(dead_code)]
 impl Slice {
     pub fn new_simple_message(
-        _bpm: BufferPoolManagerRef,
+        bpm: BufferPoolManagerRef,
         header: String,
-        _message: String,
-    ) -> Self {
-        let _schema = Schema::new(vec![Column::new(8, DataType::VarChar, header)]);
-        todo!();
+        message: String,
+    ) -> Result<Self, TableError> {
+        let schema = Schema::from_slice(&[(DataType::VarChar, header)]);
+        let mut slice = Self::new(bpm, schema);
+        slice.add(&[Datum::VarChar(message)])?;
+        Ok(slice)
     }
+
     pub fn new(bpm: BufferPoolManagerRef, schema: Schema) -> Self {
         Self {
             page_id: None,
@@ -111,7 +114,7 @@ impl Slice {
         self.bpm.borrow_mut().unpin(page_id)?;
         Ok(next_tail)
     }
-    pub fn at(&mut self, idx: usize) -> Result<Vec<Datum>, TableError> {
+    pub fn at(&self, idx: usize) -> Result<Vec<Datum>, TableError> {
         // fetch page
         let page = self.bpm.borrow_mut().fetch(self.page_id.unwrap())?;
         let end = u32::from_le_bytes(
@@ -266,5 +269,16 @@ mod tests {
         slice.add(&tuple2).unwrap();
         assert_eq!(slice.at(0).unwrap(), tuple1);
         assert_eq!(slice.at(1).unwrap(), tuple2);
+    }
+
+    #[test]
+    fn test_simple_message() {
+        let bpm = BufferPoolManager::new_shared(5);
+        bpm.borrow_mut().clear().unwrap();
+        let slice =
+            Slice::new_simple_message(bpm.clone(), "header".to_string(), "message".to_string())
+                .unwrap();
+        let tuple = slice.at(0).unwrap();
+        assert_eq!(tuple[0], Datum::VarChar("message".to_string()));
     }
 }
