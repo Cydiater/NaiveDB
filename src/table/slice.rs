@@ -331,7 +331,7 @@ mod tests {
             bpm.borrow_mut().clear().unwrap();
             let slice =
                 Slice::new_simple_message(bpm.clone(), "header".to_string(), "message".to_string())
-                .unwrap();
+                    .unwrap();
             let tuple = slice.at(0).unwrap();
             assert_eq!(tuple[0], Datum::VarChar("message".to_string()));
             filename
