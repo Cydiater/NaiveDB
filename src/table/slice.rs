@@ -275,51 +275,67 @@ mod tests {
     use super::*;
     use crate::storage::BufferPoolManager;
     use crate::table::{CharType, Column, DataType, Schema};
+    use std::fs::remove_file;
 
     #[test]
     fn test_simple_add_get() {
-        let bpm = BufferPoolManager::new_shared(5);
-        bpm.borrow_mut().clear().unwrap();
-        let columns = vec![
-            Column::new(4, DataType::Int, "v1".to_string()),
-            Column::new(24, DataType::Char(CharType::new(20)), "v2".to_string()),
-        ];
-        let schema = Schema::new(columns);
-        let mut slice = Slice::new(bpm.clone(), schema);
-        let tuple1 = vec![Datum::Int(20), Datum::Char("hello".to_string())];
-        let tuple2 = vec![Datum::Int(30), Datum::Char("world".to_string())];
-        slice.add(&tuple1).unwrap();
-        slice.add(&tuple2).unwrap();
-        assert_eq!(slice.at(0).unwrap(), tuple1);
-        assert_eq!(slice.at(1).unwrap(), tuple2);
+        let filename = {
+            let bpm = BufferPoolManager::new_random_shared(5);
+            let filename = bpm.borrow().filename();
+            bpm.borrow_mut().clear().unwrap();
+            let columns = vec![
+                Column::new(4, DataType::Int, "v1".to_string()),
+                Column::new(24, DataType::Char(CharType::new(20)), "v2".to_string()),
+            ];
+            let schema = Schema::new(columns);
+            let mut slice = Slice::new(bpm.clone(), schema);
+            let tuple1 = vec![Datum::Int(20), Datum::Char("hello".to_string())];
+            let tuple2 = vec![Datum::Int(30), Datum::Char("world".to_string())];
+            slice.add(&tuple1).unwrap();
+            slice.add(&tuple2).unwrap();
+            assert_eq!(slice.at(0).unwrap(), tuple1);
+            assert_eq!(slice.at(1).unwrap(), tuple2);
+            filename
+        };
+        remove_file(filename).unwrap();
     }
 
     #[test]
     fn test_varchar() {
-        let bpm = BufferPoolManager::new_shared(5);
-        bpm.borrow_mut().clear().unwrap();
-        let columns = vec![
-            Column::new(4, DataType::Int, "v1".to_string()),
-            Column::new(12, DataType::VarChar, "v2".to_string()),
-        ];
-        let schema = Schema::new(columns);
-        let mut slice = Slice::new(bpm.clone(), schema);
-        let tuple1 = vec![Datum::Int(20), Datum::VarChar("hello".to_string())];
-        let tuple2 = vec![Datum::Int(30), Datum::VarChar("world".to_string())];
-        slice.add(&tuple1).unwrap();
-        slice.add(&tuple2).unwrap();
-        assert_eq!(slice.at(0).unwrap(), tuple1);
-        assert_eq!(slice.at(1).unwrap(), tuple2);
+        let filename = {
+            let bpm = BufferPoolManager::new_shared(5);
+            let filename = bpm.borrow().filename();
+            bpm.borrow_mut().clear().unwrap();
+            let columns = vec![
+                Column::new(4, DataType::Int, "v1".to_string()),
+                Column::new(12, DataType::VarChar, "v2".to_string()),
+            ];
+            let schema = Schema::new(columns);
+            let mut slice = Slice::new(bpm.clone(), schema);
+            let tuple1 = vec![Datum::Int(20), Datum::VarChar("hello".to_string())];
+            let tuple2 = vec![Datum::Int(30), Datum::VarChar("world".to_string())];
+            slice.add(&tuple1).unwrap();
+            slice.add(&tuple2).unwrap();
+            assert_eq!(slice.at(0).unwrap(), tuple1);
+            assert_eq!(slice.at(1).unwrap(), tuple2);
+            filename
+        };
+        remove_file(filename).unwrap();
     }
 
     #[test]
     fn test_simple_message() {
-        let bpm = BufferPoolManager::new_shared(5);
-        bpm.borrow_mut().clear().unwrap();
-        let slice =
-            Slice::new_simple_message(bpm.clone(), "header".to_string(), "message".to_string())
+        let filename = {
+            let bpm = BufferPoolManager::new_random_shared(5);
+            let filename = bpm.borrow().filename();
+            bpm.borrow_mut().clear().unwrap();
+            let slice =
+                Slice::new_simple_message(bpm.clone(), "header".to_string(), "message".to_string())
                 .unwrap();
-        let tuple = slice.at(0).unwrap();
-        assert_eq!(tuple[0], Datum::VarChar("message".to_string()));
+            let tuple = slice.at(0).unwrap();
+            assert_eq!(tuple[0], Datum::VarChar("message".to_string()));
+            filename
+        };
+        remove_file(filename).unwrap();
     }
 }

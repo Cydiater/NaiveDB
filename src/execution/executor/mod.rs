@@ -16,6 +16,8 @@ pub enum ExecutorImpl {
 
 impl ExecutorImpl {
     pub fn execute(&mut self) -> Result<Slice, ExecutionError> {
-        todo!()
+        match self {
+            Self::CreateDatabase(executor) => executor.execute(),
+        }
     }
 }

@@ -2,6 +2,7 @@ use crate::catalog::{Catalog, CatalogError, CatalogRef};
 use crate::planner::Plan;
 use crate::storage::BufferPoolManagerRef;
 use crate::table::{Slice, TableError};
+use log::info;
 use thiserror::Error;
 
 mod executor;
@@ -28,6 +29,7 @@ impl Engine {
     }
     pub fn new(bpm: BufferPoolManagerRef) -> Self {
         let num_pages = bpm.borrow().num_pages().unwrap();
+        info!("disk file have {} pages", num_pages);
         // allocate database catalog
         if num_pages == 0 {
             let _ = bpm.borrow_mut().alloc().unwrap();

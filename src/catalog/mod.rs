@@ -79,6 +79,7 @@ impl Catalog {
         page.borrow_mut().buffer[last + 4..last + 8]
             .copy_from_slice(&(page_id as u32).to_le_bytes());
         page.borrow_mut().buffer[last + 8..last + 8 + len].copy_from_slice(name.as_bytes());
+        page.borrow_mut().is_dirty = true;
         self.bpm.borrow_mut().unpin(self.page_id)?;
         Ok(())
     }
@@ -139,5 +140,6 @@ mod tests {
                 (8, 3, "sample_3".to_string()),
             ]
         );
+        let _ = bpm.borrow_mut().clear();
     }
 }

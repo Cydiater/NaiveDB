@@ -23,13 +23,15 @@ impl NaiveDB {
             planner: Planner::new(),
         }
     }
-    pub fn run(&mut self, sql: &str) -> Result<(), NaiveDBError> {
+    pub fn run(&mut self, sql: &str) -> Result<String, NaiveDBError> {
         let statements = parse(sql)?;
+        let mut res = "".to_string();
         for stmt in statements.into_iter() {
             let plan = self.planner.plan(stmt);
-            self.engine.execute(plan)?;
+            let slice = self.engine.execute(plan)?;
+            res += &slice.to_string();
         }
-        Ok(())
+        Ok(res)
     }
 }
 
