@@ -7,7 +7,7 @@ use thiserror::Error;
 
 mod executor;
 
-pub use executor::{CreateDatabaseExecutor, Executor, ExecutorImpl};
+pub use executor::{CreateDatabaseExecutor, Executor, ExecutorImpl, ShowDatabasesExecutor};
 
 pub struct Engine {
     bpm: BufferPoolManagerRef,
@@ -24,7 +24,10 @@ impl Engine {
                     plan.database_name,
                 ))
             }
-            _ => todo!(),
+            Plan::ShowDatabases => ExecutorImpl::ShowDatabases(ShowDatabasesExecutor::new(
+                self.database_catalog.clone(),
+                self.bpm.clone(),
+            )),
         }
     }
     pub fn new(bpm: BufferPoolManagerRef) -> Self {

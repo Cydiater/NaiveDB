@@ -22,7 +22,7 @@ impl Drop for BufferPoolManager {
         for &frame_id in self.page_table.values() {
             if self.buf[frame_id].borrow().is_dirty {
                 self.disk.write(self.buf[frame_id].clone()).unwrap();
-            } 
+            }
         }
     }
 }
