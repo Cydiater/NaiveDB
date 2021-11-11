@@ -1,11 +1,17 @@
 #![feature(vec_into_raw_parts)]
 
-mod db;
+mod catalog;
+mod execution;
 mod parser;
+mod planner;
 mod storage;
+mod table;
+
+mod db;
 
 use crate::db::NaiveDB;
-use std::io::{self, Write};
+use rustyline::error::ReadlineError;
+use rustyline::Editor;
 
 #[macro_use]
 extern crate lalrpop_util;
@@ -13,18 +19,33 @@ lalrpop_mod!(#[allow(clippy::all)] pub sql);
 
 fn main() {
     env_logger::init();
-    let db = NaiveDB {};
+    let mut db = NaiveDB::new();
+    let mut rl = Editor::<()>::new();
     loop {
-        print!("navie_db > ");
-        io::stdout().flush().unwrap();
-        let mut sql = String::new();
-        io::stdin().read_line(&mut sql).unwrap();
-        match db.run(&sql) {
-            Ok(()) => {
-                todo!();
+        print!("naive_db > ");
+        let readline = rl.readline("naive_db > ");
+        match readline {
+            Ok(line) => {
+                rl.add_history_entry(line.as_str());
+                match db.run(line.as_str()) {
+                    Ok(res) => {
+                        print!("{}", res);
+                    }
+                    Err(err) => {
+                        println!("Error: {}", err);
+                    }
+                }
+            }
+            Err(ReadlineError::Interrupted) => {
+                println!("Interrupted");
+            }
+            Err(ReadlineError::Eof) => {
+                println!("Exited");
+                break;
             }
             Err(err) => {
-                println!("Error: {}", err.to_string());
+                println!("Error: {:?}", err);
+                break;
             }
         }
     }

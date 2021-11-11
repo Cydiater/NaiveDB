@@ -5,8 +5,12 @@ mod clock;
 mod disk;
 mod page;
 
-const PAGE_SIZE: usize = 4096;
-const DEFAULT_DB_FILE: &str = "naive.db";
+pub use buffer::{BufferPoolManager, BufferPoolManagerRef};
+
+pub use page::{Page, PageRef};
+
+pub const PAGE_SIZE: usize = 4096;
+pub const DEFAULT_DB_FILE: &str = "naive.db";
 
 /// `PageID` is used to fetch page from disk, it's
 /// used internally as offset for disk.

@@ -1,9 +1,13 @@
 pub enum Statement {
-    CreateDatabase { database_name: String },
-    ShowDatabase,
+    CreateDatabase(CreateDatabaseStmt),
+    ShowDatabases,
+}
+
+pub struct CreateDatabaseStmt {
+    pub database_name: String,
 }
 
 pub enum Tok {
     CreateDatabase,
-    ShowDatabase,
+    ShowDatabases,
 }
