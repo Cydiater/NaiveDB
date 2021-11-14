@@ -22,7 +22,7 @@ impl Drop for BufferPoolManager {
         for &frame_id in self.page_table.values() {
             if self.buf[frame_id].borrow().is_dirty {
                 self.disk.write(self.buf[frame_id].clone()).unwrap();
-            } 
+            }
         }
     }
 }
@@ -123,6 +123,7 @@ impl BufferPoolManager {
         // update page table
         self.page_table
             .insert(page.borrow().page_id.unwrap(), frame_id);
+        println!("alloc #{}", page.borrow().page_id.unwrap());
         Ok(page)
     }
     pub fn num_pages(&self) -> Result<usize, StorageError> {
