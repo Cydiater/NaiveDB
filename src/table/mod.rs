@@ -19,4 +19,6 @@ pub enum TableError {
     SliceOutOfSpace,
     #[error("storage error: {0}")]
     Storage(#[from] StorageError),
+    #[error("PageID not assigned")]
+    NoPageID,
 }

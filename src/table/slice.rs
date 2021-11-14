@@ -32,7 +32,7 @@ impl fmt::Display for Datum {
 /// one slice is fitted precisely in one page,
 /// we have multiple tuples in one slice. One Slice is organized as
 ///
-///     |offset1|offset2|......
+///     |next_page_id|offset1|offset2|......
 ///                      ......|data2|data1|
 ///
 /// we mark offset = 0 as the end sign, there are two type of
@@ -62,12 +62,12 @@ impl Iterator for SliceIter {
 
     fn next(&mut self) -> Option<Self::Item> {
         let end = u32::from_le_bytes(
-            self.page.borrow().buffer[self.idx * 4..(self.idx + 1) * 4]
+            self.page.borrow().buffer[(self.idx + 1) * 4..(self.idx + 2) * 4]
                 .try_into()
                 .unwrap(),
         ) as usize;
         let start = u32::from_le_bytes(
-            self.page.borrow().buffer[(self.idx + 1) * 4..(self.idx + 2) * 4]
+            self.page.borrow().buffer[(self.idx + 2) * 4..(self.idx + 3) * 4]
                 .try_into()
                 .unwrap(),
         ) as usize;
@@ -106,10 +106,33 @@ impl Slice {
             next_page_id: None,
             bpm,
             schema,
-            head: 0usize,
+            head: 4usize,
             tail: PAGE_SIZE,
         }
     }
+
+    pub fn get_next_page_id(&self) -> Option<PageID> {
+        if let Some(page_id) = self.page_id {
+            let page = self.bpm.borrow_mut().fetch(page_id).unwrap();
+            let next_page_id =
+                u32::from_le_bytes(page.borrow().buffer[0..4].try_into().unwrap()) as PageID;
+            self.bpm.borrow_mut().unpin(page_id).unwrap();
+            Some(next_page_id)
+        } else {
+            None
+        }
+    }
+
+    pub fn set_next_page_id(&mut self, page_id: PageID) -> Result<(), TableError> {
+        if let Some(my_page_id) = self.page_id {
+            let page = self.bpm.borrow_mut().fetch(my_page_id).unwrap();
+            page.borrow_mut().buffer[0..4].copy_from_slice(&page_id.to_le_bytes());
+            Ok(())
+        } else {
+            Err(TableError::NoPageID)
+        }
+    }
+
     pub fn iter(&mut self) -> SliceIter {
         SliceIter {
             bpm: self.bpm.clone(),
@@ -117,15 +140,16 @@ impl Slice {
             idx: 0usize,
         }
     }
+
     pub fn attach(&mut self, page_id: PageID) {
         self.page_id = Some(page_id);
         let (head, tail) = self
             .iter()
-            .fold((0, PAGE_SIZE), |(head, _), (tail, _)| (head + 4, tail));
+            .fold((4, PAGE_SIZE), |(head, _), (tail, _)| (head + 4, tail));
         self.head = head;
         self.tail = tail;
-        println!("attached at ({}, {})", head, tail);
     }
+
     pub fn push(&self, data: &[u8]) -> Result<usize, TableError> {
         // fetch page from bpm
         let page_id = self.page_id.unwrap();
@@ -136,12 +160,13 @@ impl Slice {
         self.bpm.borrow_mut().unpin(page_id)?;
         Ok(next_tail)
     }
+
     pub fn at(&self, idx: usize) -> Result<Vec<Datum>, TableError> {
         // fetch page
         let page = self.bpm.borrow_mut().fetch(self.page_id.unwrap())?;
         let end = u32::from_le_bytes(
             page.borrow().buffer
-                [idx * std::mem::size_of::<u32>()..(idx + 1) * std::mem::size_of::<u32>()]
+                [(idx + 1) * std::mem::size_of::<u32>()..(idx + 2) * std::mem::size_of::<u32>()]
                 .try_into()
                 .unwrap(),
         ) as usize;
@@ -192,6 +217,7 @@ impl Slice {
         self.bpm.borrow_mut().unpin(self.page_id.unwrap())?;
         Ok(tuple)
     }
+
     pub fn add(&mut self, datums: &[Datum]) -> Result<(), TableError> {
         if datums.len() != self.schema.len() {
             return Err(TableError::DatumSchemaNotMatch);
@@ -200,7 +226,7 @@ impl Slice {
         let page = if self.page_id.is_none() {
             let page = self.bpm.borrow_mut().alloc().unwrap();
             // mark end
-            page.borrow_mut().buffer[0..4].copy_from_slice(&(0 as u32).to_le_bytes());
+            page.borrow_mut().buffer[4..8].copy_from_slice(&(0 as u32).to_le_bytes());
             // fill page_id
             self.page_id = Some(page.borrow_mut().page_id.unwrap());
             page
@@ -256,8 +282,9 @@ impl Slice {
         self.bpm.borrow_mut().unpin(self.page_id.unwrap())?;
         Ok(())
     }
+
     pub fn len(&self) -> usize {
-        self.head / std::mem::size_of::<u32>()
+        (self.head - 4) / std::mem::size_of::<u32>()
     }
 }
 
