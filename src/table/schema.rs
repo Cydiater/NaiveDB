@@ -1,5 +1,6 @@
 use crate::table::DataType;
 use itertools::Itertools;
+use std::rc::Rc;
 use std::slice::{Iter, IterMut};
 
 #[derive(Debug, PartialEq)]
@@ -9,7 +10,8 @@ pub struct Column {
     pub desc: String,
 }
 
-#[allow(dead_code)]
+pub type SchemaRef = Rc<Schema>;
+
 impl Column {
     pub fn new(offset: usize, data_type: DataType, desc: String) -> Self {
         Column {

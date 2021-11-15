@@ -1,10 +1,11 @@
 use crate::storage::{BufferPoolManagerRef, PageID, PageRef, PAGE_SIZE};
-use crate::table::{DataType, Schema, TableError};
+use crate::table::{DataType, Schema, SchemaRef, TableError};
 use itertools::Itertools;
 use pad::PadStr;
 use prettytable::{Cell, Row, Table};
 use std::convert::TryInto;
 use std::fmt;
+use std::rc::Rc;
 
 #[allow(dead_code)]
 #[derive(Debug, PartialEq)]
@@ -30,7 +31,7 @@ impl fmt::Display for Datum {
 
 #[allow(dead_code)]
 /// one slice is fitted precisely in one page,
-/// we have multiple tuples in one slice. One Slice is organized as
+/// we have multiple tuples in one slice. one Slice is organized as
 ///
 ///     |next_page_id|offset1|offset2|......
 ///                      ......|data2|data1|
@@ -44,12 +45,11 @@ pub struct Slice {
     pub page_id: Option<PageID>,
     next_page_id: Option<PageID>,
     bpm: BufferPoolManagerRef,
-    schema: Schema,
+    schema: SchemaRef,
     head: usize,
     tail: usize,
 }
 
-#[allow(dead_code)]
 pub struct SliceIter {
     bpm: BufferPoolManagerRef,
     page: PageRef,
@@ -95,12 +95,12 @@ impl Slice {
         message: String,
     ) -> Result<Self, TableError> {
         let schema = Schema::from_slice(&[(DataType::VarChar, header)]);
-        let mut slice = Self::new(bpm, schema);
+        let mut slice = Self::new(bpm, Rc::new(schema));
         slice.add(&[Datum::VarChar(message)])?;
         Ok(slice)
     }
 
-    pub fn new(bpm: BufferPoolManagerRef, schema: Schema) -> Self {
+    pub fn new(bpm: BufferPoolManagerRef, schema: SchemaRef) -> Self {
         Self {
             page_id: None,
             next_page_id: None,
@@ -238,7 +238,7 @@ impl Slice {
         let page = if self.page_id.is_none() {
             let page = self.bpm.borrow_mut().alloc().unwrap();
             // mark end
-            page.borrow_mut().buffer[4..8].copy_from_slice(&(0 as u32).to_le_bytes());
+            page.borrow_mut().buffer[4..8].copy_from_slice(&(0u32).to_le_bytes());
             // fill page_id
             self.page_id = Some(page.borrow_mut().page_id.unwrap());
             page
@@ -295,7 +295,7 @@ impl Slice {
             .copy_from_slice(&(self.tail as u32).to_le_bytes());
         // mark next end
         page.borrow_mut().buffer[next_head + 4..next_head + 8]
-            .copy_from_slice(&(0 as u32).to_le_bytes());
+            .copy_from_slice(&(0u32).to_le_bytes());
         self.bpm.borrow_mut().unpin(self.page_id.unwrap())?;
         Ok(())
     }
@@ -342,7 +342,7 @@ mod tests {
                 (DataType::Int, "v1".to_string()),
                 (DataType::Char(CharType::new(20)), "v2".to_string()),
             ]);
-            let mut slice = Slice::new(bpm.clone(), schema);
+            let mut slice = Slice::new(bpm.clone(), Rc::new(schema));
             let tuple1 = vec![Datum::Int(20), Datum::Char("hello".to_string())];
             let tuple2 = vec![Datum::Int(30), Datum::Char("world".to_string())];
             let tuple3 = vec![Datum::Int(40), Datum::Char("foo".to_string())];
@@ -356,7 +356,7 @@ mod tests {
                 (DataType::Int, "v1".to_string()),
                 (DataType::Char(CharType::new(20)), "v2".to_string()),
             ]);
-            let mut slice = Slice::new(bpm.clone(), schema);
+            let mut slice = Slice::new(bpm.clone(), Rc::new(schema));
             slice.attach(page_id);
             slice.add(&tuple3).unwrap();
             assert_eq!(slice.at(0).unwrap(), tuple1);
@@ -373,7 +373,7 @@ mod tests {
             let bpm = BufferPoolManager::new_random_shared(100);
             let filename = bpm.borrow().filename();
             let schema = Schema::from_slice(&[(DataType::Int, "v1".to_string())]);
-            let mut slice = Slice::new(bpm.clone(), schema);
+            let mut slice = Slice::new(bpm.clone(), Rc::new(schema));
             // 4 + (4 + 4) * 511 = 4092
             for i in 0..511 {
                 slice.add(&[Datum::Int(i)]).unwrap();
@@ -394,7 +394,7 @@ mod tests {
                 Column::new(4, DataType::Int, "v1".to_string()),
                 Column::new(12, DataType::VarChar, "v2".to_string()),
             ];
-            let schema = Schema::new(columns);
+            let schema = Rc::new(Schema::new(columns));
             let mut slice = Slice::new(bpm.clone(), schema);
             let tuple1 = vec![Datum::Int(20), Datum::VarChar("hello".to_string())];
             let tuple2 = vec![Datum::Int(30), Datum::VarChar("world".to_string())];
