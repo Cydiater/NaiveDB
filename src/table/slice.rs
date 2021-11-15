@@ -41,9 +41,11 @@ impl fmt::Display for Datum {
 /// put the original data in the page, for the un-inlined column, you should
 /// put RecordID in to link the original data.
 ///
+/// For a slice, if the next_page_id is equal to self's page_id, then we
+/// assume that this slice is the end slice.
+///
 pub struct Slice {
     pub page_id: Option<PageID>,
-    next_page_id: Option<PageID>,
     bpm: BufferPoolManagerRef,
     schema: SchemaRef,
     head: usize,
@@ -103,7 +105,6 @@ impl Slice {
     pub fn new(bpm: BufferPoolManagerRef, schema: SchemaRef) -> Self {
         Self {
             page_id: None,
-            next_page_id: None,
             bpm,
             schema,
             head: 4usize,
@@ -117,7 +118,11 @@ impl Slice {
             let next_page_id =
                 u32::from_le_bytes(page.borrow().buffer[0..4].try_into().unwrap()) as PageID;
             self.bpm.borrow_mut().unpin(page_id).unwrap();
-            Some(next_page_id)
+            if next_page_id != page_id {
+                Some(next_page_id)
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -241,6 +246,9 @@ impl Slice {
             page.borrow_mut().buffer[4..8].copy_from_slice(&(0u32).to_le_bytes());
             // fill page_id
             self.page_id = Some(page.borrow_mut().page_id.unwrap());
+            // mark end slice
+            page.borrow_mut().buffer[0..4]
+                .copy_from_slice(&(self.page_id.unwrap() as u32).to_le_bytes());
             page
         } else {
             self.bpm.borrow_mut().fetch(self.page_id.unwrap()).unwrap()
