@@ -1,13 +1,14 @@
 use crate::storage::{BufferPoolManagerRef, PageID, PageRef, PAGE_SIZE};
-use crate::table::{DataType, Schema, TableError};
+use crate::table::{DataType, Schema, SchemaRef, TableError};
 use itertools::Itertools;
 use pad::PadStr;
 use prettytable::{Cell, Row, Table};
 use std::convert::TryInto;
 use std::fmt;
+use std::rc::Rc;
 
 #[allow(dead_code)]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, PartialOrd, Ord, Eq)]
 pub enum Datum {
     Int(i32),
     Char(String),
@@ -30,26 +31,27 @@ impl fmt::Display for Datum {
 
 #[allow(dead_code)]
 /// one slice is fitted precisely in one page,
-/// we have multiple tuples in one slice. One Slice is organized as
+/// we have multiple tuples in one slice. one Slice is organized as
 ///
-///     |offset1|offset2|......
+///     |next_page_id|offset1|offset2|......
 ///                      ......|data2|data1|
 ///
-/// we mark offset = PAGE_SIZE as the end sign, there are two type of
+/// we mark offset = 0 as the end sign, there are two type of
 /// columns, the inlined and un-inlined. for the inlined column, we just
 /// put the original data in the page, for the un-inlined column, you should
 /// put RecordID in to link the original data.
 ///
+/// For a slice, if the next_page_id is equal to self's page_id, then we
+/// assume that this slice is the end slice.
+///
 pub struct Slice {
-    page_id: Option<PageID>,
-    next_page_id: Option<PageID>,
+    pub page_id: Option<PageID>,
     bpm: BufferPoolManagerRef,
-    schema: Schema,
+    schema: SchemaRef,
     head: usize,
     tail: usize,
 }
 
-#[allow(dead_code)]
 pub struct SliceIter {
     bpm: BufferPoolManagerRef,
     page: PageRef,
@@ -57,28 +59,33 @@ pub struct SliceIter {
 }
 
 impl Iterator for SliceIter {
-    type Item = usize;
+    /// start offset and end offset of a tuple data
+    type Item = (usize, usize);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let offset = u32::from_le_bytes(
-            self.page.borrow_mut().buffer[self.idx * 4..(self.idx + 1) * 4]
+        let end = u32::from_le_bytes(
+            self.page.borrow().buffer[(self.idx + 1) * 4..(self.idx + 2) * 4]
                 .try_into()
                 .unwrap(),
         ) as usize;
-        if offset == PAGE_SIZE {
+        let start = u32::from_le_bytes(
+            self.page.borrow().buffer[(self.idx + 2) * 4..(self.idx + 3) * 4]
+                .try_into()
+                .unwrap(),
+        ) as usize;
+        if start == 0 {
             None
         } else {
-            Some(offset)
+            self.idx += 1;
+            Some((start, end))
         }
     }
 }
 
 impl Drop for SliceIter {
     fn drop(&mut self) {
-        self.bpm
-            .borrow_mut()
-            .unpin(self.page.borrow_mut().page_id.unwrap())
-            .unwrap()
+        let page_id = self.page.borrow_mut().page_id.unwrap();
+        self.bpm.borrow_mut().unpin(page_id).unwrap();
     }
 }
 
@@ -90,21 +97,71 @@ impl Slice {
         message: String,
     ) -> Result<Self, TableError> {
         let schema = Schema::from_slice(&[(DataType::VarChar, header)]);
-        let mut slice = Self::new(bpm, schema);
+        let mut slice = Self::new(bpm, Rc::new(schema));
         slice.add(&[Datum::VarChar(message)])?;
         Ok(slice)
     }
 
-    pub fn new(bpm: BufferPoolManagerRef, schema: Schema) -> Self {
+    pub fn new(bpm: BufferPoolManagerRef, schema: SchemaRef) -> Self {
         Self {
             page_id: None,
-            next_page_id: None,
             bpm,
             schema,
-            head: 0usize,
+            head: 4usize,
             tail: PAGE_SIZE,
         }
     }
+
+    pub fn new_empty(bpm: BufferPoolManagerRef, schema: SchemaRef) -> Self {
+        let page = bpm.borrow_mut().alloc().unwrap();
+        let page_id = page.borrow().page_id.unwrap();
+        // mark end next_page_id
+        page.borrow_mut().buffer[0..4].copy_from_slice(&(page_id as u32).to_le_bytes());
+        // mark end tuple
+        page.borrow_mut().buffer[4..8].copy_from_slice(&(PAGE_SIZE as u32).to_le_bytes());
+        page.borrow_mut().buffer[8..12].copy_from_slice(&(0u32).to_le_bytes());
+        bpm.borrow_mut().unpin(page_id).unwrap();
+        Self {
+            page_id: Some(page_id),
+            bpm,
+            schema,
+            head: 4usize,
+            tail: PAGE_SIZE,
+        }
+    }
+
+    pub fn get_next_page_id(&self) -> Option<PageID> {
+        if let Some(page_id) = self.page_id {
+            let page = self.bpm.borrow_mut().fetch(page_id).unwrap();
+            let next_page_id =
+                u32::from_le_bytes(page.borrow().buffer[0..4].try_into().unwrap()) as PageID;
+            self.bpm.borrow_mut().unpin(page_id).unwrap();
+            println!("self page_id = {} next_page_id = {}", page_id, next_page_id);
+            if next_page_id != page_id {
+                Some(next_page_id)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn set_next_page_id(&mut self, page_id: PageID) -> Result<(), TableError> {
+        println!(
+            "set next_page_id of #{} to #{}",
+            self.page_id.unwrap(),
+            page_id
+        );
+        if let Some(my_page_id) = self.page_id {
+            let page = self.bpm.borrow_mut().fetch(my_page_id).unwrap();
+            page.borrow_mut().buffer[0..4].copy_from_slice(&(page_id as u32).to_le_bytes());
+            Ok(())
+        } else {
+            Err(TableError::NoPageID)
+        }
+    }
+
     pub fn iter(&mut self) -> SliceIter {
         SliceIter {
             bpm: self.bpm.clone(),
@@ -112,15 +169,16 @@ impl Slice {
             idx: 0usize,
         }
     }
+
     pub fn attach(&mut self, page_id: PageID) {
-        let page = self.bpm.borrow_mut().fetch(page_id).unwrap();
-        self.page_id = Some(page.borrow().page_id.unwrap());
+        self.page_id = Some(page_id);
         let (head, tail) = self
             .iter()
-            .fold((0, PAGE_SIZE), |(head, _), offset| (head + 4, offset));
+            .fold((4, PAGE_SIZE), |(head, _), (tail, _)| (head + 4, tail));
         self.head = head;
         self.tail = tail;
     }
+
     pub fn push(&self, data: &[u8]) -> Result<usize, TableError> {
         // fetch page from bpm
         let page_id = self.page_id.unwrap();
@@ -131,12 +189,13 @@ impl Slice {
         self.bpm.borrow_mut().unpin(page_id)?;
         Ok(next_tail)
     }
+
     pub fn at(&self, idx: usize) -> Result<Vec<Datum>, TableError> {
         // fetch page
         let page = self.bpm.borrow_mut().fetch(self.page_id.unwrap())?;
         let end = u32::from_le_bytes(
             page.borrow().buffer
-                [idx * std::mem::size_of::<u32>()..(idx + 1) * std::mem::size_of::<u32>()]
+                [(idx + 1) * std::mem::size_of::<u32>()..(idx + 2) * std::mem::size_of::<u32>()]
                 .try_into()
                 .unwrap(),
         ) as usize;
@@ -187,6 +246,19 @@ impl Slice {
         self.bpm.borrow_mut().unpin(self.page_id.unwrap())?;
         Ok(tuple)
     }
+
+    pub fn size_of(&self, datums: &[Datum]) -> usize {
+        self.schema
+            .iter()
+            .zip(datums.iter())
+            .fold(0usize, |size, (col, dat)| match (dat, col.data_type) {
+                (Datum::Int(_), DataType::Int) => size + std::mem::size_of::<u32>(),
+                (Datum::Char(_), DataType::Char(char_type)) => size + char_type.width,
+                (Datum::VarChar(dat), DataType::VarChar) => size + dat.len(),
+                _ => 0usize,
+            })
+    }
+
     pub fn add(&mut self, datums: &[Datum]) -> Result<(), TableError> {
         if datums.len() != self.schema.len() {
             return Err(TableError::DatumSchemaNotMatch);
@@ -195,12 +267,26 @@ impl Slice {
         let page = if self.page_id.is_none() {
             let page = self.bpm.borrow_mut().alloc().unwrap();
             // mark end
-            page.borrow_mut().buffer[0..4].copy_from_slice(&(PAGE_SIZE as u32).to_le_bytes());
+            page.borrow_mut().buffer[4..8].copy_from_slice(&(0u32).to_le_bytes());
+            // fill page_id
             self.page_id = Some(page.borrow_mut().page_id.unwrap());
+            // mark end slice
+            println!(
+                "set next_page_id of #{} to #{}",
+                self.page_id.unwrap(),
+                self.page_id.unwrap()
+            );
+            page.borrow_mut().buffer[0..4]
+                .copy_from_slice(&(self.page_id.unwrap() as u32).to_le_bytes());
             page
         } else {
             self.bpm.borrow_mut().fetch(self.page_id.unwrap()).unwrap()
         };
+        // check if ok to insert into the slice
+        let size = self.size_of(datums);
+        if self.head + 4 + 4 + 4 > self.tail - size {
+            return Err(TableError::SliceOutOfSpace);
+        }
         let mut not_inlined_indexes = Vec::<(usize, usize)>::new();
         let last_tail = self.tail;
         for (idx, (col, dat)) in self.schema.iter().zip(datums.iter()).enumerate() {
@@ -241,11 +327,18 @@ impl Slice {
         page.borrow_mut().buffer[self.head..next_head]
             .copy_from_slice(&(last_tail as u32).to_le_bytes());
         self.head = next_head;
+        // mark tail
+        page.borrow_mut().buffer[next_head..next_head + 4]
+            .copy_from_slice(&(self.tail as u32).to_le_bytes());
+        // mark next end
+        page.borrow_mut().buffer[next_head + 4..next_head + 8]
+            .copy_from_slice(&(0u32).to_le_bytes());
         self.bpm.borrow_mut().unpin(self.page_id.unwrap())?;
         Ok(())
     }
+
     pub fn len(&self) -> usize {
-        self.head / std::mem::size_of::<u32>()
+        (self.head - 4) / std::mem::size_of::<u32>()
     }
 }
 
@@ -282,19 +375,47 @@ mod tests {
         let filename = {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
-            bpm.borrow_mut().clear().unwrap();
-            let columns = vec![
-                Column::new(4, DataType::Int, "v1".to_string()),
-                Column::new(24, DataType::Char(CharType::new(20)), "v2".to_string()),
-            ];
-            let schema = Schema::new(columns);
-            let mut slice = Slice::new(bpm.clone(), schema);
+            let schema = Schema::from_slice(&[
+                (DataType::Int, "v1".to_string()),
+                (DataType::Char(CharType::new(20)), "v2".to_string()),
+            ]);
+            let mut slice = Slice::new(bpm.clone(), Rc::new(schema));
             let tuple1 = vec![Datum::Int(20), Datum::Char("hello".to_string())];
             let tuple2 = vec![Datum::Int(30), Datum::Char("world".to_string())];
+            let tuple3 = vec![Datum::Int(40), Datum::Char("foo".to_string())];
             slice.add(&tuple1).unwrap();
             slice.add(&tuple2).unwrap();
             assert_eq!(slice.at(0).unwrap(), tuple1);
             assert_eq!(slice.at(1).unwrap(), tuple2);
+            let page_id = slice.page_id.unwrap();
+            // refetch
+            let schema = Schema::from_slice(&[
+                (DataType::Int, "v1".to_string()),
+                (DataType::Char(CharType::new(20)), "v2".to_string()),
+            ]);
+            let mut slice = Slice::new(bpm.clone(), Rc::new(schema));
+            slice.attach(page_id);
+            slice.add(&tuple3).unwrap();
+            assert_eq!(slice.at(0).unwrap(), tuple1);
+            assert_eq!(slice.at(1).unwrap(), tuple2);
+            assert_eq!(slice.at(2).unwrap(), tuple3);
+            filename
+        };
+        remove_file(filename).unwrap();
+    }
+
+    #[test]
+    fn test_overflow() {
+        let filename = {
+            let bpm = BufferPoolManager::new_random_shared(100);
+            let filename = bpm.borrow().filename();
+            let schema = Schema::from_slice(&[(DataType::Int, "v1".to_string())]);
+            let mut slice = Slice::new(bpm.clone(), Rc::new(schema));
+            // 4 + (4 + 4) * 510 = 4090
+            for i in 0..510 {
+                slice.add(&[Datum::Int(i)]).unwrap();
+            }
+            assert!(slice.add(&[Datum::Int(0)]).is_err());
             filename
         };
         remove_file(filename).unwrap();
@@ -310,7 +431,7 @@ mod tests {
                 Column::new(4, DataType::Int, "v1".to_string()),
                 Column::new(12, DataType::VarChar, "v2".to_string()),
             ];
-            let schema = Schema::new(columns);
+            let schema = Rc::new(Schema::new(columns));
             let mut slice = Slice::new(bpm.clone(), schema);
             let tuple1 = vec![Datum::Int(20), Datum::VarChar("hello".to_string())];
             let tuple2 = vec![Datum::Int(30), Datum::VarChar("world".to_string())];
