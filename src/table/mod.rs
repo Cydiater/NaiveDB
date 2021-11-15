@@ -53,6 +53,7 @@ impl Iterator for TableIter {
             ret
         } else if let Some(page_id_of_next_slice) = slice.get_next_page_id() {
             self.page_id = page_id_of_next_slice;
+            println!("next_page_id = {}", page_id_of_next_slice);
             self.idx = 1;
             slice.attach(self.page_id);
             Some(slice.at(0).unwrap())
@@ -103,11 +104,8 @@ impl Table {
         let page = bpm.borrow_mut().alloc().unwrap();
         let page_id = page.borrow().page_id.unwrap();
         // alloc slice page
-        let mut slice = Slice::new(bpm.clone(), schema.clone());
-        let slice_page = bpm.borrow_mut().alloc().unwrap();
-        let page_id_of_root_slice = slice_page.borrow().page_id.unwrap();
-        slice.attach(page_id_of_root_slice);
-        bpm.borrow_mut().unpin(page_id_of_root_slice).unwrap();
+        let slice = Slice::new_empty(bpm.clone(), schema.clone());
+        let page_id_of_root_slice = slice.page_id.unwrap();
         page.borrow_mut().buffer[0..4]
             .copy_from_slice(&(page_id_of_root_slice as u32).to_le_bytes());
         // fill schema
@@ -153,7 +151,7 @@ impl Table {
             let mut new_slice = Slice::new(self.bpm.clone(), self.schema.clone());
             new_slice.add(datums).unwrap();
             self.set_page_id_of_root_slice(new_slice.page_id.unwrap());
-            slice.set_next_page_id(new_slice.page_id.unwrap()).unwrap();
+            new_slice.set_next_page_id(slice.page_id.unwrap()).unwrap();
             Ok(())
         }
     }
@@ -178,4 +176,36 @@ pub enum TableError {
     Storage(#[from] StorageError),
     #[error("PageID not assigned")]
     NoPageID,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::storage::BufferPoolManager;
+    use itertools::Itertools;
+    use std::fs::remove_file;
+
+    #[test]
+    fn test_multiple_slice() {
+        let filename = {
+            let bpm = BufferPoolManager::new_random_shared(5);
+            let filename = bpm.borrow().filename();
+            let schema = Schema::from_slice(&[(DataType::Int, "v1".to_string())]);
+            let mut table = Table::new(schema, bpm.clone());
+            // insert
+            for idx in 0..1000 {
+                table.insert(&[Datum::Int(idx)]).unwrap()
+            }
+            // validate
+            table
+                .iter()
+                .sorted()
+                .enumerate()
+                .for_each(|(idx, datums)| {
+                    assert_eq!(Datum::Int(idx as i32), datums[0]);
+                });
+            filename
+        };
+        remove_file(filename).unwrap();
+    }
 }
