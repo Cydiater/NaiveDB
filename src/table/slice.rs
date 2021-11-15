@@ -218,6 +218,18 @@ impl Slice {
         Ok(tuple)
     }
 
+    pub fn size_of(&self, datums: &[Datum]) -> usize {
+        self.schema
+            .iter()
+            .zip(datums.iter())
+            .fold(0usize, |size, (col, dat)| match (dat, col.data_type) {
+                (Datum::Int(_), DataType::Int) => size + std::mem::size_of::<u32>(),
+                (Datum::Char(_), DataType::Char(char_type)) => size + char_type.width,
+                (Datum::VarChar(dat), DataType::VarChar) => size + dat.len(),
+                _ => 0usize,
+            })
+    }
+
     pub fn add(&mut self, datums: &[Datum]) -> Result<(), TableError> {
         if datums.len() != self.schema.len() {
             return Err(TableError::DatumSchemaNotMatch);
@@ -233,6 +245,11 @@ impl Slice {
         } else {
             self.bpm.borrow_mut().fetch(self.page_id.unwrap()).unwrap()
         };
+        // check if ok to insert into the slice
+        let size = self.size_of(datums);
+        if self.head + 4 + 4 > self.tail - size {
+            return Err(TableError::SliceOutOfSpace);
+        }
         let mut not_inlined_indexes = Vec::<(usize, usize)>::new();
         let last_tail = self.tail;
         for (idx, (col, dat)) in self.schema.iter().zip(datums.iter()).enumerate() {
@@ -321,7 +338,6 @@ mod tests {
         let filename = {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
-            bpm.borrow_mut().clear().unwrap();
             let schema = Schema::from_slice(&[
                 (DataType::Int, "v1".to_string()),
                 (DataType::Char(CharType::new(20)), "v2".to_string()),
@@ -346,6 +362,23 @@ mod tests {
             assert_eq!(slice.at(0).unwrap(), tuple1);
             assert_eq!(slice.at(1).unwrap(), tuple2);
             assert_eq!(slice.at(2).unwrap(), tuple3);
+            filename
+        };
+        remove_file(filename).unwrap();
+    }
+
+    #[test]
+    fn test_overflow() {
+        let filename = {
+            let bpm = BufferPoolManager::new_random_shared(100);
+            let filename = bpm.borrow().filename();
+            let schema = Schema::from_slice(&[(DataType::Int, "v1".to_string())]);
+            let mut slice = Slice::new(bpm.clone(), schema);
+            // 4 + (4 + 4) * 511 = 4092
+            for i in 0..511 {
+                slice.add(&[Datum::Int(i)]).unwrap();
+            }
+            assert!(slice.add(&[Datum::Int(0)]).is_err());
             filename
         };
         remove_file(filename).unwrap();
