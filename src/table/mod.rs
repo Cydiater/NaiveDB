@@ -1,4 +1,5 @@
 use crate::storage::{BufferPoolManagerRef, PageID, StorageError};
+use std::convert::TryInto;
 use std::rc::Rc;
 use thiserror::Error;
 
@@ -48,14 +49,37 @@ impl Iterator for TableIter {
 #[allow(dead_code)]
 impl Table {
     /// open an exist table from disk
-    pub fn open(_page_id: PageID, _bpm: BufferPoolManagerRef) -> Self {
-        todo!()
+    pub fn open(page_id: PageID, bpm: BufferPoolManagerRef) -> Self {
+        // fetch page from bpm
+        let page = bpm.borrow_mut().fetch(page_id).unwrap();
+        // reconstruct schema
+        let mut offset = 4;
+        let mut cols = vec![];
+        loop {
+            let desc_len =
+                u32::from_le_bytes(page.borrow().buffer[offset..offset + 4].try_into().unwrap())
+                    as usize;
+            if desc_len == 0 {
+                break;
+            }
+            offset += 4;
+            let name = String::from_utf8(page.borrow().buffer[offset..offset + desc_len].to_vec())
+                .unwrap();
+            offset += desc_len;
+            let dat =
+                DataType::from_bytes(&page.borrow().buffer[offset..offset + 4].try_into().unwrap())
+                    .unwrap();
+            cols.push((dat, name));
+        }
+        let schema = Rc::new(Schema::from_slice(cols.as_slice()));
+        Self { schema, bpm }
     }
     /// create an table
     pub fn new(schema: Schema, bpm: BufferPoolManagerRef) -> Self {
         let schema = Rc::new(schema);
         // alloc a page
         let page = bpm.borrow_mut().alloc().unwrap();
+        let page_id = page.borrow().page_id.unwrap();
         // alloc slice page
         let mut slice = Slice::new(bpm.clone(), schema.clone());
         let slice_page = bpm.borrow_mut().alloc().unwrap();
@@ -75,7 +99,11 @@ impl Table {
                 .copy_from_slice(col.desc.as_bytes());
             offset += desc_len;
             page.borrow_mut().buffer[offset..offset + 5].copy_from_slice(&col.data_type.as_bytes());
+            offset += 5;
+            page.borrow_mut().buffer[offset..offset + 4].copy_from_slice(&[0u8; 4]);
         });
+        // unpin page
+        bpm.borrow_mut().unpin(page_id).unwrap();
         Self { schema, bpm }
     }
     pub fn insert(_datums: &[Datum]) -> Result<(), TableError> {
