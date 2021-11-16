@@ -1,11 +1,14 @@
 use crate::parser::ast::Statement;
 pub use create_database::CreateDatabasePlan;
+pub use use_database::UseDatabasePlan;
 
 mod create_database;
+mod use_database;
 
 pub enum Plan {
     CreateDatabase(CreateDatabasePlan),
     ShowDatabases,
+    UseDatabase(UseDatabasePlan),
 }
 
 pub struct Planner;
@@ -20,6 +23,7 @@ impl Planner {
         match stmt {
             Statement::CreateDatabase(stmt) => self.plan_create_database(stmt),
             Statement::ShowDatabases => Plan::ShowDatabases,
+            Statement::UseDatabase(stmt) => self.plan_use_database(stmt),
         }
     }
 }

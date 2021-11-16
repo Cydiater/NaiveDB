@@ -28,5 +28,7 @@ mod tests {
         assert!(sql::StatementsParser::new()
             .parse("show databases;")
             .is_ok());
+        // use database
+        assert!(sql::StatementsParser::new().parse("use sample;").is_ok());
     }
 }

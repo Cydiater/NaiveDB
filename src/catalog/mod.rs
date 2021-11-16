@@ -1,15 +1,15 @@
 use crate::storage::{BufferPoolManagerRef, PageID, PageRef, StorageError, PAGE_SIZE};
-use std::cell::RefCell;
 use std::convert::TryInto;
-use std::rc::Rc;
 use thiserror::Error;
+
+mod catalog_manager;
+
+pub use catalog_manager::{CatalogManager, CatalogManagerRef};
 
 pub struct Catalog {
     bpm: BufferPoolManagerRef,
-    page_id: PageID,
+    pub page_id: PageID,
 }
-
-pub type CatalogRef = Rc<RefCell<Catalog>>;
 
 pub struct CatalogIter {
     pub offset: usize,
@@ -51,12 +51,18 @@ impl Drop for CatalogIter {
 }
 
 impl Catalog {
-    pub fn new_database_catalog(bpm: BufferPoolManagerRef) -> CatalogRef {
-        Rc::new(RefCell::new(Self { bpm, page_id: 0 }))
+    pub fn new_database_catalog(bpm: BufferPoolManagerRef) -> Catalog {
+        Self { bpm, page_id: 0 }
     }
-    #[allow(dead_code)]
-    pub fn new_table_catalog(bpm: BufferPoolManagerRef, page_id: PageID) -> Self {
+    pub fn new_with_page_id(bpm: BufferPoolManagerRef, page_id: PageID) -> Catalog {
         Self { bpm, page_id }
+    }
+    pub fn new_empty(bpm: BufferPoolManagerRef) -> Result<Catalog, CatalogError> {
+        let page = bpm.borrow_mut().alloc().unwrap();
+        let page_id = page.borrow().page_id.unwrap();
+        page.borrow_mut().buffer[0..4].copy_from_slice(&0u32.to_le_bytes());
+        bpm.borrow_mut().unpin(page_id).unwrap();
+        Ok(Self { bpm, page_id })
     }
     pub fn iter(&self) -> CatalogIter {
         CatalogIter {
@@ -91,6 +97,8 @@ pub enum CatalogError {
     OutOfRange,
     #[error("BPM")]
     Storage(#[from] StorageError),
+    #[error("Entry Not Found")]
+    EntryNotFound,
 }
 
 #[cfg(test)]
@@ -104,20 +112,11 @@ mod tests {
         let bpm = BufferPoolManager::new_shared(5);
         bpm.borrow_mut().clear().unwrap();
         let _ = bpm.borrow_mut().alloc().unwrap();
-        let db_catalog = Catalog::new_database_catalog(bpm.clone());
-        db_catalog
-            .borrow_mut()
-            .insert(0, "sample_0".to_string())
-            .unwrap();
-        db_catalog
-            .borrow_mut()
-            .insert(1, "sample_1".to_string())
-            .unwrap();
-        db_catalog
-            .borrow_mut()
-            .insert(2, "sample_2".to_string())
-            .unwrap();
-        let res = db_catalog.borrow_mut().iter().collect_vec();
+        let mut db_catalog = Catalog::new_database_catalog(bpm.clone());
+        db_catalog.insert(0, "sample_0".to_string()).unwrap();
+        db_catalog.insert(1, "sample_1".to_string()).unwrap();
+        db_catalog.insert(2, "sample_2".to_string()).unwrap();
+        let res = db_catalog.iter().collect_vec();
         assert_eq!(
             res,
             vec![
@@ -126,11 +125,8 @@ mod tests {
                 (8, 2, "sample_2".to_string()),
             ]
         );
-        db_catalog
-            .borrow_mut()
-            .insert(3, "sample_3".to_string())
-            .unwrap();
-        let res = db_catalog.borrow().iter().collect_vec();
+        db_catalog.insert(3, "sample_3".to_string()).unwrap();
+        let res = db_catalog.iter().collect_vec();
         assert_eq!(
             res,
             vec![

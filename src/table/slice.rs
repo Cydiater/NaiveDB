@@ -136,7 +136,6 @@ impl Slice {
             let next_page_id =
                 u32::from_le_bytes(page.borrow().buffer[0..4].try_into().unwrap()) as PageID;
             self.bpm.borrow_mut().unpin(page_id).unwrap();
-            println!("self page_id = {} next_page_id = {}", page_id, next_page_id);
             if next_page_id != page_id {
                 Some(next_page_id)
             } else {
@@ -148,11 +147,6 @@ impl Slice {
     }
 
     pub fn set_next_page_id(&mut self, page_id: PageID) -> Result<(), TableError> {
-        println!(
-            "set next_page_id of #{} to #{}",
-            self.page_id.unwrap(),
-            page_id
-        );
         if let Some(my_page_id) = self.page_id {
             let page = self.bpm.borrow_mut().fetch(my_page_id).unwrap();
             page.borrow_mut().buffer[0..4].copy_from_slice(&(page_id as u32).to_le_bytes());
@@ -271,11 +265,6 @@ impl Slice {
             // fill page_id
             self.page_id = Some(page.borrow_mut().page_id.unwrap());
             // mark end slice
-            println!(
-                "set next_page_id of #{} to #{}",
-                self.page_id.unwrap(),
-                self.page_id.unwrap()
-            );
             page.borrow_mut().buffer[0..4]
                 .copy_from_slice(&(self.page_id.unwrap() as u32).to_le_bytes());
             page

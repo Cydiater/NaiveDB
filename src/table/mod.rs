@@ -197,13 +197,9 @@ mod tests {
                 table.insert(&[Datum::Int(idx)]).unwrap()
             }
             // validate
-            table
-                .iter()
-                .sorted()
-                .enumerate()
-                .for_each(|(idx, datums)| {
-                    assert_eq!(Datum::Int(idx as i32), datums[0]);
-                });
+            table.iter().sorted().enumerate().for_each(|(idx, datums)| {
+                assert_eq!(Datum::Int(idx as i32), datums[0]);
+            });
             filename
         };
         remove_file(filename).unwrap();
