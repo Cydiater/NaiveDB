@@ -1,5 +1,5 @@
 use crate::catalog::{Catalog, CatalogError, CatalogIter};
-use crate::storage::BufferPoolManagerRef;
+use crate::storage::{BufferPoolManagerRef, PageID};
 use log::info;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -33,6 +33,19 @@ impl CatalogManager {
             .insert(page_id, database_name)
             .unwrap();
         Ok(())
+    }
+    pub fn create_table(
+        &mut self,
+        table_name: String,
+        page_id: PageID,
+    ) -> Result<(), CatalogError> {
+        if let Some(table_catalog) = self.table_catalog.as_mut() {
+            info!("create table {}", table_name);
+            table_catalog.insert(page_id, table_name).unwrap();
+            Ok(())
+        } else {
+            Err(CatalogError::NotUsingDatabase)
+        }
     }
     pub fn use_database(&mut self, database_name: String) -> Result<(), CatalogError> {
         if let Some(page_id) = self

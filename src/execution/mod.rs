@@ -8,7 +8,8 @@ use thiserror::Error;
 mod executor;
 
 pub use executor::{
-    CreateDatabaseExecutor, Executor, ExecutorImpl, ShowDatabasesExecutor, UseDatabaseExecutor,
+    CreateDatabaseExecutor, CreateTableExecutor, Executor, ExecutorImpl, ShowDatabasesExecutor,
+    UseDatabaseExecutor,
 };
 
 pub struct Engine {
@@ -34,6 +35,12 @@ impl Engine {
                 self.bpm.clone(),
                 self.catalog.clone(),
                 plan.database_name,
+            )),
+            Plan::CreateTable(plan) => ExecutorImpl::CreateTable(CreateTableExecutor::new(
+                self.bpm.clone(),
+                self.catalog.clone(),
+                plan.table_name,
+                plan.schema,
             )),
         }
     }

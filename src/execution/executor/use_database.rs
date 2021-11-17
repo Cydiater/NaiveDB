@@ -13,8 +13,7 @@ impl Executor for UseDatabaseExecutor {
     fn execute(&mut self) -> Result<Slice, ExecutionError> {
         self.catalog
             .borrow_mut()
-            .use_database(self.database_name.clone())
-            .unwrap();
+            .use_database(self.database_name.clone())?;
         Ok(Slice::new_simple_message(
             self.bpm.clone(),
             "database".to_string(),

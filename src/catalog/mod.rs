@@ -99,6 +99,8 @@ pub enum CatalogError {
     Storage(#[from] StorageError),
     #[error("Entry Not Found")]
     EntryNotFound,
+    #[error("Not Using Database")]
+    NotUsingDatabase,
 }
 
 #[cfg(test)]
