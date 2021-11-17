@@ -4,7 +4,6 @@ use log::info;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-#[allow(dead_code)]
 pub struct CatalogManager {
     bpm: BufferPoolManagerRef,
     database_catalog: Catalog,
