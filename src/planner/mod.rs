@@ -24,6 +24,7 @@ impl Planner {
             Statement::CreateDatabase(stmt) => self.plan_create_database(stmt),
             Statement::ShowDatabases => Plan::ShowDatabases,
             Statement::UseDatabase(stmt) => self.plan_use_database(stmt),
+            Statement::CreateTable(_) => todo!(),
         }
     }
 }

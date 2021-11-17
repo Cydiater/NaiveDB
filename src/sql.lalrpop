@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use crate::table::CharType;
 use crate::parser::ast::{
-    Statement, CreateDatabaseStmt, UseDatabaseStmt,
+    Statement, CreateDatabaseStmt, UseDatabaseStmt, CreateTableStmt,
     Field, NormalField, DataType,
 };
 
@@ -41,18 +41,19 @@ Field: Field = {
 }
 
 NormalField: Field = {
-    <field_name:Identifier> <field_data_type:DataType> "NOT" "NULL" ";" => Field::Normal(NormalField { field_name, field_data_type, nullable: false }),
-    <field_name:Identifier> <field_data_type:DataType> "NULL" ";" => Field::Normal(NormalField { field_name, field_data_type, nullable: true }),
+    <field_name:Identifier> <field_data_type:DataType> "not" "null" => Field::Normal(NormalField { field_name, field_data_type, nullable: false }),
+    <field_name:Identifier> <field_data_type:DataType> "null" => Field::Normal(NormalField { field_name, field_data_type, nullable: true }),
 }
 
 Statement: Statement = {
     CreateDatabaseStmt,
     ShowDatabasesStmt,
     UseDatabaseStmt,
+    CreateTableStmt,
 }
 
 CreateDatabaseStmt: Statement = {
-    "create" "database" <database_name:Identifier> ";" => Statement::CreateDatabase(CreateDatabaseStmt { database_name }),
+    "create" "database" <database_name: Identifier> ";" => Statement::CreateDatabase(CreateDatabaseStmt { database_name }),
 };
 
 ShowDatabasesStmt: Statement = {
@@ -60,7 +61,11 @@ ShowDatabasesStmt: Statement = {
 }
 
 UseDatabaseStmt: Statement = {
-    "use" <database_name:Identifier> ";" => Statement::UseDatabase(UseDatabaseStmt { database_name }),
+    "use" <database_name: Identifier> ";" => Statement::UseDatabase(UseDatabaseStmt { database_name }),
+}
+
+CreateTableStmt: Statement = {
+    "create" "table" <table_name: Identifier> "(" <fields: Fields> ")" ";" => Statement::CreateTable(CreateTableStmt { table_name, fields }),
 }
 
 Identifier: String = {

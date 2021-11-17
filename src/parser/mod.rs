@@ -16,7 +16,7 @@ mod tests {
     use crate::sql;
 
     #[test]
-    fn sql() {
+    fn test_database_sql() {
         // create database
         assert!(sql::StatementsParser::new()
             .parse("create database sample;")
@@ -30,5 +30,13 @@ mod tests {
             .is_ok());
         // use database
         assert!(sql::StatementsParser::new().parse("use sample;").is_ok());
+    }
+
+    #[test]
+    fn test_table_sql() {
+        // create table
+        assert!(sql::StatementsParser::new()
+            .parse("create table sample(v1 int not null, v2 char(20) null);")
+            .is_ok());
     }
 }
