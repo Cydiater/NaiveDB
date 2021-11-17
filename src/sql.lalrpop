@@ -1,9 +1,24 @@
 use std::str::FromStr;
-use crate::parser::ast::{Statement, Tok, CreateDatabaseStmt};
+use crate::table::CharType;
+use crate::parser::ast::{
+    Statement, CreateDatabaseStmt, UseDatabaseStmt, CreateTableStmt,
+    Field, NormalField, DataType,
+};
 
 grammar;
 
 pub Statements = Semicolon<Statement>;
+pub Fields = Comma<Field>;
+
+Comma<T>: Vec<T> = {
+    <mut v:(<T> ",")*> <e:T?> => match e {
+        None => v,
+        Some(stmt) => {
+            v.push(stmt);
+            v
+        }
+    },
+};
 
 Semicolon<T>: Vec<T> = {
     <mut v:(<T> ";")*> <e:T?> => match e {
@@ -15,29 +30,46 @@ Semicolon<T>: Vec<T> = {
     },
 };
 
+DataType: DataType = {
+    "int" => DataType::Int,
+    "char" "(" <width:Num> ")" => DataType::Char(CharType::new(width as usize)),
+    "varchar" => DataType::VarChar,
+}
+
+Field: Field = {
+    NormalField,
+}
+
+NormalField: Field = {
+    <field_name:Identifier> <field_data_type:DataType> "not" "null" => Field::Normal(NormalField { field_name, field_data_type, nullable: false }),
+    <field_name:Identifier> <field_data_type:DataType> "null" => Field::Normal(NormalField { field_name, field_data_type, nullable: true }),
+}
+
 Statement: Statement = {
     CreateDatabaseStmt,
     ShowDatabasesStmt,
+    UseDatabaseStmt,
+    CreateTableStmt,
 }
 
 CreateDatabaseStmt: Statement = {
-    CreateDatabaseToken <database_name:Identifier> ";" => Statement::CreateDatabase(CreateDatabaseStmt { database_name }),
+    "create" "database" <database_name: Identifier> ";" => Statement::CreateDatabase(CreateDatabaseStmt { database_name }),
 };
 
 ShowDatabasesStmt: Statement = {
-    ShowDatabasesToken ";" => Statement::ShowDatabases,
+    "show" "databases" ";" => Statement::ShowDatabases,
 }
 
-CreateDatabaseToken: Tok = {
-    "create database" => Tok::CreateDatabase,
-    "CREATE DATABASE" => Tok::CreateDatabase,
-};
+UseDatabaseStmt: Statement = {
+    "use" <database_name: Identifier> ";" => Statement::UseDatabase(UseDatabaseStmt { database_name }),
+}
 
-ShowDatabasesToken: Tok = {
-    "show databases" => Tok::ShowDatabases,
-    "SHOW DATABASES" => Tok::ShowDatabases,
+CreateTableStmt: Statement = {
+    "create" "table" <table_name: Identifier> "(" <fields: Fields> ")" ";" => Statement::CreateTable(CreateTableStmt { table_name, fields }),
 }
 
 Identifier: String = {
     r"[a-zA-Z_][a-zA-Z_0-9]*" => String::from_str(<>).unwrap(),
 };
+
+Num: i32 = <s:r"[0-9]+"> => i32::from_str(s).unwrap();

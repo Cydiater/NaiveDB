@@ -1,4 +1,4 @@
-use crate::catalog::{Catalog, CatalogError, CatalogRef};
+use crate::catalog::{CatalogError, CatalogManager, CatalogManagerRef};
 use crate::planner::Plan;
 use crate::storage::BufferPoolManagerRef;
 use crate::table::{Slice, TableError};
@@ -7,11 +7,14 @@ use thiserror::Error;
 
 mod executor;
 
-pub use executor::{CreateDatabaseExecutor, Executor, ExecutorImpl, ShowDatabasesExecutor};
+pub use executor::{
+    CreateDatabaseExecutor, CreateTableExecutor, Executor, ExecutorImpl, ShowDatabasesExecutor,
+    UseDatabaseExecutor,
+};
 
 pub struct Engine {
     bpm: BufferPoolManagerRef,
-    database_catalog: CatalogRef,
+    catalog: CatalogManagerRef,
 }
 
 impl Engine {
@@ -19,14 +22,25 @@ impl Engine {
         match plan {
             Plan::CreateDatabase(plan) => {
                 ExecutorImpl::CreateDatabase(CreateDatabaseExecutor::new(
-                    self.database_catalog.clone(),
+                    self.catalog.clone(),
                     self.bpm.clone(),
                     plan.database_name,
                 ))
             }
             Plan::ShowDatabases => ExecutorImpl::ShowDatabases(ShowDatabasesExecutor::new(
-                self.database_catalog.clone(),
+                self.catalog.clone(),
                 self.bpm.clone(),
+            )),
+            Plan::UseDatabase(plan) => ExecutorImpl::UseDatabase(UseDatabaseExecutor::new(
+                self.bpm.clone(),
+                self.catalog.clone(),
+                plan.database_name,
+            )),
+            Plan::CreateTable(plan) => ExecutorImpl::CreateTable(CreateTableExecutor::new(
+                self.bpm.clone(),
+                self.catalog.clone(),
+                plan.table_name,
+                plan.schema,
             )),
         }
     }
@@ -35,11 +49,15 @@ impl Engine {
         info!("disk file have {} pages", num_pages);
         // allocate database catalog
         if num_pages == 0 {
-            let _ = bpm.borrow_mut().alloc().unwrap();
+            let page = bpm.borrow_mut().alloc().unwrap();
+            let page_id = page.borrow().page_id.unwrap();
+            // mark num of database to 0
+            page.borrow_mut().buffer[0..4].copy_from_slice(&0u32.to_le_bytes());
+            bpm.borrow_mut().unpin(page_id).unwrap();
         }
         Self {
             bpm: bpm.clone(),
-            database_catalog: Catalog::new_database_catalog(bpm),
+            catalog: CatalogManager::new_shared(bpm),
         }
     }
     pub fn execute(&mut self, plan: Plan) -> Result<Slice, ExecutionError> {

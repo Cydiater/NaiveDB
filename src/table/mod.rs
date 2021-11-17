@@ -30,7 +30,7 @@ pub use types::{CharType, DataType};
 pub struct Table {
     schema: Rc<Schema>,
     bpm: BufferPoolManagerRef,
-    page_id: PageID,
+    pub page_id: PageID,
 }
 
 #[allow(dead_code)]
@@ -98,8 +98,7 @@ impl Table {
         }
     }
     /// create an table
-    pub fn new(schema: Schema, bpm: BufferPoolManagerRef) -> Self {
-        let schema = Rc::new(schema);
+    pub fn new(schema: SchemaRef, bpm: BufferPoolManagerRef) -> Self {
         // alloc a page
         let page = bpm.borrow_mut().alloc().unwrap();
         let page_id = page.borrow().page_id.unwrap();
@@ -191,19 +190,15 @@ mod tests {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
             let schema = Schema::from_slice(&[(DataType::Int, "v1".to_string())]);
-            let mut table = Table::new(schema, bpm.clone());
+            let mut table = Table::new(Rc::new(schema), bpm.clone());
             // insert
             for idx in 0..1000 {
                 table.insert(&[Datum::Int(idx)]).unwrap()
             }
             // validate
-            table
-                .iter()
-                .sorted()
-                .enumerate()
-                .for_each(|(idx, datums)| {
-                    assert_eq!(Datum::Int(idx as i32), datums[0]);
-                });
+            table.iter().sorted().enumerate().for_each(|(idx, datums)| {
+                assert_eq!(Datum::Int(idx as i32), datums[0]);
+            });
             filename
         };
         remove_file(filename).unwrap();
