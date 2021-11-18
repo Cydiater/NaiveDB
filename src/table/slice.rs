@@ -7,8 +7,7 @@ use std::convert::TryInto;
 use std::fmt;
 use std::rc::Rc;
 
-#[allow(dead_code)]
-#[derive(Debug, PartialEq, PartialOrd, Ord, Eq)]
+#[derive(Debug, PartialEq, PartialOrd, Ord, Eq, Clone)]
 pub enum Datum {
     Int(i32),
     Char(String),

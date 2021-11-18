@@ -35,6 +35,7 @@ DataType: DataType = {
     "int" => DataType::Int,
     "char" "(" <width:Num> ")" => DataType::Char(CharType::new(width as usize)),
     "varchar" => DataType::VarChar,
+    "bool" => DataType::Bool,
 }
 
 Field: Field = {

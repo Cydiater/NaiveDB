@@ -13,7 +13,7 @@ impl ConstantExpr {
 }
 
 impl Expr for ConstantExpr {
-    fn eval(&mut self, _slice: Option<&Slice>) -> Datum {
-        todo!()
+    fn eval(&mut self, _: Option<&Slice>) -> Datum {
+        self.value.clone()
     }
 }
