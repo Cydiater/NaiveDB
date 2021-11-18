@@ -6,22 +6,20 @@ pub struct CharType {
     pub width: usize,
 }
 
-#[allow(dead_code)]
 impl CharType {
     pub fn new(width: usize) -> Self {
         Self { width }
     }
 }
 
-#[allow(dead_code)]
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum DataType {
     Int,
     Char(CharType),
     VarChar,
+    Bool,
 }
 
-#[allow(dead_code)]
 impl DataType {
     pub fn width(&self) -> Option<usize> {
         match self {
@@ -39,6 +37,7 @@ impl DataType {
                 b.as_slice().try_into().unwrap()
             }
             Self::VarChar => [2u8, 0, 0, 0, 0],
+            Self::Bool => [3u8, 0, 0, 0, 0],
         }
     }
     pub fn from_bytes(bytes: &[u8; 5]) -> Result<Self, DataTypeError> {
@@ -48,6 +47,7 @@ impl DataType {
                 u32::from_le_bytes(bytes[1..5].try_into().unwrap()) as usize,
             ))),
             2 => Ok(Self::VarChar),
+            3 => Ok(Self::Bool),
             _ => Err(DataTypeError::UndefinedDataType),
         }
     }
