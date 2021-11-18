@@ -11,3 +11,11 @@ pub trait Expr {
 pub enum ExprImpl {
     Constant(ConstantExpr),
 }
+
+impl ExprImpl {
+    pub fn eval(&mut self, slice: Option<&Slice>) -> Datum {
+        match self {
+            ExprImpl::Constant(expr) => expr.eval(slice),
+        }
+    }
+}

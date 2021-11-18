@@ -12,6 +12,12 @@ pub struct Page {
 
 pub type PageRef = Rc<RefCell<Page>>;
 
+impl Default for Page {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Page {
     pub fn new() -> Self {
         Page {
