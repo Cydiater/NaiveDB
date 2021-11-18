@@ -33,6 +33,14 @@ mod tests {
     }
 
     #[test]
+    fn test_expr() {
+        // constant expr
+        assert!(sql::ExprParser::new().parse("123").is_ok());
+        assert!(sql::ExprParser::new().parse("'hello'").is_ok());
+        assert!(sql::ExprParser::new().parse("222hh").is_err());
+    }
+
+    #[test]
     fn test_table_sql() {
         // create table
         assert!(sql::StatementsParser::new()

@@ -1,5 +1,5 @@
 use crate::table::{Datum, Slice};
-use constant::ConstantExpr;
+pub use constant::ConstantExpr;
 
 mod constant;
 

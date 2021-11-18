@@ -30,7 +30,6 @@ impl NaiveDB {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Error, Debug)]
 pub enum NaiveDBError {
     #[error("ParseError: {0}")]
