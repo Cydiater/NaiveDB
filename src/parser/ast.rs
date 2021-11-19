@@ -1,3 +1,4 @@
+use crate::expr::ExprImpl;
 pub use crate::table::DataType;
 
 #[derive(Debug)]
@@ -6,6 +7,7 @@ pub enum Statement {
     ShowDatabases,
     UseDatabase(UseDatabaseStmt),
     CreateTable(CreateTableStmt),
+    Insert(InsertStmt),
 }
 
 #[derive(Debug)]
@@ -22,6 +24,12 @@ pub struct UseDatabaseStmt {
 pub struct CreateTableStmt {
     pub table_name: String,
     pub fields: Vec<Field>,
+}
+
+#[derive(Debug)]
+pub struct InsertStmt {
+    pub table_name: String,
+    pub values: Vec<Vec<ExprImpl>>,
 }
 
 #[derive(Debug)]

@@ -7,11 +7,13 @@ mod create_database;
 mod create_table;
 mod use_database;
 
+#[allow(dead_code)]
 pub enum Plan {
     CreateDatabase(CreateDatabasePlan),
     ShowDatabases,
     UseDatabase(UseDatabasePlan),
     CreateTable(CreateTablePlan),
+    Insert,
 }
 
 pub struct Planner;
@@ -28,6 +30,7 @@ impl Planner {
             Statement::ShowDatabases => Plan::ShowDatabases,
             Statement::UseDatabase(stmt) => self.plan_use_database(stmt),
             Statement::CreateTable(stmt) => self.plan_create_table(stmt),
+            Statement::Insert(_) => todo!(),
         }
     }
 }

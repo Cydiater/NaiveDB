@@ -42,6 +42,7 @@ impl Engine {
                 plan.table_name,
                 plan.schema,
             )),
+            Plan::Insert => todo!(),
         }
     }
     pub fn new(bpm: BufferPoolManagerRef) -> Self {

@@ -7,6 +7,7 @@ pub trait Expr {
     fn eval(&mut self, slice: Option<&Slice>) -> Datum;
 }
 
+#[derive(Debug)]
 #[allow(dead_code)]
 pub enum ExprImpl {
     Constant(ConstantExpr),

@@ -2,6 +2,7 @@ use crate::expr::Expr;
 use crate::table::{Datum, Slice};
 
 #[allow(dead_code)]
+#[derive(Debug)]
 pub struct ConstantExpr {
     value: Datum,
 }

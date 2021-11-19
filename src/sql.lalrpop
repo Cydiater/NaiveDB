@@ -3,13 +3,15 @@ use crate::table::{CharType, Datum};
 use crate::expr::{ExprImpl, ConstantExpr};
 use crate::parser::ast::{
     Statement, CreateDatabaseStmt, UseDatabaseStmt, CreateTableStmt,
-    Field, NormalField, DataType,
+    InsertStmt, Field, NormalField, DataType,
 };
 
 grammar;
 
 pub Statements = Semicolon<Statement>;
 pub Fields = Comma<Field>;
+pub Exprs = Comma<Expr>;
+pub Tuples = Comma<Tuple>;
 
 Comma<T>: Vec<T> = {
     <mut v:(<T> ",")*> <e:T?> => match e {
@@ -52,6 +54,7 @@ Statement: Statement = {
     ShowDatabasesStmt,
     UseDatabaseStmt,
     CreateTableStmt,
+    InsertStmt,
 }
 
 CreateDatabaseStmt: Statement = {
@@ -70,9 +73,15 @@ CreateTableStmt: Statement = {
     "create" "table" <table_name: Identifier> "(" <fields: Fields> ")" ";" => Statement::CreateTable(CreateTableStmt { table_name, fields }),
 }
 
+InsertStmt: Statement = {
+    "insert" "into" <table_name: Identifier> "values" <values: Tuples> ";" => Statement::Insert(InsertStmt { table_name, values }),
+}
+
 Identifier: String = {
     r"[a-zA-Z_][a-zA-Z_0-9]*" => String::from_str(<>).unwrap(),
 };
+
+Tuple: Vec<ExprImpl> = "(" <exprs: Exprs> ")" => exprs;
 
 pub Expr: ExprImpl = {
     <constant_expr: ConstantExpr> => ExprImpl::Constant(constant_expr),
