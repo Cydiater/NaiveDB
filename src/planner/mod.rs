@@ -1,10 +1,12 @@
 use crate::parser::ast::Statement;
 pub use create_database::CreateDatabasePlan;
 pub use create_table::CreateTablePlan;
+pub use insert::InsertPlan;
 pub use use_database::UseDatabasePlan;
 
 mod create_database;
 mod create_table;
+mod insert;
 mod use_database;
 
 #[allow(dead_code)]
@@ -13,7 +15,7 @@ pub enum Plan {
     ShowDatabases,
     UseDatabase(UseDatabasePlan),
     CreateTable(CreateTablePlan),
-    Insert,
+    Insert(InsertPlan),
 }
 
 pub struct Planner;
@@ -30,7 +32,7 @@ impl Planner {
             Statement::ShowDatabases => Plan::ShowDatabases,
             Statement::UseDatabase(stmt) => self.plan_use_database(stmt),
             Statement::CreateTable(stmt) => self.plan_create_table(stmt),
-            Statement::Insert(_) => todo!(),
+            Statement::Insert(stmt) => self.plan_insert(stmt),
         }
     }
 }

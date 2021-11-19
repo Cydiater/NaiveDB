@@ -28,7 +28,7 @@ pub use types::{CharType, DataType};
 
 #[allow(dead_code)]
 pub struct Table {
-    schema: Rc<Schema>,
+    pub schema: Rc<Schema>,
     bpm: BufferPoolManagerRef,
     pub page_id: PageID,
 }

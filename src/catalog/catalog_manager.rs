@@ -1,5 +1,6 @@
 use crate::catalog::{Catalog, CatalogError, CatalogIter};
 use crate::storage::{BufferPoolManagerRef, PageID};
+use crate::table::Table;
 use log::info;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -60,6 +61,22 @@ impl CatalogManager {
             Ok(())
         } else {
             Err(CatalogError::EntryNotFound)
+        }
+    }
+    pub fn find_table(&self, table_name: String) -> Result<Table, CatalogError> {
+        if let Some(table_catalog) = &self.table_catalog {
+            if let Some(page_id) = table_catalog
+                .iter()
+                .filter(|(_, _, name)| name == &table_name)
+                .map(|(_, page_id, _)| page_id)
+                .next()
+            {
+                Ok(Table::open(page_id, self.bpm.clone()))
+            } else {
+                Err(CatalogError::EntryNotFound)
+            }
+        } else {
+            Err(CatalogError::NotUsingDatabase)
         }
     }
     pub fn iter(&self) -> CatalogIter {

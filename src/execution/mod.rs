@@ -8,8 +8,8 @@ use thiserror::Error;
 mod executor;
 
 pub use executor::{
-    CreateDatabaseExecutor, CreateTableExecutor, Executor, ExecutorImpl, ShowDatabasesExecutor,
-    UseDatabaseExecutor,
+    CreateDatabaseExecutor, CreateTableExecutor, Executor, ExecutorImpl, InsertExecutor,
+    ShowDatabasesExecutor, UseDatabaseExecutor, ValuesExecutor,
 };
 
 pub struct Engine {
@@ -42,7 +42,19 @@ impl Engine {
                 plan.table_name,
                 plan.schema,
             )),
-            Plan::Insert => todo!(),
+            Plan::Insert(plan) => {
+                let table = self
+                    .catalog
+                    .borrow()
+                    .find_table(plan.table_name.clone())
+                    .unwrap();
+                let child = Box::new(ExecutorImpl::Values(ValuesExecutor::new(
+                    plan.values,
+                    table.schema,
+                    self.bpm.clone(),
+                )));
+                ExecutorImpl::Insert(InsertExecutor::new(plan.table_name, child))
+            }
         }
     }
     pub fn new(bpm: BufferPoolManagerRef) -> Self {

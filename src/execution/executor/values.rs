@@ -6,14 +6,14 @@ use itertools::Itertools;
 
 #[allow(dead_code)]
 pub struct ValuesExecutor {
-    values: Vec<ExprImpl>,
+    values: Vec<Vec<ExprImpl>>,
     schema: SchemaRef,
     bpm: BufferPoolManagerRef,
 }
 
 #[allow(dead_code)]
 impl ValuesExecutor {
-    pub fn new(values: Vec<ExprImpl>, schema: SchemaRef, bpm: BufferPoolManagerRef) -> Self {
+    pub fn new(values: Vec<Vec<ExprImpl>>, schema: SchemaRef, bpm: BufferPoolManagerRef) -> Self {
         Self {
             values,
             schema,
@@ -25,8 +25,10 @@ impl ValuesExecutor {
 impl Executor for ValuesExecutor {
     fn execute(&mut self) -> Result<Slice, ExecutionError> {
         let mut slice = Slice::new(self.bpm.clone(), self.schema.clone());
-        let datums = self.values.iter_mut().map(|e| e.eval(None)).collect_vec();
-        slice.add(&datums)?;
+        for tuple in self.values.iter_mut() {
+            let datums = tuple.iter_mut().map(|e| e.eval(None)).collect_vec();
+            slice.add(&datums)?;
+        }
         Ok(slice)
     }
 }
@@ -45,10 +47,10 @@ mod tests {
         let filename = {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
-            let values = vec![
+            let values = vec![vec![
                 ExprImpl::Constant(ConstantExpr::new(Datum::Int(1))),
                 ExprImpl::Constant(ConstantExpr::new(Datum::VarChar("hello world".to_string()))),
-            ];
+            ]];
             let schema = Schema::from_slice(&[
                 (DataType::Int, "v1".to_string()),
                 (DataType::VarChar, "v2".to_string()),
