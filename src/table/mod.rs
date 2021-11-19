@@ -84,7 +84,7 @@ impl Table {
                 .unwrap();
             offset += desc_len;
             let dat =
-                DataType::from_bytes(&page.borrow().buffer[offset..offset + 4].try_into().unwrap())
+                DataType::from_bytes(&page.borrow().buffer[offset..offset + 5].try_into().unwrap())
                     .unwrap();
             cols.push((dat, name));
         }

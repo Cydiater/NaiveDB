@@ -83,3 +83,43 @@ impl CatalogManager {
         self.database_catalog.iter()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::storage::BufferPoolManager;
+    use crate::table::{DataType, Schema};
+    use std::fs::remove_file;
+
+    #[test]
+    fn test_use_create_find() {
+        let filename = {
+            let bpm = BufferPoolManager::new_random_shared(5);
+            let filename = bpm.borrow().filename();
+            let mut catalog_manager = CatalogManager::new(bpm.clone());
+            // create database
+            catalog_manager
+                .create_database("sample_db".to_string())
+                .unwrap();
+            // use this database
+            catalog_manager
+                .use_database("sample_db".to_string())
+                .unwrap();
+            // create a table
+            let table = Table::new(
+                Rc::new(Schema::from_slice(&[(DataType::Int, "v1".to_string())])),
+                bpm.clone(),
+            );
+            // attach in catalog
+            catalog_manager
+                .create_table("sample_table".to_string(), table.page_id)
+                .unwrap();
+            // find this table
+            assert!(catalog_manager
+                .find_table("sample_table".to_string())
+                .is_ok());
+            filename
+        };
+        remove_file(filename).unwrap();
+    }
+}
