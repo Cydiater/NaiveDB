@@ -94,4 +94,8 @@ ConstantExpr: ConstantExpr = {
 
 Num: i32 = <s:r"[0-9]+"> => i32::from_str(s).unwrap();
 
-Str: String = r#"'[a-zA-Z_0-9]+'"# => String::from_str(<>).unwrap();
+Str: String = r#"'[a-zA-Z_0-9]+'"# => {
+    let quoted = String::from_str(<>).unwrap();
+    let len = quoted.len();
+    quoted[1..len - 1].into()
+};

@@ -23,6 +23,7 @@ pub enum DataType {
 impl DataType {
     pub fn width(&self) -> Option<usize> {
         match self {
+            Self::Bool => Some(1),
             Self::Int => Some(4),
             Self::Char(char_type) => Some(char_type.width),
             _ => None,

@@ -32,6 +32,7 @@ impl Column {
     }
 }
 
+#[derive(Debug)]
 pub struct Schema {
     columns: Vec<Column>,
 }

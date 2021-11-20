@@ -49,7 +49,11 @@ impl Engine {
             )),
             Plan::Insert(plan) => {
                 let child = self.build(*plan.child);
-                ExecutorImpl::Insert(InsertExecutor::new(plan.table_name, Box::new(child)))
+                ExecutorImpl::Insert(InsertExecutor::new(
+                    plan.table_name,
+                    self.catalog.clone(),
+                    Box::new(child),
+                ))
             }
         }
     }
@@ -64,10 +68,7 @@ impl Engine {
             page.borrow_mut().buffer[0..4].copy_from_slice(&0u32.to_le_bytes());
             bpm.borrow_mut().unpin(page_id).unwrap();
         }
-        Self {
-            bpm,
-            catalog,
-        }
+        Self { bpm, catalog }
     }
     pub fn execute(&mut self, plan: Plan) -> Result<Slice, ExecutionError> {
         let mut executor = self.build(plan);

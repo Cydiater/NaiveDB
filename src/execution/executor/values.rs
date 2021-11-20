@@ -3,6 +3,7 @@ use crate::expr::ExprImpl;
 use crate::storage::BufferPoolManagerRef;
 use crate::table::{SchemaRef, Slice};
 use itertools::Itertools;
+use log::info;
 
 #[allow(dead_code)]
 pub struct ValuesExecutor {
@@ -27,6 +28,7 @@ impl Executor for ValuesExecutor {
         let mut slice = Slice::new(self.bpm.clone(), self.schema.clone());
         for tuple in self.values.iter_mut() {
             let datums = tuple.iter_mut().map(|e| e.eval(None)).collect_vec();
+            info!("generate tuple {:?}", datums);
             slice.add(&datums)?;
         }
         Ok(slice)
