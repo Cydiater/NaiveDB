@@ -1,26 +1,23 @@
+use crate::catalog::CatalogManager;
 use crate::execution::Engine;
 use crate::execution::ExecutionError;
 use crate::parser::parse;
 use crate::planner::Planner;
-use crate::storage::{BufferPoolManager, BufferPoolManagerRef};
-use std::cell::RefCell;
-use std::rc::Rc;
+use crate::storage::BufferPoolManager;
 use thiserror::Error;
 
-#[allow(dead_code)]
 pub struct NaiveDB {
-    bpm: BufferPoolManagerRef,
     engine: Engine,
     planner: Planner,
 }
 
 impl NaiveDB {
     pub fn new() -> Self {
-        let bpm = Rc::new(RefCell::new(BufferPoolManager::new(4096)));
+        let bpm = BufferPoolManager::new_shared(4096);
+        let catalog = CatalogManager::new_shared(bpm.clone());
         Self {
-            bpm: bpm.clone(),
-            engine: Engine::new(bpm),
-            planner: Planner::new(),
+            engine: Engine::new(catalog.clone(), bpm.clone()),
+            planner: Planner::new(catalog, bpm),
         }
     }
     pub fn run(&mut self, sql: &str) -> Result<String, NaiveDBError> {
@@ -35,7 +32,6 @@ impl NaiveDB {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Error, Debug)]
 pub enum NaiveDBError {
     #[error("ParseError: {0}")]

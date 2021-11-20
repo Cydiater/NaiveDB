@@ -28,7 +28,7 @@ pub use types::{CharType, DataType};
 
 #[allow(dead_code)]
 pub struct Table {
-    schema: Rc<Schema>,
+    pub schema: Rc<Schema>,
     bpm: BufferPoolManagerRef,
     pub page_id: PageID,
 }
@@ -53,7 +53,6 @@ impl Iterator for TableIter {
             ret
         } else if let Some(page_id_of_next_slice) = slice.get_next_page_id() {
             self.page_id = page_id_of_next_slice;
-            println!("next_page_id = {}", page_id_of_next_slice);
             self.idx = 1;
             slice.attach(self.page_id);
             Some(slice.at(0).unwrap())
@@ -84,8 +83,9 @@ impl Table {
                 .unwrap();
             offset += desc_len;
             let dat =
-                DataType::from_bytes(&page.borrow().buffer[offset..offset + 4].try_into().unwrap())
+                DataType::from_bytes(&page.borrow().buffer[offset..offset + 5].try_into().unwrap())
                     .unwrap();
+            offset += 5;
             cols.push((dat, name));
         }
         let schema = Rc::new(Schema::from_slice(cols.as_slice()));
@@ -121,6 +121,8 @@ impl Table {
             offset += 5;
             page.borrow_mut().buffer[offset..offset + 4].copy_from_slice(&[0u8; 4]);
         });
+        // mark dirty
+        page.borrow_mut().is_dirty = true;
         // unpin page
         bpm.borrow_mut().unpin(page_id).unwrap();
         Self {
@@ -182,6 +184,7 @@ mod tests {
     use super::*;
     use crate::storage::BufferPoolManager;
     use itertools::Itertools;
+    use std::cell::RefCell;
     use std::fs::remove_file;
 
     #[test]
@@ -199,6 +202,27 @@ mod tests {
             table.iter().sorted().enumerate().for_each(|(idx, datums)| {
                 assert_eq!(Datum::Int(idx as i32), datums[0]);
             });
+            filename
+        };
+        remove_file(filename).unwrap();
+    }
+
+    #[test]
+    fn test_create_open() {
+        let (filename, page_id) = {
+            let bpm = BufferPoolManager::new_random_shared(5);
+            let filename = bpm.borrow().filename();
+            let schema = Schema::from_slice(&[(DataType::VarChar, "v1".to_string())]);
+            let table = Table::new(Rc::new(schema), bpm.clone());
+            (filename, table.page_id)
+        };
+        let filename = {
+            let bpm = Rc::new(RefCell::new(BufferPoolManager::new_with_name(
+                5,
+                filename.clone(),
+            )));
+            let table = Table::open(page_id, bpm.clone());
+            assert_eq!(table.schema.len(), 1);
             filename
         };
         remove_file(filename).unwrap();

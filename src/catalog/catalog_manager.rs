@@ -1,5 +1,6 @@
 use crate::catalog::{Catalog, CatalogError, CatalogIter};
 use crate::storage::{BufferPoolManagerRef, PageID};
+use crate::table::Table;
 use log::info;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -62,7 +63,63 @@ impl CatalogManager {
             Err(CatalogError::EntryNotFound)
         }
     }
+    pub fn find_table(&self, table_name: String) -> Result<Table, CatalogError> {
+        if let Some(table_catalog) = &self.table_catalog {
+            if let Some(page_id) = table_catalog
+                .iter()
+                .filter(|(_, _, name)| name == &table_name)
+                .map(|(_, page_id, _)| page_id)
+                .next()
+            {
+                Ok(Table::open(page_id, self.bpm.clone()))
+            } else {
+                Err(CatalogError::EntryNotFound)
+            }
+        } else {
+            Err(CatalogError::NotUsingDatabase)
+        }
+    }
     pub fn iter(&self) -> CatalogIter {
         self.database_catalog.iter()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::storage::BufferPoolManager;
+    use crate::table::{DataType, Schema};
+    use std::fs::remove_file;
+
+    #[test]
+    fn test_use_create_find() {
+        let filename = {
+            let bpm = BufferPoolManager::new_random_shared(5);
+            let filename = bpm.borrow().filename();
+            let mut catalog_manager = CatalogManager::new(bpm.clone());
+            // create database
+            catalog_manager
+                .create_database("sample_db".to_string())
+                .unwrap();
+            // use this database
+            catalog_manager
+                .use_database("sample_db".to_string())
+                .unwrap();
+            // create a table
+            let table = Table::new(
+                Rc::new(Schema::from_slice(&[(DataType::Int, "v1".to_string())])),
+                bpm.clone(),
+            );
+            // attach in catalog
+            catalog_manager
+                .create_table("sample_table".to_string(), table.page_id)
+                .unwrap();
+            // find this table
+            assert!(catalog_manager
+                .find_table("sample_table".to_string())
+                .is_ok());
+            filename
+        };
+        remove_file(filename).unwrap();
     }
 }

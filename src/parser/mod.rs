@@ -33,10 +33,22 @@ mod tests {
     }
 
     #[test]
+    fn test_expr() {
+        // constant expr
+        assert!(sql::ExprParser::new().parse("123").is_ok());
+        assert!(sql::ExprParser::new().parse("'hello'").is_ok());
+        assert!(sql::ExprParser::new().parse("222hh").is_err());
+    }
+
+    #[test]
     fn test_table_sql() {
         // create table
         assert!(sql::StatementsParser::new()
             .parse("create table sample(v1 int not null, v2 char(20) null);")
+            .is_ok());
+        // insert into
+        assert!(sql::StatementsParser::new()
+            .parse("insert into demo values (1, 2, 'hello'), (2, 3, 'world');")
             .is_ok());
     }
 }

@@ -1,14 +1,17 @@
 use std::str::FromStr;
-use crate::table::CharType;
+use crate::table::{CharType, Datum};
+use crate::expr::{ExprImpl, ConstantExpr};
 use crate::parser::ast::{
     Statement, CreateDatabaseStmt, UseDatabaseStmt, CreateTableStmt,
-    Field, NormalField, DataType,
+    InsertStmt, Field, NormalField, DataType,
 };
 
 grammar;
 
 pub Statements = Semicolon<Statement>;
 pub Fields = Comma<Field>;
+pub Exprs = Comma<Expr>;
+pub Tuples = Comma<Tuple>;
 
 Comma<T>: Vec<T> = {
     <mut v:(<T> ",")*> <e:T?> => match e {
@@ -34,6 +37,7 @@ DataType: DataType = {
     "int" => DataType::Int,
     "char" "(" <width:Num> ")" => DataType::Char(CharType::new(width as usize)),
     "varchar" => DataType::VarChar,
+    "bool" => DataType::Bool,
 }
 
 Field: Field = {
@@ -50,6 +54,7 @@ Statement: Statement = {
     ShowDatabasesStmt,
     UseDatabaseStmt,
     CreateTableStmt,
+    InsertStmt,
 }
 
 CreateDatabaseStmt: Statement = {
@@ -68,8 +73,29 @@ CreateTableStmt: Statement = {
     "create" "table" <table_name: Identifier> "(" <fields: Fields> ")" ";" => Statement::CreateTable(CreateTableStmt { table_name, fields }),
 }
 
+InsertStmt: Statement = {
+    "insert" "into" <table_name: Identifier> "values" <values: Tuples> ";" => Statement::Insert(InsertStmt { table_name, values }),
+}
+
 Identifier: String = {
     r"[a-zA-Z_][a-zA-Z_0-9]*" => String::from_str(<>).unwrap(),
 };
 
+Tuple: Vec<ExprImpl> = "(" <exprs: Exprs> ")" => exprs;
+
+pub Expr: ExprImpl = {
+    <constant_expr: ConstantExpr> => ExprImpl::Constant(constant_expr),
+};
+
+ConstantExpr: ConstantExpr = {
+    <num: Num> => ConstantExpr::new(Datum::Int(num)),
+    <str: Str> => ConstantExpr::new(Datum::VarChar(str)),
+};
+
 Num: i32 = <s:r"[0-9]+"> => i32::from_str(s).unwrap();
+
+Str: String = r#"'[a-zA-Z_0-9]+'"# => {
+    let quoted = String::from_str(<>).unwrap();
+    let len = quoted.len();
+    quoted[1..len - 1].into()
+};

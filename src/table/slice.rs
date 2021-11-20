@@ -7,12 +7,12 @@ use std::convert::TryInto;
 use std::fmt;
 use std::rc::Rc;
 
-#[allow(dead_code)]
-#[derive(Debug, PartialEq, PartialOrd, Ord, Eq)]
+#[derive(Debug, PartialEq, PartialOrd, Ord, Eq, Clone)]
 pub enum Datum {
     Int(i32),
     Char(String),
     VarChar(String),
+    Bool(bool),
 }
 
 impl fmt::Display for Datum {
@@ -24,6 +24,7 @@ impl fmt::Display for Datum {
                 Self::Int(d) => d.to_string(),
                 Self::Char(s) => s.to_string(),
                 Self::VarChar(s) => s.to_string(),
+                Self::Bool(s) => s.to_string(),
             }
         )
     }
@@ -234,6 +235,9 @@ impl Slice {
                         .to_string(),
                     ));
                 }
+                DataType::Bool => {
+                    tuple.push(Datum::Bool(page.borrow().buffer[offset] != 0));
+                }
             }
         }
         // unpin page
@@ -249,6 +253,7 @@ impl Slice {
                 (Datum::Int(_), DataType::Int) => size + std::mem::size_of::<u32>(),
                 (Datum::Char(_), DataType::Char(char_type)) => size + char_type.width,
                 (Datum::VarChar(dat), DataType::VarChar) => size + dat.len(),
+                (Datum::Bool(_), DataType::Bool) => size + std::mem::size_of::<bool>(),
                 _ => 0usize,
             })
     }

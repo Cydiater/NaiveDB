@@ -2,6 +2,7 @@ use crate::catalog::CatalogManagerRef;
 use crate::execution::{ExecutionError, Executor};
 use crate::storage::BufferPoolManagerRef;
 use crate::table::{Schema, SchemaRef, Slice, Table};
+use log::info;
 use std::rc::Rc;
 
 pub struct CreateTableExecutor {
@@ -29,6 +30,7 @@ impl CreateTableExecutor {
 
 impl Executor for CreateTableExecutor {
     fn execute(&mut self) -> Result<Slice, ExecutionError> {
+        info!("create table, schema = {:?}", self.schema);
         let table = Table::new(self.schema.clone(), self.bpm.clone());
         let page_id = table.page_id;
         self.catalog
