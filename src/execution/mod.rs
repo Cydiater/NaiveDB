@@ -1,4 +1,4 @@
-use crate::catalog::{CatalogError, CatalogManager, CatalogManagerRef};
+use crate::catalog::{CatalogError, CatalogManagerRef};
 use crate::planner::Plan;
 use crate::storage::BufferPoolManagerRef;
 use crate::table::{Slice, TableError};
@@ -42,22 +42,18 @@ impl Engine {
                 plan.table_name,
                 plan.schema,
             )),
+            Plan::Values(plan) => ExecutorImpl::Values(ValuesExecutor::new(
+                plan.values,
+                plan.schema,
+                self.bpm.clone(),
+            )),
             Plan::Insert(plan) => {
-                let table = self
-                    .catalog
-                    .borrow()
-                    .find_table(plan.table_name.clone())
-                    .unwrap();
-                let child = Box::new(ExecutorImpl::Values(ValuesExecutor::new(
-                    plan.values,
-                    table.schema,
-                    self.bpm.clone(),
-                )));
-                ExecutorImpl::Insert(InsertExecutor::new(plan.table_name, child))
+                let child = self.build(*plan.child);
+                ExecutorImpl::Insert(InsertExecutor::new(plan.table_name, Box::new(child)))
             }
         }
     }
-    pub fn new(bpm: BufferPoolManagerRef) -> Self {
+    pub fn new(catalog: CatalogManagerRef, bpm: BufferPoolManagerRef) -> Self {
         let num_pages = bpm.borrow().num_pages().unwrap();
         info!("disk file have {} pages", num_pages);
         // allocate database catalog
@@ -69,8 +65,8 @@ impl Engine {
             bpm.borrow_mut().unpin(page_id).unwrap();
         }
         Self {
-            bpm: bpm.clone(),
-            catalog: CatalogManager::new_shared(bpm),
+            bpm,
+            catalog,
         }
     }
     pub fn execute(&mut self, plan: Plan) -> Result<Slice, ExecutionError> {

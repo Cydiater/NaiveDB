@@ -1,3 +1,4 @@
+use crate::catalog::CatalogManager;
 use crate::execution::Engine;
 use crate::execution::ExecutionError;
 use crate::parser::parse;
@@ -13,9 +14,10 @@ pub struct NaiveDB {
 impl NaiveDB {
     pub fn new() -> Self {
         let bpm = BufferPoolManager::new_shared(4096);
+        let catalog = CatalogManager::new_shared(bpm.clone());
         Self {
-            engine: Engine::new(bpm),
-            planner: Planner::new(),
+            engine: Engine::new(catalog.clone(), bpm.clone()),
+            planner: Planner::new(catalog, bpm),
         }
     }
     pub fn run(&mut self, sql: &str) -> Result<String, NaiveDBError> {
