@@ -1,6 +1,8 @@
 # NaiveDB
 
 [![build](https://github.com/Cydiater/NaiveDB/actions/workflows/build.yml/badge.svg)](https://github.com/Cydiater/NaiveDB/actions/workflows/build.yml)
+[![codecov](https://codecov.io/gh/Cydiater/NaiveDB/branch/master/graph/badge.svg?token=KQCQG19VDD)](https://codecov.io/gh/Cydiater/NaiveDB)
+
 <img src="./img/logo.jpg" height=200/>
 
 Yet another simple relational disk-oriented database written in rust.
