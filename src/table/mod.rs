@@ -25,19 +25,17 @@ pub use types::{CharType, DataType};
 ///     | id: u8 | data: u32 |
 ///
 
-#[allow(dead_code)]
 pub struct Table {
     pub schema: Rc<Schema>,
     bpm: BufferPoolManagerRef,
     pub page_id: PageID,
 }
 
-#[allow(dead_code)]
 pub struct TableIter {
     idx: usize,
     page_id: PageID,
     bpm: BufferPoolManagerRef,
-    schema: SchemaRef,
+    pub schema: SchemaRef,
 }
 
 impl Iterator for TableIter {

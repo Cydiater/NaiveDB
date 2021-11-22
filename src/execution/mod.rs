@@ -8,8 +8,8 @@ use thiserror::Error;
 mod executor;
 
 pub use executor::{
-    CreateDatabaseExecutor, CreateTableExecutor, Executor, ExecutorImpl, InsertExecutor,
-    ShowDatabasesExecutor, UseDatabaseExecutor, ValuesExecutor,
+    CreateDatabaseExecutor, CreateTableExecutor, DescExecutor, Executor, ExecutorImpl,
+    InsertExecutor, ShowDatabasesExecutor, UseDatabaseExecutor, ValuesExecutor,
 };
 
 pub struct Engine {
@@ -55,7 +55,11 @@ impl Engine {
                     Box::new(child),
                 ))
             }
-            Plan::Desc(_) => todo!(),
+            Plan::Desc(plan) => ExecutorImpl::Desc(DescExecutor::new(
+                plan.table_name,
+                self.bpm.clone(),
+                self.catalog.clone(),
+            )),
         }
     }
     pub fn new(catalog: CatalogManagerRef, bpm: BufferPoolManagerRef) -> Self {
