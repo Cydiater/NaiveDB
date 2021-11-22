@@ -1,19 +1,19 @@
 use crate::catalog::CatalogManagerRef;
 use crate::parser::ast::Statement;
-use crate::storage::BufferPoolManagerRef;
 pub use create_database::CreateDatabasePlan;
 pub use create_table::CreateTablePlan;
+pub use desc::DescPlan;
 pub use insert::InsertPlan;
 pub use use_database::UseDatabasePlan;
 pub use values::ValuesPlan;
 
 mod create_database;
 mod create_table;
+mod desc;
 mod insert;
 mod use_database;
 mod values;
 
-#[allow(dead_code)]
 pub enum Plan {
     CreateDatabase(CreateDatabasePlan),
     ShowDatabases,
@@ -21,17 +21,16 @@ pub enum Plan {
     CreateTable(CreateTablePlan),
     Values(ValuesPlan),
     Insert(InsertPlan),
+    Desc(DescPlan),
 }
 
-#[allow(dead_code)]
 pub struct Planner {
     catalog: CatalogManagerRef,
-    bpm: BufferPoolManagerRef,
 }
 
 impl Planner {
-    pub fn new(catalog: CatalogManagerRef, bpm: BufferPoolManagerRef) -> Self {
-        Self { catalog, bpm }
+    pub fn new(catalog: CatalogManagerRef) -> Self {
+        Self { catalog }
     }
 
     pub fn plan(&self, stmt: Statement) -> Plan {
@@ -41,6 +40,7 @@ impl Planner {
             Statement::UseDatabase(stmt) => self.plan_use_database(stmt),
             Statement::CreateTable(stmt) => self.plan_create_table(stmt),
             Statement::Insert(stmt) => self.plan_insert(stmt),
+            Statement::Desc(stmt) => self.plan_desc(stmt),
         }
     }
 }
@@ -59,7 +59,7 @@ mod tests {
             let bpm = BufferPoolManager::new_random_shared(5);
             let catalog = CatalogManager::new_shared(bpm.clone());
             let filename = bpm.borrow().filename();
-            let planner = Planner::new(catalog, bpm);
+            let planner = Planner::new(catalog);
             let stmt = Statement::CreateDatabase(CreateDatabaseStmt {
                 database_name: "sample_database".to_string(),
             });

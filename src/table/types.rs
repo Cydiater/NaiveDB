@@ -1,4 +1,5 @@
 use std::convert::TryInto;
+use std::fmt;
 use thiserror::Error;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -18,6 +19,21 @@ pub enum DataType {
     Char(CharType),
     VarChar,
     Bool,
+}
+
+impl fmt::Display for DataType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Int => "int".to_string(),
+                Self::Char(char_type) => format!("char({})", char_type.width),
+                Self::VarChar => "varchar".to_string(),
+                Self::Bool => "bool".to_string(),
+            }
+        )
+    }
 }
 
 impl DataType {

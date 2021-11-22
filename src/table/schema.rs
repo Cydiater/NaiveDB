@@ -8,25 +8,27 @@ pub struct Column {
     pub offset: usize,
     pub data_type: DataType,
     pub desc: String,
+    pub nullable: bool,
 }
 
 pub type SchemaRef = Rc<Schema>;
 
 impl Column {
-    pub fn new(offset: usize, data_type: DataType, desc: String) -> Self {
+    pub fn new(offset: usize, data_type: DataType, desc: String, nullable: bool) -> Self {
         Column {
             offset,
             data_type,
             desc,
+            nullable,
         }
     }
-    pub fn from_slice(type_and_names: &[(DataType, String)]) -> Vec<Self> {
+    pub fn from_slice(type_and_names: &[(DataType, String, bool)]) -> Vec<Self> {
         let mut offset = 0;
         type_and_names
             .iter()
-            .map(|(data_type, desc)| {
+            .map(|(data_type, desc, nullable)| {
                 offset += data_type.width().unwrap_or(8);
-                Column::new(offset, *data_type, desc.clone())
+                Column::new(offset, *data_type, desc.clone(), *nullable)
             })
             .collect_vec()
     }
@@ -45,7 +47,7 @@ impl Schema {
     pub fn len(&self) -> usize {
         self.columns.len()
     }
-    pub fn from_slice(type_and_names: &[(DataType, String)]) -> Self {
+    pub fn from_slice(type_and_names: &[(DataType, String, bool)]) -> Self {
         Schema::new(Column::from_slice(type_and_names))
     }
     pub fn iter(&self) -> Iter<Column> {
@@ -64,18 +66,23 @@ mod tests {
     #[test]
     fn test_schema_from_slice() {
         let type_and_names = vec![
-            (DataType::Int, "v1".to_string()),
-            (DataType::Char(CharType::new(20)), "v2".to_string()),
-            (DataType::VarChar, "v3".to_string()),
+            (DataType::Int, "v1".to_string(), false),
+            (DataType::Char(CharType::new(20)), "v2".to_string(), false),
+            (DataType::VarChar, "v3".to_string(), false),
         ];
         let schema = Schema::from_slice(type_and_names.as_slice());
         let columns = schema.columns;
         assert_eq!(
             columns,
             vec![
-                Column::new(4, DataType::Int, "v1".to_string()),
-                Column::new(24, DataType::Char(CharType::new(20)), "v2".to_string()),
-                Column::new(32, DataType::VarChar, "v3".to_string())
+                Column::new(4, DataType::Int, "v1".to_string(), false),
+                Column::new(
+                    24,
+                    DataType::Char(CharType::new(20)),
+                    "v2".to_string(),
+                    false
+                ),
+                Column::new(32, DataType::VarChar, "v3".to_string(), false)
             ]
         );
     }

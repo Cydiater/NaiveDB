@@ -8,6 +8,12 @@ pub enum Statement {
     UseDatabase(UseDatabaseStmt),
     CreateTable(CreateTableStmt),
     Insert(InsertStmt),
+    Desc(DescStmt),
+}
+
+#[derive(Debug)]
+pub struct DescStmt {
+    pub table_name: String,
 }
 
 #[derive(Debug)]

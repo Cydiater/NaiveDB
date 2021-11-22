@@ -3,6 +3,7 @@ use crate::table::Slice;
 
 pub use create_database::CreateDatabaseExecutor;
 pub use create_table::CreateTableExecutor;
+pub use desc::DescExecutor;
 pub use insert::InsertExecutor;
 pub use show_databases::ShowDatabasesExecutor;
 pub use use_database::UseDatabaseExecutor;
@@ -10,6 +11,7 @@ pub use values::ValuesExecutor;
 
 mod create_database;
 mod create_table;
+mod desc;
 mod insert;
 mod show_databases;
 mod use_database;
@@ -26,6 +28,7 @@ pub enum ExecutorImpl {
     CreateTable(CreateTableExecutor),
     Values(ValuesExecutor),
     Insert(InsertExecutor),
+    Desc(DescExecutor),
 }
 
 impl ExecutorImpl {
@@ -37,6 +40,7 @@ impl ExecutorImpl {
             Self::CreateTable(executor) => executor.execute(),
             Self::Values(executor) => executor.execute(),
             Self::Insert(executor) => executor.execute(),
+            Self::Desc(executor) => executor.execute(),
         }
     }
 }

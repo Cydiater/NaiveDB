@@ -50,5 +50,7 @@ mod tests {
         assert!(sql::StatementsParser::new()
             .parse("insert into demo values (1, 2, 'hello'), (2, 3, 'world');")
             .is_ok());
+        // desc
+        assert!(sql::StatementsParser::new().parse("desc sample;").is_ok());
     }
 }
