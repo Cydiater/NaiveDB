@@ -93,8 +93,8 @@ pub Expr: ExprImpl = {
 };
 
 ConstantExpr: ConstantExpr = {
-    <num: Num> => ConstantExpr::new(Datum::Int(num)),
-    <str: Str> => ConstantExpr::new(Datum::VarChar(str)),
+    <num: Num> => ConstantExpr::new(Datum::Int(Some(num))),
+    <str: Str> => ConstantExpr::new(Datum::VarChar(Some(str))),
 };
 
 Num: i32 = <s:r"[0-9]+"> => i32::from_str(s).unwrap();

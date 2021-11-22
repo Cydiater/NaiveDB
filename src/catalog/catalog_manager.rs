@@ -107,7 +107,7 @@ mod tests {
                 .unwrap();
             // create a table
             let table = Table::new(
-                Rc::new(Schema::from_slice(&[(DataType::Int, "v1".to_string())])),
+                Rc::new(Schema::from_slice(&[(DataType::Int, "v1".to_string(), false)])),
                 bpm.clone(),
             );
             // attach in catalog

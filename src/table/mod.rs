@@ -3,7 +3,6 @@ use std::convert::TryInto;
 use std::rc::Rc;
 use thiserror::Error;
 
-mod rid;
 mod schema;
 mod slice;
 mod types;
@@ -19,7 +18,7 @@ pub use types::{CharType, DataType};
 /// each column have an desc, which is a string, and type id that describe
 /// the type this column have.
 ///
-///     | desc_len | chars_of_desc | type_id |
+///     | desc_len | chars_of_desc | type_id | nullable |
 ///
 /// type_id:
 ///
@@ -86,7 +85,9 @@ impl Table {
                 DataType::from_bytes(&page.borrow().buffer[offset..offset + 5].try_into().unwrap())
                     .unwrap();
             offset += 5;
-            cols.push((dat, name));
+            let nullable = page.borrow().buffer[offset] != 0;
+            offset += 1;
+            cols.push((dat, name, nullable));
         }
         let schema = Rc::new(Schema::from_slice(cols.as_slice()));
         // unpin page
@@ -120,6 +121,8 @@ impl Table {
             page.borrow_mut().buffer[offset..offset + 5].copy_from_slice(&col.data_type.as_bytes());
             offset += 5;
             page.borrow_mut().buffer[offset..offset + 4].copy_from_slice(&[0u8; 4]);
+            offset += 1;
+            page.borrow_mut().buffer[offset] = col.nullable.into();
         });
         // mark dirty
         page.borrow_mut().is_dirty = true;
@@ -192,15 +195,15 @@ mod tests {
         let filename = {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
-            let schema = Schema::from_slice(&[(DataType::Int, "v1".to_string())]);
+            let schema = Schema::from_slice(&[(DataType::Int, "v1".to_string(), false)]);
             let mut table = Table::new(Rc::new(schema), bpm.clone());
             // insert
             for idx in 0..1000 {
-                table.insert(&[Datum::Int(idx)]).unwrap()
+                table.insert(&[Datum::Int(Some(idx))]).unwrap()
             }
             // validate
             table.iter().sorted().enumerate().for_each(|(idx, datums)| {
-                assert_eq!(Datum::Int(idx as i32), datums[0]);
+                assert_eq!(Datum::Int(Some(idx as i32)), datums[0]);
             });
             filename
         };
@@ -212,7 +215,7 @@ mod tests {
         let (filename, page_id) = {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
-            let schema = Schema::from_slice(&[(DataType::VarChar, "v1".to_string())]);
+            let schema = Schema::from_slice(&[(DataType::VarChar, "v1".to_string(), false)]);
             let table = Table::new(Rc::new(schema), bpm.clone());
             (filename, table.page_id)
         };
