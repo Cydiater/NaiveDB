@@ -118,9 +118,9 @@ impl Table {
             offset += desc_len;
             page.borrow_mut().buffer[offset..offset + 5].copy_from_slice(&col.data_type.as_bytes());
             offset += 5;
-            page.borrow_mut().buffer[offset..offset + 4].copy_from_slice(&[0u8; 4]);
-            offset += 1;
             page.borrow_mut().buffer[offset] = col.nullable.into();
+            offset += 1;
+            page.borrow_mut().buffer[offset..offset + 4].copy_from_slice(&[0u8; 4]);
         });
         // mark dirty
         page.borrow_mut().is_dirty = true;
