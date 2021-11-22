@@ -3,7 +3,7 @@ use crate::table::{CharType, Datum};
 use crate::expr::{ExprImpl, ConstantExpr};
 use crate::parser::ast::{
     Statement, CreateDatabaseStmt, UseDatabaseStmt, CreateTableStmt,
-    InsertStmt, Field, NormalField, DataType,
+    InsertStmt, Field, NormalField, DataType, DescStmt,
 };
 
 grammar;
@@ -55,7 +55,12 @@ Statement: Statement = {
     UseDatabaseStmt,
     CreateTableStmt,
     InsertStmt,
+    DescStmt,
 }
+
+DescStmt: Statement = {
+    "desc" <table_name: Identifier> ";" => Statement::Desc(DescStmt { table_name }),
+};
 
 CreateDatabaseStmt: Statement = {
     "create" "database" <database_name: Identifier> ";" => Statement::CreateDatabase(CreateDatabaseStmt { database_name }),

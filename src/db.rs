@@ -16,8 +16,8 @@ impl NaiveDB {
         let bpm = BufferPoolManager::new_shared(4096);
         let catalog = CatalogManager::new_shared(bpm.clone());
         Self {
-            engine: Engine::new(catalog.clone(), bpm.clone()),
-            planner: Planner::new(catalog, bpm),
+            engine: Engine::new(catalog.clone(), bpm),
+            planner: Planner::new(catalog),
         }
     }
     pub fn run(&mut self, sql: &str) -> Result<String, NaiveDBError> {

@@ -55,6 +55,7 @@ impl Engine {
                     Box::new(child),
                 ))
             }
+            Plan::Desc(_) => todo!(),
         }
     }
     pub fn new(catalog: CatalogManagerRef, bpm: BufferPoolManagerRef) -> Self {
