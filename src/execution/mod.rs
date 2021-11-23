@@ -60,6 +60,7 @@ impl Engine {
                 self.bpm.clone(),
                 self.catalog.clone(),
             )),
+            Plan::Select(_) => todo!(),
         }
     }
     pub fn new(catalog: CatalogManagerRef, bpm: BufferPoolManagerRef) -> Self {
