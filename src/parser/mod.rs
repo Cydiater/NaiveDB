@@ -52,5 +52,12 @@ mod tests {
             .is_ok());
         // desc
         assert!(sql::StatementsParser::new().parse("desc sample;").is_ok());
+        // select from
+        assert!(sql::StatementsParser::new()
+            .parse("select * from t;")
+            .is_ok());
+        assert!(sql::StatementsParser::new()
+            .parse("select v1, v2, v3 from t;")
+            .is_ok());
     }
 }

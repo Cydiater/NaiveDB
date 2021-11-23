@@ -27,7 +27,10 @@ impl Executor for ValuesExecutor {
     fn execute(&mut self) -> Result<Slice, ExecutionError> {
         let mut slice = Slice::new(self.bpm.clone(), self.schema.clone());
         for tuple in self.values.iter_mut() {
-            let datums = tuple.iter_mut().map(|e| e.eval(None)).collect_vec();
+            let datums = tuple
+                .iter_mut()
+                .map(|e| e.eval(None).remove(0))
+                .collect_vec();
             info!("generate tuple {:?}", datums);
             slice.add(&datums)?;
         }

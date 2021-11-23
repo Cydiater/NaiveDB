@@ -41,6 +41,7 @@ impl Planner {
             Statement::CreateTable(stmt) => self.plan_create_table(stmt),
             Statement::Insert(stmt) => self.plan_insert(stmt),
             Statement::Desc(stmt) => self.plan_desc(stmt),
+            Statement::Select(_) => todo!(),
         }
     }
 }

@@ -1,10 +1,7 @@
 use std::str::FromStr;
 use crate::table::{CharType, Datum};
-use crate::expr::{ExprImpl, ConstantExpr};
-use crate::parser::ast::{
-    Statement, CreateDatabaseStmt, UseDatabaseStmt, CreateTableStmt,
-    InsertStmt, Field, NormalField, DataType, DescStmt,
-};
+use crate::expr::{ExprImpl, ConstantExpr, ColumnRefExpr};
+use crate::parser::ast::*;
 
 grammar;
 
@@ -56,15 +53,25 @@ Statement: Statement = {
     CreateTableStmt,
     InsertStmt,
     DescStmt,
+    SelectStmt,
+}
+
+Selectors: Selectors = {
+    "*" => Selectors::All,
+    <exprs: Exprs> => Selectors::Exprs(exprs),
+}
+
+SelectStmt: Statement = {
+    "select" <selectors: Selectors> "from" <table_name: Identifier> => Statement::Select(SelectStmt { table_name, selectors }),
 }
 
 DescStmt: Statement = {
     "desc" <table_name: Identifier> ";" => Statement::Desc(DescStmt { table_name }),
-};
+}
 
 CreateDatabaseStmt: Statement = {
     "create" "database" <database_name: Identifier> ";" => Statement::CreateDatabase(CreateDatabaseStmt { database_name }),
-};
+}
 
 ShowDatabasesStmt: Statement = {
     "show" "databases" ";" => Statement::ShowDatabases,
@@ -84,13 +91,18 @@ InsertStmt: Statement = {
 
 Identifier: String = {
     r"[a-zA-Z_][a-zA-Z_0-9]*" => String::from_str(<>).unwrap(),
-};
+}
 
 Tuple: Vec<ExprImpl> = "(" <exprs: Exprs> ")" => exprs;
 
 pub Expr: ExprImpl = {
     <constant_expr: ConstantExpr> => ExprImpl::Constant(constant_expr),
-};
+    <column_ref_expr: ColumnRefExpr> => ExprImpl::ColumnRef(column_ref_expr),
+}
+
+ColumnRefExpr: ColumnRefExpr = {
+    <field_name: Identifier> => ColumnRefExpr::new(field_name),
+}
 
 ConstantExpr: ConstantExpr = {
     <num: Num> => ConstantExpr::new(Datum::Int(Some(num))),

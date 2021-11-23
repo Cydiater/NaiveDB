@@ -47,6 +47,9 @@ impl Schema {
     pub fn len(&self) -> usize {
         self.columns.len()
     }
+    pub fn index_of(&self, field_name: String) -> Option<usize> {
+        self.columns.iter().position(|c| c.desc == field_name)
+    }
     pub fn from_slice(type_and_names: &[(DataType, String, bool)]) -> Self {
         Schema::new(Column::from_slice(type_and_names))
     }
