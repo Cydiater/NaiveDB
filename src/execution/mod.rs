@@ -7,10 +7,7 @@ use thiserror::Error;
 
 mod executor;
 
-pub use executor::{
-    CreateDatabaseExecutor, CreateTableExecutor, DescExecutor, Executor, ExecutorImpl,
-    InsertExecutor, ShowDatabasesExecutor, UseDatabaseExecutor, ValuesExecutor,
-};
+pub use executor::*;
 
 pub struct Engine {
     bpm: BufferPoolManagerRef,
@@ -60,7 +57,20 @@ impl Engine {
                 self.bpm.clone(),
                 self.catalog.clone(),
             )),
-            Plan::SeqScan(_) => todo!(),
+            Plan::SeqScan(plan) => {
+                let table = self
+                    .catalog
+                    .borrow_mut()
+                    .find_table(plan.table_name)
+                    .unwrap();
+                let schema = table.schema.clone();
+                let page_id = table.get_page_id_of_root_slice();
+                ExecutorImpl::SeqScan(SeqScanExecutor::new(
+                    self.bpm.clone(),
+                    Some(page_id),
+                    schema,
+                ))
+            }
         }
     }
     pub fn new(catalog: CatalogManagerRef, bpm: BufferPoolManagerRef) -> Self {

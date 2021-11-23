@@ -2,11 +2,10 @@ use crate::expr::ExprImpl;
 use crate::parser::ast::{SelectStmt, Selectors};
 use crate::planner::{Plan, Planner};
 
-#[allow(dead_code)]
 pub struct SeqScanPlan {
-    exprs: Vec<ExprImpl>,
-    is_all: bool,
-    table_name: String,
+    pub exprs: Vec<ExprImpl>,
+    pub is_all: bool,
+    pub table_name: String,
 }
 
 impl Planner {
