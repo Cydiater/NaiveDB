@@ -1,7 +1,7 @@
 use crate::catalog::{CatalogError, CatalogManagerRef};
 use crate::planner::Plan;
 use crate::storage::BufferPoolManagerRef;
-use crate::table::{Slice, TableError};
+use crate::table::{Table, TableError};
 use log::info;
 use thiserror::Error;
 
@@ -60,7 +60,7 @@ impl Engine {
                 self.bpm.clone(),
                 self.catalog.clone(),
             )),
-            Plan::Select(_) => todo!(),
+            Plan::SeqScan(_) => todo!(),
         }
     }
     pub fn new(catalog: CatalogManagerRef, bpm: BufferPoolManagerRef) -> Self {
@@ -76,9 +76,13 @@ impl Engine {
         }
         Self { bpm, catalog }
     }
-    pub fn execute(&mut self, plan: Plan) -> Result<Slice, ExecutionError> {
+    pub fn execute(&mut self, plan: Plan) -> Result<Table, ExecutionError> {
         let mut executor = self.build(plan);
-        executor.execute()
+        let mut slices = vec![];
+        while let Some(slice) = executor.execute()? {
+            slices.push(slice);
+        }
+        Ok(Table::from_slice(slices, self.bpm.clone()))
     }
 }
 

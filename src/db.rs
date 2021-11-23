@@ -25,8 +25,8 @@ impl NaiveDB {
         let mut res = "".to_string();
         for stmt in statements.into_iter() {
             let plan = self.planner.plan(stmt);
-            let slice = self.engine.execute(plan)?;
-            res += &slice.to_string();
+            let table = self.engine.execute(plan)?;
+            res += &table.to_string();
         }
         Ok(res)
     }

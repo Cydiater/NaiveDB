@@ -1,5 +1,8 @@
 use crate::storage::{BufferPoolManagerRef, PageID, StorageError};
+use itertools::Itertools;
+use prettytable::{Cell, Row, Table as PrintTable};
 use std::convert::TryInto;
+use std::fmt;
 use std::rc::Rc;
 use thiserror::Error;
 
@@ -29,6 +32,26 @@ pub struct Table {
     pub schema: Rc<Schema>,
     bpm: BufferPoolManagerRef,
     pub page_id: PageID,
+}
+
+impl fmt::Display for Table {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut table = PrintTable::new();
+        let header = self
+            .schema
+            .iter()
+            .map(|c| Cell::new(c.desc.as_str()))
+            .collect_vec();
+        table.add_row(Row::new(header));
+        self.iter().for_each(|tuple| {
+            let tuple = tuple
+                .iter()
+                .map(|d| Cell::new(d.to_string().as_str()))
+                .collect_vec();
+            table.add_row(Row::new(tuple));
+        });
+        write!(f, "{}", table)
+    }
 }
 
 pub struct TableIter {
@@ -164,6 +187,17 @@ impl Table {
             bpm: self.bpm.clone(),
             schema: self.schema.clone(),
         }
+    }
+    pub fn from_slice(slices: Vec<Slice>, bpm: BufferPoolManagerRef) -> Self {
+        let mut table = Table::new(slices[0].schema.clone(), bpm);
+        slices.iter().for_each(|s| {
+            let len = s.len();
+            for idx in 0..len {
+                let tuple = s.at(idx).unwrap();
+                table.insert(tuple.as_slice()).unwrap();
+            }
+        });
+        table
     }
 }
 
