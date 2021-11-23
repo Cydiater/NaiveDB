@@ -1,7 +1,6 @@
 use crate::expr::Expr;
 use crate::table::{Datum, Slice};
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub struct ConstantExpr {
     value: Datum,
@@ -14,7 +13,11 @@ impl ConstantExpr {
 }
 
 impl Expr for ConstantExpr {
-    fn eval(&mut self, _: Option<&Slice>) -> Datum {
-        self.value.clone()
+    fn eval(&mut self, slice: Option<&Slice>) -> Vec<Datum> {
+        if let Some(slice) = slice {
+            vec![self.value.clone(); slice.len()]
+        } else {
+            vec![self.value.clone()]
+        }
     }
 }

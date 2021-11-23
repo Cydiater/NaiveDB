@@ -4,6 +4,7 @@ pub use create_database::CreateDatabasePlan;
 pub use create_table::CreateTablePlan;
 pub use desc::DescPlan;
 pub use insert::InsertPlan;
+pub use seq_scan::SeqScanPlan;
 pub use use_database::UseDatabasePlan;
 pub use values::ValuesPlan;
 
@@ -11,6 +12,7 @@ mod create_database;
 mod create_table;
 mod desc;
 mod insert;
+mod seq_scan;
 mod use_database;
 mod values;
 
@@ -22,6 +24,7 @@ pub enum Plan {
     Values(ValuesPlan),
     Insert(InsertPlan),
     Desc(DescPlan),
+    SeqScan(SeqScanPlan),
 }
 
 pub struct Planner {
@@ -41,6 +44,7 @@ impl Planner {
             Statement::CreateTable(stmt) => self.plan_create_table(stmt),
             Statement::Insert(stmt) => self.plan_insert(stmt),
             Statement::Desc(stmt) => self.plan_desc(stmt),
+            Statement::Select(stmt) => self.plan_seq_scan(stmt),
         }
     }
 }

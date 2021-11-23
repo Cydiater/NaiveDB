@@ -9,6 +9,19 @@ pub enum Statement {
     CreateTable(CreateTableStmt),
     Insert(InsertStmt),
     Desc(DescStmt),
+    Select(SelectStmt),
+}
+
+#[derive(Debug)]
+pub enum Selectors {
+    All,
+    Exprs(Vec<ExprImpl>),
+}
+
+#[derive(Debug)]
+pub struct SelectStmt {
+    pub table_name: String,
+    pub selectors: Selectors,
 }
 
 #[derive(Debug)]

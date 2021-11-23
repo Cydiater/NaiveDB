@@ -10,6 +10,7 @@ pub struct ValuesExecutor {
     values: Vec<Vec<ExprImpl>>,
     schema: SchemaRef,
     bpm: BufferPoolManagerRef,
+    executed: bool,
 }
 
 #[allow(dead_code)]
@@ -19,19 +20,28 @@ impl ValuesExecutor {
             values,
             schema,
             bpm,
+            executed: false,
         }
     }
 }
 
 impl Executor for ValuesExecutor {
-    fn execute(&mut self) -> Result<Slice, ExecutionError> {
-        let mut slice = Slice::new(self.bpm.clone(), self.schema.clone());
-        for tuple in self.values.iter_mut() {
-            let datums = tuple.iter_mut().map(|e| e.eval(None)).collect_vec();
-            info!("generate tuple {:?}", datums);
-            slice.add(&datums)?;
+    fn execute(&mut self) -> Result<Option<Slice>, ExecutionError> {
+        if !self.executed {
+            let mut slice = Slice::new(self.bpm.clone(), self.schema.clone());
+            for tuple in self.values.iter_mut() {
+                let datums = tuple
+                    .iter_mut()
+                    .map(|e| e.eval(None).remove(0))
+                    .collect_vec();
+                info!("generate tuple {:?}", datums);
+                slice.add(&datums)?;
+            }
+            self.executed = true;
+            Ok(Some(slice))
+        } else {
+            Ok(None)
         }
-        Ok(slice)
     }
 }
 
@@ -60,7 +70,7 @@ mod tests {
                 (DataType::VarChar, "v2".to_string(), false),
             ]);
             let mut values_executor = ValuesExecutor::new(values, Rc::new(schema), bpm);
-            let res = values_executor.execute().unwrap();
+            let res = values_executor.execute().unwrap().unwrap();
             assert_eq!(
                 res.at(0).unwrap(),
                 [

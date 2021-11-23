@@ -21,19 +21,23 @@ impl InsertExecutor {
 }
 
 impl Executor for InsertExecutor {
-    fn execute(&mut self) -> Result<Slice, ExecutionError> {
+    fn execute(&mut self) -> Result<Option<Slice>, ExecutionError> {
         let input = self.child.execute()?;
-        let mut table = self
-            .catalog
-            .borrow_mut()
-            .find_table(self.table_name.clone())?;
-        let len = input.len();
-        for idx in 0..len {
-            let tuple = input.at(idx)?;
-            info!("insert tuple {:?}", tuple);
-            table.insert(tuple.as_slice())?;
+        if let Some(input) = input {
+            let mut table = self
+                .catalog
+                .borrow_mut()
+                .find_table(self.table_name.clone())?;
+            let len = input.len();
+            for idx in 0..len {
+                let tuple = input.at(idx)?;
+                info!("insert tuple {:?}", tuple);
+                table.insert(tuple.as_slice())?;
+            }
+            Ok(Some(input))
+        } else {
+            Ok(None)
         }
-        Ok(input)
     }
 }
 

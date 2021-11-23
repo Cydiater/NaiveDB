@@ -49,7 +49,7 @@ impl fmt::Display for Datum {
 pub struct Slice {
     pub page_id: Option<PageID>,
     bpm: BufferPoolManagerRef,
-    schema: SchemaRef,
+    pub schema: SchemaRef,
     head: usize,
     tail: usize,
 }

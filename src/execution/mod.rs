@@ -1,16 +1,13 @@
 use crate::catalog::{CatalogError, CatalogManagerRef};
 use crate::planner::Plan;
 use crate::storage::BufferPoolManagerRef;
-use crate::table::{Slice, TableError};
+use crate::table::{Table, TableError};
 use log::info;
 use thiserror::Error;
 
 mod executor;
 
-pub use executor::{
-    CreateDatabaseExecutor, CreateTableExecutor, DescExecutor, Executor, ExecutorImpl,
-    InsertExecutor, ShowDatabasesExecutor, UseDatabaseExecutor, ValuesExecutor,
-};
+pub use executor::*;
 
 pub struct Engine {
     bpm: BufferPoolManagerRef,
@@ -60,6 +57,20 @@ impl Engine {
                 self.bpm.clone(),
                 self.catalog.clone(),
             )),
+            Plan::SeqScan(plan) => {
+                let table = self
+                    .catalog
+                    .borrow_mut()
+                    .find_table(plan.table_name)
+                    .unwrap();
+                let schema = table.schema.clone();
+                let page_id = table.get_page_id_of_root_slice();
+                ExecutorImpl::SeqScan(SeqScanExecutor::new(
+                    self.bpm.clone(),
+                    Some(page_id),
+                    schema,
+                ))
+            }
         }
     }
     pub fn new(catalog: CatalogManagerRef, bpm: BufferPoolManagerRef) -> Self {
@@ -75,9 +86,13 @@ impl Engine {
         }
         Self { bpm, catalog }
     }
-    pub fn execute(&mut self, plan: Plan) -> Result<Slice, ExecutionError> {
+    pub fn execute(&mut self, plan: Plan) -> Result<Table, ExecutionError> {
         let mut executor = self.build(plan);
-        executor.execute()
+        let mut slices = vec![];
+        while let Some(slice) = executor.execute()? {
+            slices.push(slice);
+        }
+        Ok(Table::from_slice(slices, self.bpm.clone()))
     }
 }
 
