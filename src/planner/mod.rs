@@ -4,6 +4,7 @@ pub use create_database::CreateDatabasePlan;
 pub use create_table::CreateTablePlan;
 pub use desc::DescPlan;
 pub use insert::InsertPlan;
+pub use project::ProjectPlan;
 pub use seq_scan::SeqScanPlan;
 pub use use_database::UseDatabasePlan;
 pub use values::ValuesPlan;
@@ -12,6 +13,7 @@ mod create_database;
 mod create_table;
 mod desc;
 mod insert;
+mod project;
 mod seq_scan;
 mod use_database;
 mod values;
@@ -25,6 +27,7 @@ pub enum Plan {
     Insert(InsertPlan),
     Desc(DescPlan),
     SeqScan(SeqScanPlan),
+    Project(ProjectPlan),
 }
 
 pub struct Planner {
@@ -35,7 +38,6 @@ impl Planner {
     pub fn new(catalog: CatalogManagerRef) -> Self {
         Self { catalog }
     }
-
     pub fn plan(&self, stmt: Statement) -> Plan {
         match stmt {
             Statement::CreateDatabase(stmt) => self.plan_create_database(stmt),

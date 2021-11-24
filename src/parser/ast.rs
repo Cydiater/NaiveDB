@@ -1,4 +1,3 @@
-use crate::expr::ExprImpl;
 pub use crate::table::DataType;
 
 #[derive(Debug)]
@@ -13,9 +12,32 @@ pub enum Statement {
 }
 
 #[derive(Debug)]
+pub enum ConstantValue {
+    String(String),
+    Int(i32),
+    Bool(bool),
+}
+
+#[derive(Debug)]
+pub struct ConstantExprNode {
+    pub value: ConstantValue,
+}
+
+#[derive(Debug)]
+pub struct ColumnRefExprNode {
+    pub column_name: String,
+}
+
+#[derive(Debug)]
+pub enum ExprNode {
+    Constant(ConstantExprNode),
+    ColumnRef(ColumnRefExprNode),
+}
+
+#[derive(Debug)]
 pub enum Selectors {
     All,
-    Exprs(Vec<ExprImpl>),
+    Exprs(Vec<ExprNode>),
 }
 
 #[derive(Debug)]
@@ -48,7 +70,7 @@ pub struct CreateTableStmt {
 #[derive(Debug)]
 pub struct InsertStmt {
     pub table_name: String,
-    pub values: Vec<Vec<ExprImpl>>,
+    pub values: Vec<Vec<ExprNode>>,
 }
 
 #[derive(Debug)]

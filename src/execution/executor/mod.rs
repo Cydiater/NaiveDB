@@ -5,6 +5,7 @@ pub use create_database::CreateDatabaseExecutor;
 pub use create_table::CreateTableExecutor;
 pub use desc::DescExecutor;
 pub use insert::InsertExecutor;
+pub use project::ProjectExecutor;
 pub use seq_scan::SeqScanExecutor;
 pub use show_databases::ShowDatabasesExecutor;
 pub use use_database::UseDatabaseExecutor;
@@ -14,6 +15,7 @@ mod create_database;
 mod create_table;
 mod desc;
 mod insert;
+mod project;
 mod seq_scan;
 mod show_databases;
 mod use_database;
@@ -33,6 +35,7 @@ pub enum ExecutorImpl {
     Insert(InsertExecutor),
     Desc(DescExecutor),
     SeqScan(SeqScanExecutor),
+    Project(ProjectExecutor),
 }
 
 impl ExecutorImpl {
@@ -46,6 +49,7 @@ impl ExecutorImpl {
             Self::Insert(executor) => executor.execute(),
             Self::Desc(executor) => executor.execute(),
             Self::SeqScan(executor) => executor.execute(),
+            Self::Project(executor) => executor.execute(),
         }
     }
 }

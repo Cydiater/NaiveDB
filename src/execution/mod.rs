@@ -71,6 +71,7 @@ impl Engine {
                     schema,
                 ))
             }
+            Plan::Project(_) => todo!(),
         }
     }
     pub fn new(catalog: CatalogManagerRef, bpm: BufferPoolManagerRef) -> Self {

@@ -1,6 +1,7 @@
 use crate::expr::ExprImpl;
 use crate::parser::ast::{SelectStmt, Selectors};
 use crate::planner::{Plan, Planner};
+use itertools::Itertools;
 
 pub struct SeqScanPlan {
     pub exprs: Vec<ExprImpl>,
@@ -16,11 +17,17 @@ impl Planner {
                 is_all: true,
                 table_name: stmt.table_name,
             }),
-            Selectors::Exprs(exprs) => Plan::SeqScan(SeqScanPlan {
-                exprs,
-                is_all: false,
-                table_name: stmt.table_name,
-            }),
+            Selectors::Exprs(exprs) => {
+                let exprs = exprs
+                    .into_iter()
+                    .map(|node| ExprImpl::from_ast(node, self.catalog.clone()))
+                    .collect_vec();
+                Plan::SeqScan(SeqScanPlan {
+                    exprs,
+                    is_all: false,
+                    table_name: stmt.table_name,
+                })
+            }
         }
     }
 }
