@@ -46,7 +46,7 @@ NormalField: Field = {
     <field_name:Identifier> <field_data_type:DataType> "null" => Field::Normal(NormalField { field_name, field_data_type, nullable: true }),
 }
 
-Statement: Statement = {
+pub Statement: Statement = {
     CreateDatabaseStmt,
     ShowDatabasesStmt,
     UseDatabaseStmt,
@@ -62,7 +62,7 @@ Selectors: Selectors = {
 }
 
 SelectStmt: Statement = {
-    "select" <selectors: Selectors> "from" <table_name: Identifier> => Statement::Select(SelectStmt { table_name, selectors }),
+    "select" <selectors: Selectors> "from" <table_name: Identifier> ";" => Statement::Select(SelectStmt { table_name, selectors }),
 }
 
 DescStmt: Statement = {
