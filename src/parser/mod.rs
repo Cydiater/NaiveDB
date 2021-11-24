@@ -1,11 +1,11 @@
 use crate::db::NaiveDBError;
-use crate::sql::StatementsParser;
+use crate::sql::StatementParser;
 use ast::Statement;
 
 pub mod ast;
 
-pub fn parse(sql: &str) -> Result<Vec<Statement>, NaiveDBError> {
-    let stmt_parser = StatementsParser::new();
+pub fn parse(sql: &str) -> Result<Statement, NaiveDBError> {
+    let stmt_parser = StatementParser::new();
     stmt_parser
         .parse(sql)
         .map_err(|e| NaiveDBError::Parse(e.to_string()))
