@@ -79,11 +79,7 @@ mod tests {
             columns,
             vec![
                 Column::new(4, DataType::new_int(false), "v1".to_string()),
-                Column::new(
-                    24,
-                    DataType::new_char(20, false),
-                    "v2".to_string(),
-                ),
+                Column::new(24, DataType::new_char(20, false), "v2".to_string(),),
                 Column::new(32, DataType::new_varchar(false), "v3".to_string()),
             ]
         );

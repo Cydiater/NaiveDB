@@ -1,8 +1,7 @@
-use crate::execution::ExecutorImpl;
 use crate::expr::ExprImpl;
+use crate::planner::Plan;
 
-#[allow(dead_code)]
 pub struct ProjectPlan {
-    exprs: Vec<ExprImpl>,
-    child: Box<ExecutorImpl>,
+    pub exprs: Vec<ExprImpl>,
+    pub child: Box<Plan>,
 }

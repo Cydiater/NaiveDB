@@ -60,7 +60,10 @@ mod tests {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
             let values = vec![vec![
-                ExprImpl::Constant(ConstantExpr::new(Datum::Int(Some(1)), DataType::new_int(false))),
+                ExprImpl::Constant(ConstantExpr::new(
+                    Datum::Int(Some(1)),
+                    DataType::new_int(false),
+                )),
                 ExprImpl::Constant(ConstantExpr::new(
                     Datum::VarChar(Some("hello world".to_string())),
                     DataType::new_varchar(false),

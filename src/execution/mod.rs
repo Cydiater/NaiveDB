@@ -71,7 +71,14 @@ impl Engine {
                     schema,
                 ))
             }
-            Plan::Project(_) => todo!(),
+            Plan::Project(plan) => {
+                let child = self.build(*plan.child);
+                ExecutorImpl::Project(ProjectExecutor::new(
+                    plan.exprs,
+                    Box::new(child),
+                    self.bpm.clone(),
+                ))
+            }
         }
     }
     pub fn new(catalog: CatalogManagerRef, bpm: BufferPoolManagerRef) -> Self {
