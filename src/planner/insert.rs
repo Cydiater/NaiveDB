@@ -1,6 +1,7 @@
 use crate::parser::ast::InsertStmt;
 use crate::planner::{Plan, Planner};
 
+#[derive(Debug)]
 pub struct InsertPlan {
     pub table_name: String,
     pub child: Box<Plan>,

@@ -16,6 +16,7 @@ pub struct Engine {
 
 impl Engine {
     fn build(&self, plan: Plan) -> ExecutorImpl {
+        info!("execute with plan {:#?}", plan);
         match plan {
             Plan::CreateDatabase(plan) => {
                 ExecutorImpl::CreateDatabase(CreateDatabaseExecutor::new(
@@ -69,6 +70,14 @@ impl Engine {
                     self.bpm.clone(),
                     Some(page_id),
                     schema,
+                ))
+            }
+            Plan::Project(plan) => {
+                let child = self.build(*plan.child);
+                ExecutorImpl::Project(ProjectExecutor::new(
+                    plan.exprs,
+                    Box::new(child),
+                    self.bpm.clone(),
                 ))
             }
         }

@@ -8,7 +8,6 @@ struct ClockItem {
     pinned: bool,
 }
 
-#[allow(dead_code)]
 impl ClockItem {
     pub fn pin(&mut self) -> bool {
         let already_pinned = self.pinned;
@@ -33,7 +32,6 @@ impl ClockItem {
     }
 }
 
-#[allow(dead_code)]
 pub struct ClockReplacer {
     /// the clock
     clock: Vec<ClockItem>,
@@ -43,7 +41,6 @@ pub struct ClockReplacer {
     num_unpinned: usize,
 }
 
-#[allow(dead_code)]
 impl ClockReplacer {
     pub fn new(size: usize) -> Self {
         Self {
@@ -53,6 +50,7 @@ impl ClockReplacer {
         }
     }
 
+    #[allow(dead_code)]
     pub fn erase(&mut self) {
         self.handle = 0;
         self.num_unpinned = self.clock.len();

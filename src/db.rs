@@ -79,6 +79,16 @@ mod tests {
                     vec![Datum::Int(Some(3))],
                 ]
             );
+            let table = db.run("select v1 from t;").unwrap();
+            let tuples = table.iter().collect_vec();
+            assert_eq!(
+                tuples,
+                vec![
+                    vec![Datum::Int(Some(1))],
+                    vec![Datum::Int(Some(2))],
+                    vec![Datum::Int(Some(3))],
+                ]
+            );
             filename
         };
         remove_file(filename).unwrap();

@@ -1,6 +1,5 @@
 use std::str::FromStr;
-use crate::table::{CharType, Datum};
-use crate::expr::{ExprImpl, ConstantExpr, ColumnRefExpr};
+use crate::table::DataType;
 use crate::parser::ast::*;
 
 grammar;
@@ -30,11 +29,29 @@ Semicolon<T>: Vec<T> = {
     },
 };
 
+pub Expr: ExprNode = {
+    <constant_expr: ConstantExpr> => ExprNode::Constant(constant_expr),
+    <column_ref_expr: ColumnRefExpr> => ExprNode::ColumnRef(column_ref_expr),
+}
+
+ColumnRefExpr: ColumnRefExprNode = {
+    <column_name: Identifier> => ColumnRefExprNode { column_name },
+}
+
+ConstantExpr: ConstantExprNode = {
+    <num: Num> => ConstantExprNode { value: ConstantValue::Int(num) },
+    <str: Str> => ConstantExprNode { value: ConstantValue::String(str) },
+};
+
 DataType: DataType = {
-    "int" => DataType::Int,
-    "char" "(" <width:Num> ")" => DataType::Char(CharType::new(width as usize)),
-    "varchar" => DataType::VarChar,
-    "bool" => DataType::Bool,
+    "int" "not" "null" => DataType::new_int(false),
+    "int" "null" => DataType::new_int(true),
+    "char" "(" <width:Num> ")" "not" "null" => DataType::new_char(width as usize, false),
+    "char" "(" <width:Num> ")" "null" => DataType::new_char(width as usize, true),
+    "varchar" "not" "null" => DataType::new_varchar(false),
+    "varchar" "null" => DataType::new_varchar(true),
+    "bool" "not" "null" => DataType::new_bool(false),
+    "bool" "null" => DataType::new_bool(true),
 }
 
 Field: Field = {
@@ -42,8 +59,7 @@ Field: Field = {
 }
 
 NormalField: Field = {
-    <field_name:Identifier> <field_data_type:DataType> "not" "null" => Field::Normal(NormalField { field_name, field_data_type, nullable: false }),
-    <field_name:Identifier> <field_data_type:DataType> "null" => Field::Normal(NormalField { field_name, field_data_type, nullable: true }),
+    <field_name:Identifier> <field_data_type:DataType> => Field::Normal(NormalField { field_name, field_data_type }),
 }
 
 pub Statement: Statement = {
@@ -93,21 +109,7 @@ Identifier: String = {
     r"[a-zA-Z_][a-zA-Z_0-9]*" => String::from_str(<>).unwrap(),
 }
 
-Tuple: Vec<ExprImpl> = "(" <exprs: Exprs> ")" => exprs;
-
-pub Expr: ExprImpl = {
-    <constant_expr: ConstantExpr> => ExprImpl::Constant(constant_expr),
-    <column_ref_expr: ColumnRefExpr> => ExprImpl::ColumnRef(column_ref_expr),
-}
-
-ColumnRefExpr: ColumnRefExpr = {
-    <field_name: Identifier> => ColumnRefExpr::new(field_name),
-}
-
-ConstantExpr: ConstantExpr = {
-    <num: Num> => ConstantExpr::new(Datum::Int(Some(num))),
-    <str: Str> => ConstantExpr::new(Datum::VarChar(Some(str))),
-};
+Tuple: Vec<ExprNode> = "(" <exprs: Exprs> ")" => exprs;
 
 Num: i32 = <s:r"[0-9]+"> => i32::from_str(s).unwrap();
 

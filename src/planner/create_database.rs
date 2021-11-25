@@ -1,6 +1,7 @@
 use super::{Plan, Planner};
 use crate::parser::ast::CreateDatabaseStmt;
 
+#[derive(Debug)]
 pub struct CreateDatabasePlan {
     pub database_name: String,
 }
