@@ -63,9 +63,10 @@ mod tests {
             )]));
             let catalog = CatalogManager::new_shared(bpm.clone());
             let values_executor = ExecutorImpl::Values(ValuesExecutor::new(
-                vec![vec![ExprImpl::Constant(ConstantExpr::new(Datum::Int(
-                    Some(123),
-                )))]],
+                vec![vec![ExprImpl::Constant(ConstantExpr::new(
+                    Datum::Int(Some(123)),
+                    DataType::Int,
+                ))]],
                 schema.clone(),
                 bpm.clone(),
             ));

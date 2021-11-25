@@ -18,14 +18,18 @@ impl Planner {
                 table_name: stmt.table_name,
             }),
             Selectors::Exprs(exprs) => {
+                let table_name = stmt.table_name;
                 let exprs = exprs
                     .into_iter()
-                    .map(|node| ExprImpl::from_ast(node, self.catalog.clone()))
+                    .map(|node| {
+                        ExprImpl::from_ast(node, self.catalog.clone(), Some(table_name.clone()))
+                            .unwrap()
+                    })
                     .collect_vec();
                 Plan::SeqScan(SeqScanPlan {
                     exprs,
                     is_all: false,
-                    table_name: stmt.table_name,
+                    table_name,
                 })
             }
         }

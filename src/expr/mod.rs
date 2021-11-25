@@ -1,8 +1,9 @@
-use crate::catalog::CatalogManagerRef;
-use crate::parser::ast::ExprNode;
+use crate::catalog::{CatalogError, CatalogManagerRef};
+use crate::parser::ast::{ConstantValue, ExprNode};
 use crate::table::{DataType, Datum, Slice};
 pub use column_ref::ColumnRefExpr;
 pub use constant::ConstantExpr;
+use thiserror::Error;
 
 mod column_ref;
 mod constant;
@@ -33,7 +34,41 @@ impl ExprImpl {
             ExprImpl::ColumnRef(expr) => expr.return_type(),
         }
     }
-    pub fn from_ast(_node: ExprNode, _catalog: CatalogManagerRef) -> Self {
-        todo!()
+    pub fn from_ast(
+        node: ExprNode,
+        catalog: CatalogManagerRef,
+        table_name: Option<String>,
+    ) -> Result<Self, ExprError> {
+        match node {
+            ExprNode::Constant(node) => Ok(match node.value {
+                ConstantValue::Int(value) => {
+                    ExprImpl::Constant(ConstantExpr::new(Datum::Int(Some(value)), DataType::Int))
+                }
+                ConstantValue::String(value) => ExprImpl::Constant(ConstantExpr::new(
+                    Datum::VarChar(Some(value)),
+                    DataType::VarChar,
+                )),
+                ConstantValue::Bool(value) => {
+                    ExprImpl::Constant(ConstantExpr::new(Datum::Bool(Some(value)), DataType::Bool))
+                }
+            }),
+            ExprNode::ColumnRef(node) => {
+                let table_name = table_name.unwrap();
+                let table = catalog.borrow().find_table(table_name)?;
+                let schema = table.schema;
+                let idx = schema.index_of(node.column_name).unwrap();
+                let return_type = schema.type_at(idx);
+                Ok(ExprImpl::ColumnRef(ColumnRefExpr::new(idx, return_type)))
+            }
+        }
     }
+}
+
+#[allow(dead_code)]
+#[derive(Error, Debug)]
+pub enum ExprError {
+    #[error("TableNameNotFound")]
+    TableNameNotFound,
+    #[error("CatalogError: {0}")]
+    CatalogError(#[from] CatalogError),
 }

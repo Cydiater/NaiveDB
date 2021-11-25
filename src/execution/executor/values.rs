@@ -60,10 +60,11 @@ mod tests {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
             let values = vec![vec![
-                ExprImpl::Constant(ConstantExpr::new(Datum::Int(Some(1)))),
-                ExprImpl::Constant(ConstantExpr::new(Datum::VarChar(Some(
-                    "hello world".to_string(),
-                )))),
+                ExprImpl::Constant(ConstantExpr::new(Datum::Int(Some(1)), DataType::Int)),
+                ExprImpl::Constant(ConstantExpr::new(
+                    Datum::VarChar(Some("hello world".to_string())),
+                    DataType::VarChar,
+                )),
             ]];
             let schema = Schema::from_slice(&[
                 (DataType::Int, "v1".to_string(), false),

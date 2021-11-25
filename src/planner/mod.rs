@@ -18,6 +18,7 @@ mod seq_scan;
 mod use_database;
 mod values;
 
+#[allow(dead_code)]
 pub enum Plan {
     CreateDatabase(CreateDatabasePlan),
     ShowDatabases,

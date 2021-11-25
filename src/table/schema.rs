@@ -59,6 +59,9 @@ impl Schema {
     pub fn iter_mut(&mut self) -> IterMut<Column> {
         self.columns.iter_mut()
     }
+    pub fn type_at(&self, idx: usize) -> DataType {
+        self.columns[idx].data_type
+    }
 }
 
 #[cfg(test)]
