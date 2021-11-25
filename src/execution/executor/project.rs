@@ -40,8 +40,10 @@ impl Executor for ProjectExecutor {
                     for idx in 0..len {
                         self.buffer.push(from_child.at(idx).unwrap());
                     }
-                } else {
+                } else if slice.len() == 0 {
                     return Ok(None);
+                } else {
+                    return Ok(Some(slice));
                 }
             }
             if slice.add(self.buffer[0].as_slice()).is_ok() {

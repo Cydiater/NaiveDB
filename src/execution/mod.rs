@@ -16,6 +16,7 @@ pub struct Engine {
 
 impl Engine {
     fn build(&self, plan: Plan) -> ExecutorImpl {
+        info!("execute with plan {:#?}", plan);
         match plan {
             Plan::CreateDatabase(plan) => {
                 ExecutorImpl::CreateDatabase(CreateDatabaseExecutor::new(

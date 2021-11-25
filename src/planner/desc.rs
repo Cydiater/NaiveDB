@@ -1,6 +1,7 @@
 use crate::parser::ast::DescStmt;
 use crate::planner::{Plan, Planner};
 
+#[derive(Debug)]
 pub struct DescPlan {
     pub table_name: String,
 }

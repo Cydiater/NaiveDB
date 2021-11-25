@@ -3,18 +3,21 @@ use crate::parser::ast::{SelectStmt, Selectors};
 use crate::planner::{Plan, Planner};
 use itertools::Itertools;
 
+#[derive(Debug)]
 pub struct SeqScanPlan {
-    pub exprs: Vec<ExprImpl>,
-    pub is_all: bool,
     pub table_name: String,
 }
 
+#[derive(Debug)]
+pub struct ProjectPlan {
+    pub exprs: Vec<ExprImpl>,
+    pub child: Box<Plan>,
+}
+
 impl Planner {
-    pub fn plan_seq_scan(&self, stmt: SelectStmt) -> Plan {
+    pub fn plan_select(&self, stmt: SelectStmt) -> Plan {
         match stmt.selectors {
             Selectors::All => Plan::SeqScan(SeqScanPlan {
-                exprs: vec![],
-                is_all: true,
                 table_name: stmt.table_name,
             }),
             Selectors::Exprs(exprs) => {
@@ -26,10 +29,10 @@ impl Planner {
                             .unwrap()
                     })
                     .collect_vec();
-                Plan::SeqScan(SeqScanPlan {
+                let seq_scan = Plan::SeqScan(SeqScanPlan { table_name });
+                Plan::Project(ProjectPlan {
                     exprs,
-                    is_all: false,
-                    table_name,
+                    child: Box::new(seq_scan),
                 })
             }
         }

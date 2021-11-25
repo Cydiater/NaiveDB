@@ -1,11 +1,11 @@
 use crate::catalog::CatalogManagerRef;
 use crate::parser::ast::Statement;
+use log::info;
 pub use create_database::CreateDatabasePlan;
 pub use create_table::CreateTablePlan;
 pub use desc::DescPlan;
 pub use insert::InsertPlan;
-pub use project::ProjectPlan;
-pub use seq_scan::SeqScanPlan;
+pub use select::{ProjectPlan, SeqScanPlan};
 pub use use_database::UseDatabasePlan;
 pub use values::ValuesPlan;
 
@@ -13,12 +13,11 @@ mod create_database;
 mod create_table;
 mod desc;
 mod insert;
-mod project;
-mod seq_scan;
+mod select;
 mod use_database;
 mod values;
 
-#[allow(dead_code)]
+#[derive(Debug)]
 pub enum Plan {
     CreateDatabase(CreateDatabasePlan),
     ShowDatabases,
@@ -40,6 +39,7 @@ impl Planner {
         Self { catalog }
     }
     pub fn plan(&self, stmt: Statement) -> Plan {
+        info!("plan with statement {:#?}", stmt);
         match stmt {
             Statement::CreateDatabase(stmt) => self.plan_create_database(stmt),
             Statement::ShowDatabases => Plan::ShowDatabases,
@@ -47,7 +47,7 @@ impl Planner {
             Statement::CreateTable(stmt) => self.plan_create_table(stmt),
             Statement::Insert(stmt) => self.plan_insert(stmt),
             Statement::Desc(stmt) => self.plan_desc(stmt),
-            Statement::Select(stmt) => self.plan_seq_scan(stmt),
+            Statement::Select(stmt) => self.plan_select(stmt),
         }
     }
 }

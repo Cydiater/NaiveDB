@@ -3,6 +3,7 @@ use crate::planner::{Plan, Planner};
 use crate::table::Schema;
 use itertools::Itertools;
 
+#[derive(Debug)]
 pub struct CreateTablePlan {
     pub table_name: String,
     pub schema: Schema,

@@ -4,6 +4,7 @@ use crate::planner::{Plan, Planner};
 use crate::table::SchemaRef;
 use itertools::Itertools;
 
+#[derive(Debug)]
 pub struct ValuesPlan {
     pub values: Vec<Vec<ExprImpl>>,
     pub schema: SchemaRef,
