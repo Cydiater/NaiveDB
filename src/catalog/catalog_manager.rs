@@ -108,9 +108,8 @@ mod tests {
             // create a table
             let table = Table::new(
                 Rc::new(Schema::from_slice(&[(
-                    DataType::Int,
+                    DataType::new_int(false),
                     "v1".to_string(),
-                    false,
                 )])),
                 bpm.clone(),
             );

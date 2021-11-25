@@ -57,15 +57,14 @@ mod tests {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
             let schema = Rc::new(Schema::from_slice(&[(
-                DataType::Int,
+                DataType::new_int(false),
                 "v1".to_string(),
-                false,
             )]));
             let catalog = CatalogManager::new_shared(bpm.clone());
             let values_executor = ExecutorImpl::Values(ValuesExecutor::new(
                 vec![vec![ExprImpl::Constant(ConstantExpr::new(
                     Datum::Int(Some(123)),
-                    DataType::Int,
+                    DataType::new_int(false),
                 ))]],
                 schema.clone(),
                 bpm.clone(),

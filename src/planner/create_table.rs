@@ -14,7 +14,7 @@ impl Planner {
             .fields
             .iter()
             .map(|f| match f {
-                Field::Normal(f) => (f.field_data_type, f.field_name.clone(), f.nullable),
+                Field::Normal(f) => (f.field_data_type, f.field_name.clone()),
             })
             .collect_vec();
         Plan::CreateTable(CreateTablePlan {

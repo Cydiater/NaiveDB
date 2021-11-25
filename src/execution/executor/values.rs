@@ -60,15 +60,15 @@ mod tests {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
             let values = vec![vec![
-                ExprImpl::Constant(ConstantExpr::new(Datum::Int(Some(1)), DataType::Int)),
+                ExprImpl::Constant(ConstantExpr::new(Datum::Int(Some(1)), DataType::new_int(false))),
                 ExprImpl::Constant(ConstantExpr::new(
                     Datum::VarChar(Some("hello world".to_string())),
-                    DataType::VarChar,
+                    DataType::new_varchar(false),
                 )),
             ]];
             let schema = Schema::from_slice(&[
-                (DataType::Int, "v1".to_string(), false),
-                (DataType::VarChar, "v2".to_string(), false),
+                (DataType::new_int(false), "v1".to_string()),
+                (DataType::new_varchar(false), "v2".to_string()),
             ]);
             let mut values_executor = ValuesExecutor::new(values, Rc::new(schema), bpm);
             let res = values_executor.execute().unwrap().unwrap();

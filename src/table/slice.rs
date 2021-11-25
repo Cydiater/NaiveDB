@@ -98,7 +98,7 @@ impl Slice {
         header: String,
         message: String,
     ) -> Result<Self, TableError> {
-        let schema = Schema::from_slice(&[(DataType::VarChar, header, false)]);
+        let schema = Schema::from_slice(&[(DataType::new_varchar(false), header)]);
         let mut slice = Self::new(bpm, Rc::new(schema));
         slice.add(&[Datum::VarChar(Some(message))])?;
         Ok(slice)
@@ -201,7 +201,7 @@ impl Slice {
             let offset = end - col.offset;
             assert!(offset < PAGE_SIZE);
             match col.data_type {
-                DataType::Int => {
+                DataType::Int(_) => {
                     tuple.push(Datum::Int(Some(i32::from_le_bytes(
                         page.borrow().buffer[offset..offset + 4].try_into().unwrap(),
                     ))));
@@ -218,7 +218,7 @@ impl Slice {
                         .to_string(),
                     )));
                 }
-                DataType::VarChar => {
+                DataType::VarChar(_) => {
                     let start = end
                         - u32::from_le_bytes(
                             page.borrow().buffer[offset..offset + 4].try_into().unwrap(),
@@ -236,7 +236,7 @@ impl Slice {
                         .to_string(),
                     )));
                 }
-                DataType::Bool => {
+                DataType::Bool(_) => {
                     tuple.push(Datum::Bool(Some(page.borrow().buffer[offset] != 0)));
                 }
             }
@@ -251,12 +251,12 @@ impl Slice {
             .iter()
             .zip(datums.iter())
             .fold(0usize, |size, (col, dat)| match (dat, col.data_type) {
-                (Datum::Int(_), DataType::Int) => size + std::mem::size_of::<u32>(),
+                (Datum::Int(_), DataType::Int(_)) => size + std::mem::size_of::<u32>(),
                 (Datum::Char(_), DataType::Char(char_type)) => size + char_type.width,
-                (Datum::VarChar(dat), DataType::VarChar) => {
+                (Datum::VarChar(dat), DataType::VarChar(_)) => {
                     dat.as_ref().unwrap_or(&"0".to_string()).len()
                 }
-                (Datum::Bool(_), DataType::Bool) => size + std::mem::size_of::<bool>(),
+                (Datum::Bool(_), DataType::Bool(_)) => size + std::mem::size_of::<bool>(),
                 _ => 0usize,
             })
     }
@@ -288,7 +288,7 @@ impl Slice {
         let last_tail = self.tail;
         for (idx, (col, dat)) in self.schema.iter().zip(datums.iter()).enumerate() {
             let tail = match (dat, col.data_type) {
-                (Datum::Int(dat), DataType::Int) => self.push(&if let Some(dat) = dat {
+                (Datum::Int(dat), DataType::Int(_)) => self.push(&if let Some(dat) = dat {
                     dat.to_le_bytes()
                 } else {
                     [0u8; 4]
@@ -301,7 +301,7 @@ impl Slice {
                     })?
                 }
                 // put placeholder first, we fill offset and length later
-                (Datum::VarChar(_), DataType::VarChar) => {
+                (Datum::VarChar(_), DataType::VarChar(_)) => {
                     let tail = self.push(&[0u8; 8])?;
                     not_inlined_indexes.push((idx, tail));
                     tail
@@ -373,7 +373,7 @@ impl fmt::Display for Slice {
 mod tests {
     use super::*;
     use crate::storage::BufferPoolManager;
-    use crate::table::{CharType, Column, DataType, Schema};
+    use crate::table::{Column, DataType, Schema};
     use std::fs::remove_file;
 
     #[test]
@@ -382,8 +382,8 @@ mod tests {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
             let schema = Schema::from_slice(&[
-                (DataType::Int, "v1".to_string(), false),
-                (DataType::Char(CharType::new(20)), "v2".to_string(), false),
+                (DataType::new_int(false), "v1".to_string()),
+                (DataType::new_char(20, false), "v2".to_string()),
             ]);
             let mut slice = Slice::new(bpm.clone(), Rc::new(schema));
             let tuple1 = vec![Datum::Int(Some(20)), Datum::Char(Some("hello".to_string()))];
@@ -396,8 +396,8 @@ mod tests {
             let page_id = slice.page_id.unwrap();
             // refetch
             let schema = Schema::from_slice(&[
-                (DataType::Int, "v1".to_string(), false),
-                (DataType::Char(CharType::new(20)), "v2".to_string(), false),
+                (DataType::new_int(false), "v1".to_string()),
+                (DataType::new_char(20, false), "v2".to_string()),
             ]);
             let mut slice = Slice::new(bpm.clone(), Rc::new(schema));
             slice.attach(page_id);
@@ -415,7 +415,7 @@ mod tests {
         let filename = {
             let bpm = BufferPoolManager::new_random_shared(100);
             let filename = bpm.borrow().filename();
-            let schema = Schema::from_slice(&[(DataType::Int, "v1".to_string(), false)]);
+            let schema = Schema::from_slice(&[(DataType::new_int(false), "v1".to_string())]);
             let mut slice = Slice::new(bpm.clone(), Rc::new(schema));
             // 4 + (4 + 4) * 510 = 4090
             for i in 0..510 {
@@ -434,8 +434,8 @@ mod tests {
             let filename = bpm.borrow().filename();
             bpm.borrow_mut().clear().unwrap();
             let columns = vec![
-                Column::new(4, DataType::Int, "v1".to_string(), false),
-                Column::new(12, DataType::VarChar, "v2".to_string(), false),
+                Column::new(4, DataType::new_int(false), "v1".to_string()),
+                Column::new(12, DataType::new_varchar(false), "v2".to_string()),
             ];
             let schema = Rc::new(Schema::new(columns));
             let mut slice = Slice::new(bpm.clone(), schema);

@@ -24,4 +24,7 @@ impl Expr for ConstantExpr {
     fn return_type(&self) -> DataType {
         self.return_type
     }
+    fn name(&self) -> String {
+        String::from("constant")
+    }
 }

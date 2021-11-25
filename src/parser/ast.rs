@@ -82,5 +82,4 @@ pub enum Field {
 pub struct NormalField {
     pub field_name: String,
     pub field_data_type: DataType,
-    pub nullable: bool,
 }

@@ -21,7 +21,7 @@ pub use types::{CharType, DataType};
 /// each column have an desc, which is a string, and type id that describe
 /// the type this column have.
 ///
-///     | desc_len | chars_of_desc | type_id | nullable |
+///     | desc_len | chars_of_desc | type_id |
 ///
 /// type_id:
 ///
@@ -106,9 +106,7 @@ impl Table {
                 DataType::from_bytes(&page.borrow().buffer[offset..offset + 5].try_into().unwrap())
                     .unwrap();
             offset += 5;
-            let nullable = page.borrow().buffer[offset] != 0;
-            offset += 1;
-            cols.push((dat, name, nullable));
+            cols.push((dat, name));
         }
         let schema = Rc::new(Schema::from_slice(cols.as_slice()));
         // unpin page
@@ -141,8 +139,6 @@ impl Table {
             offset += desc_len;
             page.borrow_mut().buffer[offset..offset + 5].copy_from_slice(&col.data_type.as_bytes());
             offset += 5;
-            page.borrow_mut().buffer[offset] = col.nullable.into();
-            offset += 1;
             page.borrow_mut().buffer[offset..offset + 4].copy_from_slice(&[0u8; 4]);
         });
         // mark dirty
@@ -227,7 +223,7 @@ mod tests {
         let filename = {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
-            let schema = Schema::from_slice(&[(DataType::Int, "v1".to_string(), false)]);
+            let schema = Schema::from_slice(&[(DataType::new_int(false), "v1".to_string())]);
             let mut table = Table::new(Rc::new(schema), bpm.clone());
             // insert
             for idx in 0..1000 {
@@ -247,7 +243,7 @@ mod tests {
         let (filename, page_id) = {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
-            let schema = Schema::from_slice(&[(DataType::VarChar, "v1".to_string(), false)]);
+            let schema = Schema::from_slice(&[(DataType::new_varchar(false), "v1".to_string())]);
             let table = Table::new(Rc::new(schema), bpm.clone());
             (filename, table.page_id)
         };

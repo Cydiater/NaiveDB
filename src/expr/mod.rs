@@ -11,6 +11,7 @@ mod constant;
 pub trait Expr {
     fn eval(&mut self, slice: Option<&Slice>) -> Vec<Datum>;
     fn return_type(&self) -> DataType;
+    fn name(&self) -> String;
 }
 
 #[derive(Debug)]
@@ -34,6 +35,12 @@ impl ExprImpl {
             ExprImpl::ColumnRef(expr) => expr.return_type(),
         }
     }
+    pub fn name(&self) -> String {
+        match self {
+            ExprImpl::Constant(expr) => expr.name(),
+            ExprImpl::ColumnRef(expr) => expr.name(),
+        }
+    }
     pub fn from_ast(
         node: ExprNode,
         catalog: CatalogManagerRef,
@@ -41,24 +48,30 @@ impl ExprImpl {
     ) -> Result<Self, ExprError> {
         match node {
             ExprNode::Constant(node) => Ok(match node.value {
-                ConstantValue::Int(value) => {
-                    ExprImpl::Constant(ConstantExpr::new(Datum::Int(Some(value)), DataType::Int))
-                }
+                ConstantValue::Int(value) => ExprImpl::Constant(ConstantExpr::new(
+                    Datum::Int(Some(value)),
+                    DataType::new_int(false),
+                )),
                 ConstantValue::String(value) => ExprImpl::Constant(ConstantExpr::new(
                     Datum::VarChar(Some(value)),
-                    DataType::VarChar,
+                    DataType::new_varchar(false),
                 )),
-                ConstantValue::Bool(value) => {
-                    ExprImpl::Constant(ConstantExpr::new(Datum::Bool(Some(value)), DataType::Bool))
-                }
+                ConstantValue::Bool(value) => ExprImpl::Constant(ConstantExpr::new(
+                    Datum::Bool(Some(value)),
+                    DataType::new_bool(false),
+                )),
             }),
             ExprNode::ColumnRef(node) => {
                 let table_name = table_name.unwrap();
                 let table = catalog.borrow().find_table(table_name)?;
                 let schema = table.schema;
-                let idx = schema.index_of(node.column_name).unwrap();
+                let idx = schema.index_of(node.column_name.clone()).unwrap();
                 let return_type = schema.type_at(idx);
-                Ok(ExprImpl::ColumnRef(ColumnRefExpr::new(idx, return_type)))
+                Ok(ExprImpl::ColumnRef(ColumnRefExpr::new(
+                    idx,
+                    return_type,
+                    node.column_name,
+                )))
             }
         }
     }

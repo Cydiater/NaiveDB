@@ -5,11 +5,16 @@ use crate::table::{DataType, Datum, Slice};
 pub struct ColumnRefExpr {
     idx: usize,
     return_type: DataType,
+    desc: String,
 }
 
 impl ColumnRefExpr {
-    pub fn new(idx: usize, return_type: DataType) -> Self {
-        Self { idx, return_type }
+    pub fn new(idx: usize, return_type: DataType, desc: String) -> Self {
+        Self {
+            idx,
+            return_type,
+            desc,
+        }
     }
 }
 
@@ -28,5 +33,8 @@ impl Expr for ColumnRefExpr {
     }
     fn return_type(&self) -> DataType {
         self.return_type
+    }
+    fn name(&self) -> String {
+        self.desc.clone()
     }
 }

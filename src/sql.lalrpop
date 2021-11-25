@@ -1,5 +1,5 @@
 use std::str::FromStr;
-use crate::table::{CharType, DataType};
+use crate::table::DataType;
 use crate::parser::ast::*;
 
 grammar;
@@ -44,10 +44,14 @@ ConstantExpr: ConstantExprNode = {
 };
 
 DataType: DataType = {
-    "int" => DataType::Int,
-    "char" "(" <width:Num> ")" => DataType::Char(CharType::new(width as usize)),
-    "varchar" => DataType::VarChar,
-    "bool" => DataType::Bool,
+    "int" "not" "null" => DataType::new_int(false),
+    "int" "null" => DataType::new_int(true),
+    "char" "(" <width:Num> ")" "not" "null" => DataType::new_char(width as usize, false),
+    "char" "(" <width:Num> ")" "null" => DataType::new_char(width as usize, true),
+    "varchar" "not" "null" => DataType::new_varchar(false),
+    "varchar" "null" => DataType::new_varchar(true),
+    "bool" "not" "null" => DataType::new_bool(false),
+    "bool" "null" => DataType::new_bool(true),
 }
 
 Field: Field = {
@@ -55,8 +59,7 @@ Field: Field = {
 }
 
 NormalField: Field = {
-    <field_name:Identifier> <field_data_type:DataType> "not" "null" => Field::Normal(NormalField { field_name, field_data_type, nullable: false }),
-    <field_name:Identifier> <field_data_type:DataType> "null" => Field::Normal(NormalField { field_name, field_data_type, nullable: true }),
+    <field_name:Identifier> <field_data_type:DataType> => Field::Normal(NormalField { field_name, field_data_type }),
 }
 
 pub Statement: Statement = {
