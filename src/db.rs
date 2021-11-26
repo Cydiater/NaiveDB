@@ -4,6 +4,8 @@ use crate::parser::parse;
 use crate::planner::Planner;
 use crate::storage::{BufferPoolManager, BufferPoolManagerRef};
 use crate::table::Table;
+use std::cell::RefCell;
+use std::rc::Rc;
 use thiserror::Error;
 
 pub struct NaiveDB {
@@ -21,6 +23,18 @@ impl NaiveDB {
     #[allow(dead_code)]
     pub fn new_random() -> Self {
         let bpm = BufferPoolManager::new_random_shared(4096);
+        let catalog = CatalogManager::new_shared(bpm.clone());
+        Self {
+            bpm: bpm.clone(),
+            engine: Engine::new(catalog.clone(), bpm),
+            planner: Planner::new(catalog),
+        }
+    }
+    #[allow(dead_code)]
+    pub fn new_with_name(filename: String) -> Self {
+        let bpm = Rc::new(RefCell::new(BufferPoolManager::new_with_name(
+            4096, filename,
+        )));
         let catalog = CatalogManager::new_shared(bpm.clone());
         Self {
             bpm: bpm.clone(),
@@ -80,6 +94,55 @@ mod tests {
                 ]
             );
             let table = db.run("select v1 from t;").unwrap();
+            let tuples = table.iter().collect_vec();
+            assert_eq!(
+                tuples,
+                vec![
+                    vec![Datum::Int(Some(1))],
+                    vec![Datum::Int(Some(2))],
+                    vec![Datum::Int(Some(3))],
+                ]
+            );
+            filename
+        };
+        remove_file(filename).unwrap();
+    }
+
+    #[test]
+    fn test_persistent() {
+        let filename = {
+            let mut db = NaiveDB::new_random();
+            let filename = db.filename();
+            db.run("create database d;").unwrap();
+            db.run("use d;").unwrap();
+            db.run("create table t (v1 int not null);").unwrap();
+            db.run("insert into t values (1), (2), (3);").unwrap();
+            let table = db.run("select * from t;").unwrap();
+            let tuples = table.iter().collect_vec();
+            assert_eq!(
+                tuples,
+                vec![
+                    vec![Datum::Int(Some(1))],
+                    vec![Datum::Int(Some(2))],
+                    vec![Datum::Int(Some(3))],
+                ]
+            );
+            let table = db.run("select v1 from t;").unwrap();
+            let tuples = table.iter().collect_vec();
+            assert_eq!(
+                tuples,
+                vec![
+                    vec![Datum::Int(Some(1))],
+                    vec![Datum::Int(Some(2))],
+                    vec![Datum::Int(Some(3))],
+                ]
+            );
+            filename
+        };
+        let filename = {
+            let mut db = NaiveDB::new_with_name(filename.clone());
+            db.run("use d;").unwrap();
+            let table = db.run("select * from t;").unwrap();
             let tuples = table.iter().collect_vec();
             assert_eq!(
                 tuples,

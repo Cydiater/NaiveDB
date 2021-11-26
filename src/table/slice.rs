@@ -181,6 +181,8 @@ impl Slice {
         let page = self.bpm.borrow_mut().fetch(page_id).unwrap();
         let next_tail = self.tail - data.len();
         page.borrow_mut().buffer[next_tail..self.tail].copy_from_slice(data);
+        // mark dirty
+        page.borrow_mut().is_dirty = true;
         // unpin page
         self.bpm.borrow_mut().unpin(page_id)?;
         Ok(next_tail)
@@ -339,6 +341,9 @@ impl Slice {
         // mark next end
         page.borrow_mut().buffer[next_head + 4..next_head + 8]
             .copy_from_slice(&(0u32).to_le_bytes());
+        // mark dirty
+        page.borrow_mut().is_dirty = true;
+        // unpin
         self.bpm.borrow_mut().unpin(self.page_id.unwrap())?;
         Ok(())
     }
