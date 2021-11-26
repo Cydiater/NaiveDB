@@ -15,13 +15,11 @@ pub trait Expr {
 }
 
 #[derive(Debug)]
-#[allow(dead_code)]
 pub enum ExprImpl {
     Constant(ConstantExpr),
     ColumnRef(ColumnRefExpr),
 }
 
-#[allow(dead_code)]
 impl ExprImpl {
     pub fn eval(&mut self, slice: Option<&Slice>) -> Vec<Datum> {
         match self {
