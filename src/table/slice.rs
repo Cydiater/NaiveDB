@@ -31,7 +31,6 @@ impl fmt::Display for Datum {
     }
 }
 
-#[allow(dead_code)]
 /// one slice is fitted precisely in one page,
 /// we have multiple tuples in one slice. one Slice is organized as
 ///
