@@ -15,6 +15,16 @@ pub enum Datum {
     Bool(Option<bool>),
 }
 
+impl Datum {
+    pub fn from_index_key_binary(
+        _bpm: BufferPoolManagerRef,
+        _data_type: DataType,
+        _bytes: &[u8],
+    ) -> Self {
+        todo!()
+    }
+}
+
 impl fmt::Display for Datum {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
