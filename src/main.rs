@@ -3,6 +3,7 @@
 mod catalog;
 mod execution;
 mod expr;
+mod index;
 mod parser;
 mod planner;
 mod storage;
