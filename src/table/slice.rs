@@ -54,6 +54,13 @@ impl Datum {
             _ => todo!(),
         }
     }
+    pub fn from_index_key_binary(
+        _bpm: BufferPoolManagerRef,
+        _data_type: DataType,
+        _bytes: &[u8],
+    ) -> Self {
+        todo!()
+    }
 }
 
 impl fmt::Display for Datum {
