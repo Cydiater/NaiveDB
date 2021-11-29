@@ -13,6 +13,7 @@ pub enum Statement {
 
 #[derive(Debug)]
 pub enum ConstantValue {
+    Null,
     String(String),
     Int(i32),
     Bool(bool),

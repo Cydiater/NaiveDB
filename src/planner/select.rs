@@ -25,8 +25,13 @@ impl Planner {
                 let exprs = exprs
                     .into_iter()
                     .map(|node| {
-                        ExprImpl::from_ast(node, self.catalog.clone(), Some(table_name.clone()))
-                            .unwrap()
+                        ExprImpl::from_ast(
+                            node,
+                            self.catalog.clone(),
+                            Some(table_name.clone()),
+                            None,
+                        )
+                        .unwrap()
                     })
                     .collect_vec();
                 let seq_scan = Plan::SeqScan(SeqScanPlan { table_name });

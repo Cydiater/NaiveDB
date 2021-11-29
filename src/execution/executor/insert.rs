@@ -32,7 +32,7 @@ impl Executor for InsertExecutor {
             for idx in 0..len {
                 let tuple = input.at(idx)?;
                 info!("insert tuple {:?}", tuple);
-                table.insert(tuple.as_slice())?;
+                table.insert(tuple)?;
             }
             Ok(Some(input))
         } else {

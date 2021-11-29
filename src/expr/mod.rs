@@ -43,6 +43,7 @@ impl ExprImpl {
         node: ExprNode,
         catalog: CatalogManagerRef,
         table_name: Option<String>,
+        data_type_hint: Option<&DataType>,
     ) -> Result<Self, ExprError> {
         match node {
             ExprNode::Constant(node) => Ok(match node.value {
@@ -58,6 +59,24 @@ impl ExprImpl {
                     Datum::Bool(Some(value)),
                     DataType::new_bool(false),
                 )),
+                ConstantValue::Null => match data_type_hint.unwrap() {
+                    DataType::Int(int_type) => ExprImpl::Constant(ConstantExpr::new(
+                        Datum::Int(None),
+                        DataType::Int(*int_type),
+                    )),
+                    DataType::Char(char_type) => ExprImpl::Constant(ConstantExpr::new(
+                        Datum::Char(None),
+                        DataType::Char(*char_type),
+                    )),
+                    DataType::VarChar(varchar_type) => ExprImpl::Constant(ConstantExpr::new(
+                        Datum::VarChar(None),
+                        DataType::VarChar(*varchar_type),
+                    )),
+                    DataType::Bool(bool_type) => ExprImpl::Constant(ConstantExpr::new(
+                        Datum::Bool(None),
+                        DataType::Bool(*bool_type),
+                    )),
+                },
             }),
             ExprNode::ColumnRef(node) => {
                 let table_name = table_name.unwrap();
