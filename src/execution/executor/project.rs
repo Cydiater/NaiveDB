@@ -31,14 +31,21 @@ impl Executor for ProjectExecutor {
             .map(|e| (e.return_type(), e.name()))
             .collect_vec();
         let schema = Rc::new(Schema::from_slice(type_and_names.as_slice()));
+        println!("schema = {:#?}", schema);
         let mut slice = Slice::new_empty(self.bpm.clone(), schema);
         loop {
             if self.buffer.is_empty() {
                 let from_child = self.child.execute()?;
                 if let Some(from_child) = from_child {
-                    let len = from_child.len();
-                    for idx in 0..len {
-                        self.buffer.push(from_child.at(idx).unwrap());
+                    let mut columns = self
+                        .exprs
+                        .iter_mut()
+                        .map(|e| e.eval(Some(&from_child)))
+                        .collect_vec();
+                    let len = columns[0].len();
+                    for _ in 0..len {
+                        let datums = columns.iter_mut().map(|v| v.remove(0)).collect_vec();
+                        self.buffer.push(datums);
                     }
                 } else if slice.len() == 0 {
                     return Ok(None);

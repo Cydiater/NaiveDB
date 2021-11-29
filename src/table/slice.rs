@@ -275,7 +275,9 @@ impl Slice {
                     } else {
                         let start = end
                             - u32::from_le_bytes(
-                                page.borrow().buffer[offset + 1..offset + 5].try_into().unwrap(),
+                                page.borrow().buffer[offset + 1..offset + 5]
+                                    .try_into()
+                                    .unwrap(),
                             ) as usize;
                         let end = end
                             - u32::from_le_bytes(

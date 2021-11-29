@@ -41,6 +41,8 @@ ColumnRefExpr: ColumnRefExprNode = {
 ConstantExpr: ConstantExprNode = {
     <num: Num> => ConstantExprNode { value: ConstantValue::Int(num) },
     <str: Str> => ConstantExprNode { value: ConstantValue::String(str) },
+    "null" => ConstantExprNode { value: ConstantValue::Null },
+    "NULL" => ConstantExprNode { value: ConstantValue::Null }
 };
 
 DataType: DataType = {

@@ -156,4 +156,40 @@ mod tests {
         };
         remove_file(filename).unwrap();
     }
+
+    #[test]
+    fn test_null() {
+        let filename = {
+            let mut db = NaiveDB::new_random();
+            let filename = db.filename();
+            db.run("create database d;").unwrap();
+            db.run("use d;").unwrap();
+            db.run("create table t (v1 int null, v2 varchar null);")
+                .unwrap();
+            db.run("insert into t values (1, 'foo'), (2, null), (null, 'bar');")
+                .unwrap();
+            let table = db.run("select * from t;").unwrap();
+            let tuples = table.iter().collect_vec();
+            assert_eq!(
+                tuples,
+                vec![
+                    vec![Datum::Int(Some(1)), Datum::VarChar(Some("foo".to_string()))],
+                    vec![Datum::Int(Some(2)), Datum::VarChar(None)],
+                    vec![Datum::Int(None), Datum::VarChar(Some("bar".to_string()))],
+                ]
+            );
+            let table = db.run("select v1 from t;").unwrap();
+            let tuples = table.iter().collect_vec();
+            assert_eq!(
+                tuples,
+                vec![
+                    vec![Datum::Int(Some(1))],
+                    vec![Datum::Int(Some(2))],
+                    vec![Datum::Int(None)],
+                ]
+            );
+            filename
+        };
+        remove_file(filename).unwrap();
+    }
 }
