@@ -36,7 +36,7 @@ impl Executor for DescExecutor {
             ]);
             let mut desc = Slice::new_empty(self.bpm.clone(), Rc::new(desc_schema));
             table.schema.iter().for_each(|c| {
-                desc.add(&[
+                desc.add(vec![
                     Datum::VarChar(Some(c.desc.clone())),
                     Datum::VarChar(Some(c.data_type.to_string())),
                     Datum::VarChar(Some(if c.data_type.nullable() {

@@ -25,7 +25,7 @@ impl Column {
         type_and_names
             .iter()
             .map(|(data_type, desc)| {
-                offset += data_type.width().unwrap_or(8);
+                offset += data_type.width().unwrap_or(8) + 1;
                 Column::new(offset, *data_type, desc.clone())
             })
             .collect_vec()
@@ -78,9 +78,9 @@ mod tests {
         assert_eq!(
             columns,
             vec![
-                Column::new(4, DataType::new_int(false), "v1".to_string()),
-                Column::new(24, DataType::new_char(20, false), "v2".to_string(),),
-                Column::new(32, DataType::new_varchar(false), "v3".to_string()),
+                Column::new(5, DataType::new_int(false), "v1".to_string()),
+                Column::new(26, DataType::new_char(20, false), "v2".to_string(),),
+                Column::new(35, DataType::new_varchar(false), "v3".to_string()),
             ]
         );
     }

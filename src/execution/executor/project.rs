@@ -46,8 +46,8 @@ impl Executor for ProjectExecutor {
                     return Ok(Some(slice));
                 }
             }
-            if slice.add(self.buffer[0].as_slice()).is_ok() {
-                self.buffer.remove(0);
+            if slice.ok_to_add(&self.buffer[0]) {
+                slice.add(self.buffer.remove(0))?;
             } else {
                 break;
             }

@@ -162,11 +162,12 @@ impl Table {
         page.borrow_mut().buffer[0..4].copy_from_slice(&(page_id as u32).to_le_bytes());
         self.bpm.borrow_mut().unpin(self.page_id).unwrap();
     }
-    pub fn insert(&mut self, datums: &[Datum]) -> Result<(), TableError> {
+    pub fn insert(&mut self, datums: Vec<Datum>) -> Result<(), TableError> {
         let page_id_of_root_slice = self.get_page_id_of_root_slice();
         let mut slice = Slice::new(self.bpm.clone(), self.schema.clone());
         slice.attach(page_id_of_root_slice);
-        if slice.add(datums).is_ok() {
+        if slice.ok_to_add(&datums) {
+            slice.add(datums).unwrap();
             Ok(())
         } else {
             let mut new_slice = Slice::new(self.bpm.clone(), self.schema.clone());
@@ -190,7 +191,7 @@ impl Table {
             let len = s.len();
             for idx in 0..len {
                 let tuple = s.at(idx).unwrap();
-                table.insert(tuple.as_slice()).unwrap();
+                table.insert(tuple).unwrap();
             }
         });
         table
@@ -227,7 +228,7 @@ mod tests {
             let mut table = Table::new(Rc::new(schema), bpm.clone());
             // insert
             for idx in 0..1000 {
-                table.insert(&[Datum::Int(Some(idx))]).unwrap()
+                table.insert(vec![Datum::Int(Some(idx))]).unwrap()
             }
             // validate
             table.iter().sorted().enumerate().for_each(|(idx, datums)| {

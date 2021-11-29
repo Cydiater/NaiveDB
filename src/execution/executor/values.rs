@@ -5,7 +5,6 @@ use crate::table::{SchemaRef, Slice};
 use itertools::Itertools;
 use log::info;
 
-#[allow(dead_code)]
 pub struct ValuesExecutor {
     values: Vec<Vec<ExprImpl>>,
     schema: SchemaRef,
@@ -13,7 +12,6 @@ pub struct ValuesExecutor {
     executed: bool,
 }
 
-#[allow(dead_code)]
 impl ValuesExecutor {
     pub fn new(values: Vec<Vec<ExprImpl>>, schema: SchemaRef, bpm: BufferPoolManagerRef) -> Self {
         Self {
@@ -35,7 +33,7 @@ impl Executor for ValuesExecutor {
                     .map(|e| e.eval(None).remove(0))
                     .collect_vec();
                 info!("generate tuple {:?}", datums);
-                slice.add(&datums)?;
+                slice.add(datums)?;
             }
             self.executed = true;
             Ok(Some(slice))
