@@ -1,5 +1,6 @@
 use crate::storage::{BufferPoolManagerRef, PageID};
 use crate::table::{DataType, Datum};
+use crate::index::IndexError;
 use std::convert::TryInto;
 
 ///
@@ -35,6 +36,14 @@ pub struct InternalNode {
 
 #[allow(dead_code)]
 impl InternalNode {
+    pub fn offset_of_nth_key(_idx: usize) -> usize {
+        todo!()
+    }
+
+    pub fn offset_of_nth_value(_idx: usize) -> usize {
+        todo!()
+    }
+
     pub fn get_parent_page_id(&self) -> Option<PageID> {
         let page = self.bpm.borrow_mut().fetch(self.page_id).unwrap();
         let page_id = u32::from_le_bytes(page.borrow().buffer[4..8].try_into().unwrap()) as usize;
@@ -76,7 +85,7 @@ impl InternalNode {
         page_id
     }
 
-    pub fn find_child_page_id(&self, key: Vec<Datum>) -> PageID {
+    pub fn index_of(&self, key: &[Datum]) -> usize {
         let page = self.bpm.borrow_mut().fetch(self.page_id).unwrap();
         let num_child = u32::from_le_bytes(page.borrow().buffer[0..4].try_into().unwrap());
         let mut left = 0usize;
@@ -84,19 +93,25 @@ impl InternalNode {
         let mut mid;
         while left + 1 < right {
             mid = (left + right) / 2;
-            if key < self.key_at(mid) {
+            if key < self.key_at(mid).as_slice() {
                 right = mid;
             } else {
                 left = mid;
             }
         }
-        if key >= self.key_at(right) {
-            self.value_at(right)
-        } else if key >= self.key_at(left) {
-            self.value_at(left)
+        if key >= self.key_at(right).as_slice() {
+            right
+        } else if key >= self.key_at(left).as_slice() {
+            left
         } else {
-            self.value_at(0)
+            0
         }
+    }
+    
+    pub fn insert(&mut self, key: &[Datum], _page_id: PageID) -> Result<(), IndexError> {
+        let _page = self.bpm.borrow_mut().fetch(self.page_id).unwrap();
+        let _idx = self.index_of(key);
+        todo!()
     }
 }
 
