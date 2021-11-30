@@ -56,10 +56,14 @@ impl Datum {
     }
     pub fn from_index_key_binary(
         _bpm: BufferPoolManagerRef,
-        _data_type: DataType,
-        _bytes: &[u8],
+        data_type: DataType,
+        bytes: Vec<u8>,
     ) -> Self {
-        todo!()
+        match data_type {
+            DataType::Int(_) => Datum::Int(Some(i32::from_le_bytes(bytes.try_into().unwrap()))),
+            DataType::Char(_) => Datum::Char(Some(String::from_utf8(bytes).unwrap())),
+            _ => todo!(),
+        }
     }
 }
 
