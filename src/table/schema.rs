@@ -25,7 +25,7 @@ impl Column {
         type_and_names
             .iter()
             .map(|(data_type, desc)| {
-                offset += data_type.width().unwrap_or(8) + 1;
+                offset += data_type.width_of_value().unwrap_or(8);
                 Column::new(offset, *data_type, desc.clone())
             })
             .collect_vec()
@@ -80,7 +80,7 @@ mod tests {
             vec![
                 Column::new(5, DataType::new_int(false), "v1".to_string()),
                 Column::new(26, DataType::new_char(20, false), "v2".to_string(),),
-                Column::new(35, DataType::new_varchar(false), "v3".to_string()),
+                Column::new(34, DataType::new_varchar(false), "v3".to_string()),
             ]
         );
     }

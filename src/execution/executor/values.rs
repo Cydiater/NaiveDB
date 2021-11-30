@@ -46,9 +46,10 @@ impl Executor for ValuesExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::datum::{DataType, Datum};
     use crate::expr::{ConstantExpr, ExprImpl};
     use crate::storage::BufferPoolManager;
-    use crate::table::{DataType, Datum, Schema};
+    use crate::table::Schema;
     use std::fs::remove_file;
     use std::rc::Rc;
 

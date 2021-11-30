@@ -1,5 +1,6 @@
+use crate::datum::{DataType, Datum};
 use crate::expr::Expr;
-use crate::table::{DataType, Datum, Slice};
+use crate::table::Slice;
 
 #[derive(Debug)]
 pub struct ColumnRefExpr {

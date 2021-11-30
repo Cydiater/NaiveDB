@@ -1,4 +1,4 @@
-pub use crate::table::DataType;
+pub use crate::datum::DataType;
 
 #[derive(Debug)]
 pub enum Statement {

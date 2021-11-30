@@ -1,7 +1,8 @@
 use crate::catalog::CatalogManagerRef;
+use crate::datum::{DataType, Datum};
 use crate::execution::{ExecutionError, Executor};
 use crate::storage::BufferPoolManagerRef;
-use crate::table::{DataType, Datum, Schema, Slice};
+use crate::table::{Schema, Slice};
 use std::rc::Rc;
 
 pub struct ShowDatabasesExecutor {

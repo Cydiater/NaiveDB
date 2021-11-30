@@ -1,5 +1,5 @@
+use crate::datum::Datum;
 use crate::storage::PageID;
-use crate::table::Datum;
 use thiserror::Error;
 
 #[allow(dead_code)]

@@ -1,7 +1,8 @@
+use crate::datum::Datum;
 use crate::execution::{ExecutionError, Executor, ExecutorImpl};
 use crate::expr::ExprImpl;
 use crate::storage::BufferPoolManagerRef;
-use crate::table::{Datum, Schema, Slice};
+use crate::table::{Schema, Slice};
 use itertools::Itertools;
 use std::rc::Rc;
 

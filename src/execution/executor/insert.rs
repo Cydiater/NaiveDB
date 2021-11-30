@@ -44,10 +44,11 @@ impl Executor for InsertExecutor {
 #[cfg(test)]
 mod tests {
     use crate::catalog::CatalogManager;
+    use crate::datum::{DataType, Datum};
     use crate::execution::{ExecutorImpl, InsertExecutor, ValuesExecutor};
     use crate::expr::{ConstantExpr, ExprImpl};
     use crate::storage::BufferPoolManager;
-    use crate::table::{DataType, Datum, Schema, Table};
+    use crate::table::{Schema, Table};
     use std::fs::remove_file;
     use std::rc::Rc;
 

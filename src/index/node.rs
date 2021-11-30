@@ -1,6 +1,6 @@
+use crate::datum::{DataType, Datum};
 use crate::index::IndexError;
 use crate::storage::{BufferPoolManagerRef, PageID};
-use crate::table::{DataType, Datum};
 use std::convert::TryInto;
 
 ///
@@ -8,20 +8,17 @@ use std::convert::TryInto;
 ///
 
 fn index_key_from_binary(
-    bpm: BufferPoolManagerRef,
+    _bpm: BufferPoolManagerRef,
     data_types: &[DataType],
-    bytes: &[u8],
+    _bytes: &[u8],
+    _is_inlined: bool,
 ) -> Vec<Datum> {
-    let mut offset = 0;
-    let mut datums = vec![];
+    let mut _offset = 0;
+    let datums = vec![];
     for data_type in data_types {
-        let width = data_type.size_as_index_key();
-        offset += data_type.size_as_index_key();
-        datums.push(Datum::from_index_key_binary(
-            bpm.clone(),
-            *data_type,
-            bytes[offset..(offset + width)].to_vec(),
-        ));
+        let _width = data_type.size_as_index_key();
+        _offset += data_type.size_as_index_key();
+        todo!();
     }
     datums
 }
@@ -32,6 +29,7 @@ pub struct InternalNode {
     bpm: BufferPoolManagerRef,
     key_data_types: Vec<DataType>,
     key_size: usize,
+    is_inlined: bool,
 }
 
 #[allow(dead_code)]
@@ -96,7 +94,12 @@ impl InternalNode {
         let start = self.offset_of_nth_key(idx);
         let end = start + self.key_size;
         let bytes = &page.borrow().buffer[start..end];
-        index_key_from_binary(self.bpm.clone(), &self.key_data_types, bytes)
+        index_key_from_binary(
+            self.bpm.clone(),
+            &self.key_data_types,
+            bytes,
+            self.is_inlined,
+        )
     }
 
     pub fn value_at(&self, idx: usize) -> PageID {
@@ -165,3 +168,39 @@ pub struct LeafNode {
 }
 
 impl LeafNode {}
+
+#[cfg(test)]
+mod tests {
+    use crate::datum::{DataType, Datum};
+    use crate::storage::BufferPoolManager;
+    use crate::table::{Schema, Slice};
+    use std::fs::remove_file;
+    use std::rc::Rc;
+
+    #[test]
+    fn test_insert_find_internal() {
+        let filename = {
+            let bpm = BufferPoolManager::new_random_shared(10);
+            let filename = bpm.borrow().filename();
+            let schema = Schema::from_slice(&[
+                (DataType::new_int(false), "v1".to_string()),
+                (DataType::new_varchar(false), "v2".to_string()),
+            ]);
+            let mut slice = Slice::new_empty(bpm.clone(), Rc::new(schema));
+            slice
+                .add(vec![
+                    Datum::Int(Some(1)),
+                    Datum::VarChar(Some("foo".to_string())),
+                ])
+                .unwrap();
+            slice
+                .add(vec![
+                    Datum::Int(Some(2)),
+                    Datum::VarChar(Some("bar".to_string())),
+                ])
+                .unwrap();
+            filename
+        };
+        remove_file(filename).unwrap()
+    }
+}
