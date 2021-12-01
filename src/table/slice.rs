@@ -1,4 +1,5 @@
 use crate::datum::{DataType, Datum};
+use crate::index::RecordID;
 use crate::storage::{BufferPoolManagerRef, PageID, PageRef, PAGE_SIZE};
 use crate::table::{Schema, SchemaRef, TableError};
 use itertools::Itertools;
@@ -161,6 +162,22 @@ impl Slice {
         Ok(next_tail)
     }
 
+    #[allow(dead_code)]
+    pub fn record_id_at(&self, idx: usize) -> RecordID {
+        // fetch page
+        let page = self.bpm.borrow_mut().fetch(self.page_id.unwrap()).unwrap();
+        // get offset
+        let offset = u32::from_le_bytes(
+            page.borrow().buffer
+                [(idx + 1) * std::mem::size_of::<u32>()..(idx + 2) * std::mem::size_of::<u32>()]
+                .try_into()
+                .unwrap(),
+        ) as usize;
+        // unpin page
+        self.bpm.borrow_mut().unpin(self.page_id.unwrap()).unwrap();
+        (self.page_id.unwrap(), offset)
+    }
+
     pub fn at(&self, idx: usize) -> Result<Vec<Datum>, TableError> {
         // fetch page
         let page = self.bpm.borrow_mut().fetch(self.page_id.unwrap())?;
@@ -179,7 +196,7 @@ impl Slice {
                 let start = offset;
                 let end = start + col.data_type.width_of_value().unwrap();
                 let bytes = page.borrow().buffer[start..end].to_vec();
-                Datum::from_bytes(col.data_type, bytes)
+                Datum::from_bytes(&col.data_type, bytes)
             } else {
                 let start = u32::from_le_bytes(
                     page.borrow().buffer[offset..offset + 4].try_into().unwrap(),
@@ -190,7 +207,7 @@ impl Slice {
                         .unwrap(),
                 ) as usize;
                 let bytes = page.borrow().buffer[start..end].to_vec();
-                Datum::from_bytes(col.data_type, bytes)
+                Datum::from_bytes(&col.data_type, bytes)
             };
             tuple.push(datum);
         }

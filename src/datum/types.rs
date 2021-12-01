@@ -83,14 +83,6 @@ impl DataType {
     pub fn new_char(width: usize, nullable: bool) -> Self {
         Self::Char(CharType::new(width, nullable))
     }
-    pub fn size_as_index_key(&self) -> usize {
-        match self {
-            Self::Bool(_) => 1,
-            Self::Int(_) => 4,
-            Self::Char(char_type) => char_type.width,
-            Self::VarChar(_) => 2,
-        }
-    }
     pub fn width_of_value(&self) -> Option<usize> {
         match self {
             Self::Bool(_) => Some(2),

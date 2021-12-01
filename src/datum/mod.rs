@@ -63,7 +63,7 @@ impl Datum {
             _ => todo!(),
         }
     }
-    pub fn from_bytes(data_type: DataType, bytes: Vec<u8>) -> Self {
+    pub fn from_bytes(data_type: &DataType, bytes: Vec<u8>) -> Self {
         match data_type {
             DataType::Int(_) => {
                 if bytes[0] == 0 {
