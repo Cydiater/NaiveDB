@@ -1,78 +1,13 @@
+use crate::datum::{DataType, Datum};
+use crate::index::RecordID;
 use crate::storage::{BufferPoolManagerRef, PageID, PageRef, PAGE_SIZE};
-use crate::table::{DataType, Schema, SchemaRef, TableError};
+use crate::table::{Schema, SchemaRef, TableError};
 use itertools::Itertools;
-use pad::PadStr;
 use prettytable::{Cell, Row, Table};
 use std::convert::TryInto;
 use std::fmt;
 use std::rc::Rc;
 
-#[derive(Debug, PartialEq, PartialOrd, Ord, Eq, Clone)]
-pub enum Datum {
-    Int(Option<i32>),
-    Char(Option<String>),
-    VarChar(Option<String>),
-    Bool(Option<bool>),
-}
-
-impl Datum {
-    pub fn size_of_bytes(&self, data_type: &DataType) -> usize {
-        match (self, data_type) {
-            (Self::Int(_), DataType::Int(_)) => 5,
-            (Self::Char(_), DataType::Char(t)) => t.width + 1,
-            (Self::VarChar(_), DataType::VarChar(_)) => 9,
-            _ => todo!(),
-        }
-    }
-    pub fn as_bytes(&self, data_type: &DataType) -> Vec<u8> {
-        match (self, data_type) {
-            (Self::Int(v), DataType::Int(_)) => {
-                if let Some(v) = v {
-                    let mut bytes = vec![1];
-                    bytes.extend_from_slice(&v.to_le_bytes());
-                    bytes
-                } else {
-                    vec![0u8; 5]
-                }
-            }
-            (Self::Char(v), DataType::Char(t)) => {
-                if let Some(v) = v {
-                    let mut bytes = vec![1];
-                    bytes.extend_from_slice(v.with_exact_width(t.width).as_bytes());
-                    bytes
-                } else {
-                    vec![0u8; t.width + 1]
-                }
-            }
-            (Self::VarChar(v), DataType::VarChar(_)) => {
-                if v.is_some() {
-                    vec![1u8; 9]
-                } else {
-                    vec![0u8; 9]
-                }
-            }
-            _ => todo!(),
-        }
-    }
-}
-
-impl fmt::Display for Datum {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::Int(Some(d)) => d.to_string(),
-                Self::Char(Some(s)) => s.to_string(),
-                Self::VarChar(Some(s)) => s.to_string(),
-                Self::Bool(Some(s)) => s.to_string(),
-                _ => String::from("NULL"),
-            }
-        )
-    }
-}
-
-#[allow(dead_code)]
 /// one slice is fitted precisely in one page,
 /// we have multiple tuples in one slice. one Slice is organized as
 ///
@@ -227,6 +162,22 @@ impl Slice {
         Ok(next_tail)
     }
 
+    #[allow(dead_code)]
+    pub fn record_id_at(&self, idx: usize) -> RecordID {
+        // fetch page
+        let page = self.bpm.borrow_mut().fetch(self.page_id.unwrap()).unwrap();
+        // get offset
+        let offset = u32::from_le_bytes(
+            page.borrow().buffer
+                [(idx + 1) * std::mem::size_of::<u32>()..(idx + 2) * std::mem::size_of::<u32>()]
+                .try_into()
+                .unwrap(),
+        ) as usize;
+        // unpin page
+        self.bpm.borrow_mut().unpin(self.page_id.unwrap()).unwrap();
+        (self.page_id.unwrap(), offset)
+    }
+
     pub fn at(&self, idx: usize) -> Result<Vec<Datum>, TableError> {
         // fetch page
         let page = self.bpm.borrow_mut().fetch(self.page_id.unwrap())?;
@@ -241,66 +192,24 @@ impl Slice {
         for col in self.schema.iter() {
             let offset = end - col.offset;
             assert!(offset < PAGE_SIZE);
-            match col.data_type {
-                DataType::Int(_) => {
-                    if page.borrow().buffer[offset] == 0 {
-                        tuple.push(Datum::Int(None))
-                    } else {
-                        tuple.push(Datum::Int(Some(i32::from_le_bytes(
-                            page.borrow().buffer[offset + 1..offset + 5]
-                                .try_into()
-                                .unwrap(),
-                        ))));
-                    }
-                }
-                DataType::Char(char_type) => {
-                    if page.borrow().buffer[offset] == 0 {
-                        tuple.push(Datum::Char(None))
-                    } else {
-                        tuple.push(Datum::Char(Some(
-                            String::from_utf8_lossy(
-                                page.borrow().buffer[offset + 1..offset + char_type.width + 1]
-                                    .try_into()
-                                    .unwrap(),
-                            )
-                            .to_string()
-                            .trim_end()
-                            .to_string(),
-                        )));
-                    }
-                }
-                DataType::VarChar(_) => {
-                    if page.borrow().buffer[offset] == 0 {
-                        tuple.push(Datum::VarChar(None))
-                    } else {
-                        let start = end
-                            - u32::from_le_bytes(
-                                page.borrow().buffer[offset + 1..offset + 5]
-                                    .try_into()
-                                    .unwrap(),
-                            ) as usize;
-                        let end = end
-                            - u32::from_le_bytes(
-                                page.borrow().buffer[offset + 5..offset + 9]
-                                    .try_into()
-                                    .unwrap(),
-                            ) as usize;
-                        tuple.push(Datum::VarChar(Some(
-                            String::from_utf8_lossy(
-                                page.borrow().buffer[start..end].try_into().unwrap(),
-                            )
-                            .to_string(),
-                        )));
-                    }
-                }
-                DataType::Bool(_) => {
-                    if page.borrow().buffer[offset] == 0 {
-                        tuple.push(Datum::Bool(None));
-                    } else {
-                        tuple.push(Datum::Bool(Some(page.borrow().buffer[offset] != 0)));
-                    }
-                }
-            }
+            let datum = if col.data_type.is_inlined() {
+                let start = offset;
+                let end = start + col.data_type.width_of_value().unwrap();
+                let bytes = page.borrow().buffer[start..end].to_vec();
+                Datum::from_bytes(&col.data_type, bytes)
+            } else {
+                let start = u32::from_le_bytes(
+                    page.borrow().buffer[offset..offset + 4].try_into().unwrap(),
+                ) as usize;
+                let end = u32::from_le_bytes(
+                    page.borrow().buffer[offset + 4..offset + 8]
+                        .try_into()
+                        .unwrap(),
+                ) as usize;
+                let bytes = page.borrow().buffer[start..end].to_vec();
+                Datum::from_bytes(&col.data_type, bytes)
+            };
+            tuple.push(datum);
         }
         // unpin page
         self.bpm.borrow_mut().unpin(self.page_id.unwrap())?;
@@ -338,30 +247,26 @@ impl Slice {
         if !self.ok_to_add(&datums) {
             return Err(TableError::SliceOutOfSpace);
         }
-        let mut not_inlined_data = Vec::<(usize, Datum)>::new();
+        let mut not_inlined_data = Vec::<(usize, DataType, Datum)>::new();
         let last_tail = self.tail;
         for (col, dat) in self.schema.iter().zip(datums.into_iter()) {
-            let tail = self.push(dat.as_bytes(&col.data_type).as_slice())?;
-            if matches!(col.data_type, DataType::VarChar(_)) {
-                not_inlined_data.push((tail, dat));
-            }
-            self.tail = tail;
+            self.tail = if dat.is_inlined() {
+                self.push(dat.into_bytes(&col.data_type).as_slice())?
+            } else {
+                let tail = self.push(&[0u8; 8])?;
+                not_inlined_data.push((tail, col.data_type, dat));
+                tail
+            };
         }
         // fill the external data
-        for (offset, dat) in not_inlined_data {
-            let end = last_tail - self.tail;
-            let tail = match &dat {
-                Datum::VarChar(Some(dat)) => self.push(dat.as_bytes())?,
-                Datum::VarChar(None) => self.push(&[0u8; 1])?,
-                _ => {
-                    return Err(TableError::DatumSchemaNotMatch);
-                }
-            };
-            let start = last_tail - tail;
+        for (offset, data_type, dat) in not_inlined_data {
+            let end = self.tail;
+            let tail = self.push(&dat.into_bytes(&data_type))?;
+            let start = tail;
             self.tail = tail;
-            page.borrow_mut().buffer[offset + 1..offset + 5]
+            page.borrow_mut().buffer[offset..offset + 4]
                 .copy_from_slice(&(start as u32).to_le_bytes());
-            page.borrow_mut().buffer[offset + 5..offset + 9]
+            page.borrow_mut().buffer[offset + 4..offset + 8]
                 .copy_from_slice(&(end as u32).to_le_bytes());
         }
         let next_head = self.head + std::mem::size_of::<u32>();
@@ -410,8 +315,9 @@ impl fmt::Display for Slice {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::datum::DataType;
     use crate::storage::BufferPoolManager;
-    use crate::table::{DataType, Schema};
+    use crate::table::Schema;
     use std::fs::remove_file;
 
     #[test]

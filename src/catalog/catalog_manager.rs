@@ -87,8 +87,9 @@ impl CatalogManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::datum::DataType;
     use crate::storage::BufferPoolManager;
-    use crate::table::{DataType, Schema};
+    use crate::table::Schema;
     use std::fs::remove_file;
 
     #[test]

@@ -1,8 +1,10 @@
 #![feature(vec_into_raw_parts)]
 
 mod catalog;
+mod datum;
 mod execution;
 mod expr;
+mod index;
 mod parser;
 mod planner;
 mod storage;

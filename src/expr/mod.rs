@@ -1,6 +1,7 @@
 use crate::catalog::{CatalogError, CatalogManagerRef};
+use crate::datum::{DataType, Datum};
 use crate::parser::ast::{ConstantValue, ExprNode};
-use crate::table::{DataType, Datum, Slice};
+use crate::table::Slice;
 pub use column_ref::ColumnRefExpr;
 pub use constant::ConstantExpr;
 use thiserror::Error;

@@ -1,3 +1,4 @@
+use crate::datum::{DataType, Datum};
 use crate::storage::{BufferPoolManagerRef, PageID, StorageError};
 use itertools::Itertools;
 use prettytable::{Cell, Row, Table as PrintTable};
@@ -8,11 +9,9 @@ use thiserror::Error;
 
 mod schema;
 mod slice;
-mod types;
 
 pub use schema::{Column, Schema, SchemaRef};
-pub use slice::{Datum, Slice};
-pub use types::{CharType, DataType};
+pub use slice::Slice;
 
 /// one table is fitted precisely in one page, which is organized as
 ///

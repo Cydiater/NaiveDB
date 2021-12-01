@@ -83,11 +83,11 @@ impl DataType {
     pub fn new_char(width: usize, nullable: bool) -> Self {
         Self::Char(CharType::new(width, nullable))
     }
-    pub fn width(&self) -> Option<usize> {
+    pub fn width_of_value(&self) -> Option<usize> {
         match self {
-            Self::Bool(_) => Some(1),
-            Self::Int(_) => Some(4),
-            Self::Char(char_type) => Some(char_type.width),
+            Self::Bool(_) => Some(2),
+            Self::Int(_) => Some(5),
+            Self::Char(char_type) => Some(char_type.width + 1),
             _ => None,
         }
     }
@@ -97,6 +97,14 @@ impl DataType {
             Self::Int(int_type) => int_type.nullable,
             Self::VarChar(varchar_type) => varchar_type.nullable,
             Self::Char(char_type) => char_type.nullable,
+        }
+    }
+    pub fn is_inlined(&self) -> bool {
+        match self {
+            Self::Bool(_) => true,
+            Self::Int(_) => true,
+            Self::Char(_) => true,
+            Self::VarChar(_) => false,
         }
     }
     pub fn as_bytes(&self) -> [u8; 5] {

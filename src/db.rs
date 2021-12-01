@@ -69,8 +69,8 @@ pub enum NaiveDBError {
 
 #[cfg(test)]
 mod tests {
+    use crate::datum::Datum;
     use crate::db::NaiveDB;
-    use crate::table::Datum;
     use itertools::Itertools;
     use std::fs::remove_file;
 
