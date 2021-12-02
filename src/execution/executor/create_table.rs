@@ -35,7 +35,7 @@ impl Executor for CreateTableExecutor {
         if !self.executed {
             info!("create table, schema = {:?}", self.schema);
             let table = Table::new(self.schema.clone(), self.bpm.clone());
-            let page_id = table.page_id;
+            let page_id = table.get_page_id();
             self.catalog
                 .borrow_mut()
                 .create_table(self.table_name.clone(), page_id)?;

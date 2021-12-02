@@ -21,8 +21,7 @@ impl SeqScanExecutor {
 impl Executor for SeqScanExecutor {
     fn execute(&mut self) -> Result<Option<Slice>, ExecutionError> {
         if let Some(page_id) = self.page_id {
-            let mut slice = Slice::new(self.bpm.clone(), self.schema.clone());
-            slice.attach(page_id);
+            let slice = Slice::open(self.bpm.clone(), self.schema.clone(), page_id);
             self.page_id = slice.get_next_page_id();
             Ok(Some(slice))
         } else {

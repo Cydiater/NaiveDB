@@ -27,7 +27,7 @@ impl CatalogManager {
     pub fn create_database(&mut self, database_name: String) -> Result<(), CatalogError> {
         // create table catalog
         let table_catalog = Catalog::new_empty(self.bpm.clone()).unwrap();
-        let page_id = table_catalog.page_id;
+        let page_id = table_catalog.get_page_id();
         // add to database catalog
         self.database_catalog
             .insert(page_id, database_name)
@@ -116,7 +116,7 @@ mod tests {
             );
             // attach in catalog
             catalog_manager
-                .create_table("sample_table".to_string(), table.page_id)
+                .create_table("sample_table".to_string(), table.get_page_id())
                 .unwrap();
             // find this table
             assert!(catalog_manager

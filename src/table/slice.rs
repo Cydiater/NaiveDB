@@ -6,62 +6,44 @@ use itertools::Itertools;
 use prettytable::{Cell, Row, Table};
 use std::convert::TryInto;
 use std::fmt;
+use std::ops::Range;
 use std::rc::Rc;
 
-/// one slice is fitted precisely in one page,
-/// we have multiple tuples in one slice. one Slice is organized as
 ///
-///     | next_page_id | offset1: u32 | offset2: u32 |  ......
-///                                                     ...... | data2 | data1 |
+/// Slice Format:
 ///
-/// we mark offset = PAGE_SIZE as the end sign.
+///     | Meta | offset1 | offset2 |  ......
+///                                   ...... | data2 | data1 |
+///
+/// Meta Format:
+///
+///     | next_page_id | num_tuple | head | tail |
+///
+/// Note that:
+///     
+///     - next_page_id is None if the value is zero,
 ///
 pub struct Slice {
-    pub page_id: Option<PageID>,
-    bpm: BufferPoolManagerRef,
-    pub schema: SchemaRef,
-    head: usize,
-    tail: usize,
-}
-
-pub struct SliceIter {
     bpm: BufferPoolManagerRef,
     page: PageRef,
-    idx: usize,
+    pub schema: SchemaRef,
 }
 
-impl Iterator for SliceIter {
-    /// start offset and end offset of a tuple data
-    type Item = (usize, usize);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let end = u32::from_le_bytes(
-            self.page.borrow().buffer[(self.idx + 1) * 4..(self.idx + 2) * 4]
-                .try_into()
-                .unwrap(),
-        ) as usize;
-        let start = u32::from_le_bytes(
-            self.page.borrow().buffer[(self.idx + 2) * 4..(self.idx + 3) * 4]
-                .try_into()
-                .unwrap(),
-        ) as usize;
-        if start == 0 {
-            None
-        } else {
-            self.idx += 1;
-            Some((start, end))
-        }
-    }
-}
-
-impl Drop for SliceIter {
+impl Drop for Slice {
     fn drop(&mut self) {
-        let page_id = self.page.borrow_mut().page_id.unwrap();
+        let page_id = self.page.borrow().page_id.unwrap();
         self.bpm.borrow_mut().unpin(page_id).unwrap();
     }
 }
 
 impl Slice {
+    const NEXT_PAGE_ID: Range<usize> = 0..4;
+    const NUM_TUPLE: Range<usize> = 4..8;
+    const HEAD: Range<usize> = 8..12;
+    const TAIL: Range<usize> = 12..16;
+    /// SIZE_OF_META should equal to the end of last field
+    const SIZE_OF_META: usize = 16;
+
     pub fn new_simple_message(
         bpm: BufferPoolManagerRef,
         header: String,
@@ -73,146 +55,140 @@ impl Slice {
         Ok(slice)
     }
 
+    /// create a new empty slice
     pub fn new(bpm: BufferPoolManagerRef, schema: SchemaRef) -> Self {
-        Self {
-            page_id: None,
-            bpm,
-            schema,
-            head: 4usize,
-            tail: PAGE_SIZE,
-        }
-    }
-
-    pub fn remain(&self) -> usize {
-        // 4 for next_page_id, 8 for end mark
-        self.tail - self.head - 8 - 4
-    }
-
-    pub fn new_empty(bpm: BufferPoolManagerRef, schema: SchemaRef) -> Self {
         let page = bpm.borrow_mut().alloc().unwrap();
-        let page_id = page.borrow().page_id.unwrap();
-        // mark end next_page_id
-        page.borrow_mut().buffer[0..4].copy_from_slice(&(page_id as u32).to_le_bytes());
-        // mark end tuple
-        page.borrow_mut().buffer[4..8].copy_from_slice(&(PAGE_SIZE as u32).to_le_bytes());
-        page.borrow_mut().buffer[8..12].copy_from_slice(&(0u32).to_le_bytes());
-        bpm.borrow_mut().unpin(page_id).unwrap();
-        Self {
-            page_id: Some(page_id),
-            bpm,
-            schema,
-            head: 4usize,
-            tail: PAGE_SIZE,
+        {
+            let buffer = &mut page.borrow_mut().buffer;
+            // next_page_id = None
+            buffer[Self::NEXT_PAGE_ID].copy_from_slice(&0u32.to_le_bytes());
+            // num_tuple = 0
+            buffer[Self::NUM_TUPLE].copy_from_slice(&0u32.to_le_bytes());
+            // head = size_of_meta
+            buffer[Self::HEAD].copy_from_slice(&(Self::SIZE_OF_META as u32).to_le_bytes());
+            // tail = PAGE_SIZE;
+            buffer[Self::TAIL].copy_from_slice(&(PAGE_SIZE as u32).to_le_bytes());
         }
+        // mark dirty
+        page.borrow_mut().is_dirty = true;
+        Self { page, bpm, schema }
     }
 
-    pub fn get_next_page_id(&self) -> Option<PageID> {
-        if let Some(page_id) = self.page_id {
-            let page = self.bpm.borrow_mut().fetch(page_id).unwrap();
-            let next_page_id =
-                u32::from_le_bytes(page.borrow().buffer[0..4].try_into().unwrap()) as PageID;
-            self.bpm.borrow_mut().unpin(page_id).unwrap();
-            if next_page_id != page_id {
-                Some(next_page_id)
-            } else {
-                None
-            }
-        } else {
+    /// open a slice with page_id
+    pub fn open(bpm: BufferPoolManagerRef, schema: SchemaRef, page_id: PageID) -> Self {
+        let page = bpm.borrow_mut().fetch(page_id).unwrap();
+        Self { page, bpm, schema }
+    }
+
+    pub fn get_page_id(&self) -> PageID {
+        self.page.borrow().page_id.unwrap()
+    }
+
+    pub fn get_num_tuple(&self) -> usize {
+        u32::from_le_bytes(
+            self.page.borrow().buffer[Self::NUM_TUPLE]
+                .try_into()
+                .unwrap(),
+        ) as usize
+    }
+
+    pub fn get_head(&self) -> usize {
+        u32::from_le_bytes(self.page.borrow().buffer[Self::HEAD].try_into().unwrap()) as usize
+    }
+
+    pub fn get_tail(&self) -> usize {
+        u32::from_le_bytes(self.page.borrow().buffer[Self::TAIL].try_into().unwrap()) as usize
+    }
+
+    pub fn get_free_size(&self) -> usize {
+        self.get_tail() - self.get_head()
+    }
+
+    pub fn get_next_page_id(&self) -> Option<usize> {
+        let next_page_id = u32::from_le_bytes(
+            self.page.borrow().buffer[Self::NEXT_PAGE_ID]
+                .try_into()
+                .unwrap(),
+        ) as usize;
+        if next_page_id == 0 {
             None
-        }
-    }
-
-    pub fn set_next_page_id(&mut self, page_id: PageID) -> Result<(), TableError> {
-        if let Some(my_page_id) = self.page_id {
-            let page = self.bpm.borrow_mut().fetch(my_page_id).unwrap();
-            page.borrow_mut().buffer[0..4].copy_from_slice(&(page_id as u32).to_le_bytes());
-            Ok(())
         } else {
-            Err(TableError::NoPageID)
+            Some(next_page_id)
         }
     }
 
-    pub fn iter(&mut self) -> SliceIter {
-        SliceIter {
-            bpm: self.bpm.clone(),
-            page: self.bpm.borrow_mut().fetch(self.page_id.unwrap()).unwrap(),
-            idx: 0usize,
-        }
+    pub fn set_head(&self, head: usize) {
+        self.page.borrow_mut().buffer[Self::HEAD].copy_from_slice(&(head as u32).to_le_bytes());
+        self.page.borrow_mut().is_dirty = true;
     }
 
-    pub fn attach(&mut self, page_id: PageID) {
-        self.page_id = Some(page_id);
-        let (head, tail) = self
-            .iter()
-            .fold((4, PAGE_SIZE), |(head, _), (tail, _)| (head + 4, tail));
-        self.head = head;
-        self.tail = tail;
+    pub fn set_tail(&self, tail: usize) {
+        self.page.borrow_mut().buffer[Self::TAIL].copy_from_slice(&(tail as u32).to_le_bytes());
+        self.page.borrow_mut().is_dirty = true;
+    }
+
+    pub fn set_next_page_id(&self, next_page_id: Option<PageID>) {
+        let next_page_id = next_page_id.unwrap_or(0);
+        self.page.borrow_mut().buffer[Self::NEXT_PAGE_ID]
+            .copy_from_slice(&(next_page_id as u32).to_le_bytes());
+        self.page.borrow_mut().is_dirty = true;
+    }
+
+    pub fn set_num_tuple(&self, num_tuple: usize) {
+        self.page.borrow_mut().buffer[Self::NUM_TUPLE]
+            .copy_from_slice(&(num_tuple as u32).to_le_bytes());
+        self.page.borrow_mut().is_dirty = true;
     }
 
     pub fn push(&self, data: &[u8]) -> Result<usize, TableError> {
-        // fetch page from bpm
-        let page_id = self.page_id.unwrap();
-        let page = self.bpm.borrow_mut().fetch(page_id).unwrap();
-        let next_tail = self.tail - data.len();
-        page.borrow_mut().buffer[next_tail..self.tail].copy_from_slice(data);
+        let tail = self.get_tail();
+        let next_tail = tail - data.len();
+        // copy data
+        self.page.borrow_mut().buffer[next_tail..tail].copy_from_slice(data);
         // mark dirty
-        page.borrow_mut().is_dirty = true;
-        // unpin page
-        self.bpm.borrow_mut().unpin(page_id)?;
+        self.page.borrow_mut().is_dirty = true;
         Ok(next_tail)
     }
 
     #[allow(dead_code)]
     pub fn record_id_at(&self, idx: usize) -> RecordID {
-        // fetch page
-        let page = self.bpm.borrow_mut().fetch(self.page_id.unwrap()).unwrap();
-        // get offset
-        let offset = u32::from_le_bytes(
-            page.borrow().buffer
-                [(idx + 1) * std::mem::size_of::<u32>()..(idx + 2) * std::mem::size_of::<u32>()]
-                .try_into()
-                .unwrap(),
-        ) as usize;
-        // unpin page
-        self.bpm.borrow_mut().unpin(self.page_id.unwrap()).unwrap();
-        (self.page_id.unwrap(), offset)
+        let offset = Self::SIZE_OF_META + idx * std::mem::size_of::<u32>();
+        (self.get_page_id(), offset)
     }
 
     pub fn at(&self, idx: usize) -> Result<Vec<Datum>, TableError> {
-        // fetch page
-        let page = self.bpm.borrow_mut().fetch(self.page_id.unwrap())?;
-        let end = u32::from_le_bytes(
-            page.borrow().buffer
-                [(idx + 1) * std::mem::size_of::<u32>()..(idx + 2) * std::mem::size_of::<u32>()]
+        let base_offset = u32::from_le_bytes(
+            self.page.borrow().buffer[Self::SIZE_OF_META + idx * std::mem::size_of::<u32>()
+                ..Self::SIZE_OF_META + (idx + 1) * std::mem::size_of::<u32>()]
                 .try_into()
                 .unwrap(),
         ) as usize;
-        assert!(end <= PAGE_SIZE);
+        assert!(base_offset <= PAGE_SIZE);
         let mut tuple = Vec::<Datum>::new();
         for col in self.schema.iter() {
-            let offset = end - col.offset;
+            let offset = base_offset - col.offset;
             assert!(offset < PAGE_SIZE);
             let datum = if col.data_type.is_inlined() {
                 let start = offset;
                 let end = start + col.data_type.width_of_value().unwrap();
-                let bytes = page.borrow().buffer[start..end].to_vec();
+                let bytes = self.page.borrow().buffer[start..end].to_vec();
                 Datum::from_bytes(&col.data_type, bytes)
             } else {
                 let start = u32::from_le_bytes(
-                    page.borrow().buffer[offset..offset + 4].try_into().unwrap(),
-                ) as usize;
-                let end = u32::from_le_bytes(
-                    page.borrow().buffer[offset + 4..offset + 8]
+                    self.page.borrow().buffer[offset..offset + 4]
                         .try_into()
                         .unwrap(),
                 ) as usize;
-                let bytes = page.borrow().buffer[start..end].to_vec();
+                let end = u32::from_le_bytes(
+                    self.page.borrow().buffer[offset + 4..offset + 8]
+                        .try_into()
+                        .unwrap(),
+                ) as usize;
+                let bytes = self.page.borrow().buffer[start..end].to_vec();
                 Datum::from_bytes(&col.data_type, bytes)
             };
             tuple.push(datum);
         }
-        // unpin page
-        self.bpm.borrow_mut().unpin(self.page_id.unwrap())?;
         Ok(tuple)
     }
 
@@ -222,72 +198,54 @@ impl Slice {
             .zip(self.schema.iter())
             .map(|(d, c)| d.size_of_bytes(&c.data_type))
             .sum();
-        delta_size <= self.remain()
+        delta_size <= self.get_free_size()
     }
 
     pub fn add(&mut self, datums: Vec<Datum>) -> Result<(), TableError> {
+        // check schema
         if datums.len() != self.schema.len() {
             return Err(TableError::DatumSchemaNotMatch);
         }
-        // don't have page, allocate first
-        let page = if self.page_id.is_none() {
-            let page = self.bpm.borrow_mut().alloc().unwrap();
-            // mark end
-            page.borrow_mut().buffer[4..8].copy_from_slice(&(0u32).to_le_bytes());
-            // fill page_id
-            self.page_id = Some(page.borrow_mut().page_id.unwrap());
-            // mark end slice
-            page.borrow_mut().buffer[0..4]
-                .copy_from_slice(&(self.page_id.unwrap() as u32).to_le_bytes());
-            page
-        } else {
-            self.bpm.borrow_mut().fetch(self.page_id.unwrap()).unwrap()
-        };
         // check if ok to insert into the slice
         if !self.ok_to_add(&datums) {
             return Err(TableError::SliceOutOfSpace);
         }
+        let last_tail = self.get_tail();
+        // fixed part
         let mut not_inlined_data = Vec::<(usize, DataType, Datum)>::new();
-        let last_tail = self.tail;
         for (col, dat) in self.schema.iter().zip(datums.into_iter()) {
-            self.tail = if dat.is_inlined() {
+            let tail = if dat.is_inlined() {
                 self.push(dat.into_bytes(&col.data_type).as_slice())?
             } else {
                 let tail = self.push(&[0u8; 8])?;
                 not_inlined_data.push((tail, col.data_type, dat));
                 tail
             };
+            self.set_tail(tail);
         }
-        // fill the external data
+        // variable part
         for (offset, data_type, dat) in not_inlined_data {
-            let end = self.tail;
+            let end = self.get_tail();
             let tail = self.push(&dat.into_bytes(&data_type))?;
             let start = tail;
-            self.tail = tail;
-            page.borrow_mut().buffer[offset..offset + 4]
+            self.set_tail(tail);
+            self.page.borrow_mut().buffer[offset..offset + 4]
                 .copy_from_slice(&(start as u32).to_le_bytes());
-            page.borrow_mut().buffer[offset + 4..offset + 8]
+            self.page.borrow_mut().buffer[offset + 4..offset + 8]
                 .copy_from_slice(&(end as u32).to_le_bytes());
         }
-        let next_head = self.head + std::mem::size_of::<u32>();
-        page.borrow_mut().buffer[self.head..next_head]
+        // move head
+        let head = self.get_head();
+        self.set_head(head + 4);
+        // set offset
+        self.page.borrow_mut().buffer[head..head + 4]
             .copy_from_slice(&(last_tail as u32).to_le_bytes());
-        self.head = next_head;
-        // mark tail
-        page.borrow_mut().buffer[next_head..next_head + 4]
-            .copy_from_slice(&(self.tail as u32).to_le_bytes());
-        // mark next end
-        page.borrow_mut().buffer[next_head + 4..next_head + 8]
-            .copy_from_slice(&(0u32).to_le_bytes());
+        // increase num_tuple
+        let num_tuple = self.get_num_tuple();
+        self.set_num_tuple(num_tuple + 1);
         // mark dirty
-        page.borrow_mut().is_dirty = true;
-        // unpin
-        self.bpm.borrow_mut().unpin(self.page_id.unwrap())?;
+        self.page.borrow_mut().is_dirty = true;
         Ok(())
-    }
-
-    pub fn len(&self) -> usize {
-        (self.head - 4) / std::mem::size_of::<u32>()
     }
 }
 
@@ -300,7 +258,7 @@ impl fmt::Display for Slice {
             .map(|c| Cell::new(c.desc.as_str()))
             .collect_vec();
         table.add_row(Row::new(header));
-        for idx in 0..self.len() {
+        for idx in 0..self.get_num_tuple() {
             let tuple = self.at(idx).unwrap();
             let tuple = tuple
                 .iter()
@@ -329,22 +287,23 @@ mod tests {
                 (DataType::new_int(false), "v1".to_string()),
                 (DataType::new_char(20, false), "v2".to_string()),
             ]);
-            let mut slice = Slice::new(bpm.clone(), Rc::new(schema));
             let tuple1 = vec![Datum::Int(Some(20)), Datum::Char(Some("hello".to_string()))];
             let tuple2 = vec![Datum::Int(Some(30)), Datum::Char(Some("world".to_string()))];
             let tuple3 = vec![Datum::Int(Some(40)), Datum::Char(Some("foo".to_string()))];
-            slice.add(tuple1.clone()).unwrap();
-            slice.add(tuple2.clone()).unwrap();
-            assert_eq!(slice.at(0).unwrap(), tuple1);
-            assert_eq!(slice.at(1).unwrap(), tuple2);
-            let page_id = slice.page_id.unwrap();
+            let page_id = {
+                let mut slice = Slice::new(bpm.clone(), Rc::new(schema));
+                slice.add(tuple1.clone()).unwrap();
+                slice.add(tuple2.clone()).unwrap();
+                assert_eq!(slice.at(0).unwrap(), tuple1);
+                assert_eq!(slice.at(1).unwrap(), tuple2);
+                slice.get_page_id()
+            };
             // refetch
             let schema = Schema::from_slice(&[
                 (DataType::new_int(false), "v1".to_string()),
                 (DataType::new_char(20, false), "v2".to_string()),
             ]);
-            let mut slice = Slice::new(bpm.clone(), Rc::new(schema));
-            slice.attach(page_id);
+            let mut slice = Slice::open(bpm.clone(), Rc::new(schema), page_id);
             slice.add(tuple3.clone()).unwrap();
             assert_eq!(slice.at(0).unwrap(), tuple1);
             assert_eq!(slice.at(1).unwrap(), tuple2);
