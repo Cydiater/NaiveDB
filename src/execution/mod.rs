@@ -83,16 +83,6 @@ impl Engine {
         }
     }
     pub fn new(catalog: CatalogManagerRef, bpm: BufferPoolManagerRef) -> Self {
-        let num_pages = bpm.borrow().num_pages().unwrap();
-        info!("disk file have {} pages", num_pages);
-        // allocate database catalog
-        if num_pages == 0 {
-            let page = bpm.borrow_mut().alloc().unwrap();
-            let page_id = page.borrow().page_id.unwrap();
-            // mark num of database to 0
-            page.borrow_mut().buffer[0..4].copy_from_slice(&0u32.to_le_bytes());
-            bpm.borrow_mut().unpin(page_id).unwrap();
-        }
         Self { bpm, catalog }
     }
     pub fn execute(&mut self, plan: Plan) -> Result<Table, ExecutionError> {

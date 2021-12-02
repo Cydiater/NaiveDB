@@ -6,9 +6,16 @@ mod catalog_manager;
 
 pub use catalog_manager::{CatalogManager, CatalogManagerRef};
 
+impl Drop for Catalog {
+    fn drop(&mut self) {
+        let page_id = self.get_page_id();
+        self.bpm.borrow_mut().unpin(page_id).unwrap();
+    }
+}
+
 pub struct Catalog {
     bpm: BufferPoolManagerRef,
-    pub page_id: PageID,
+    page: PageRef,
 }
 
 pub struct CatalogIter {
@@ -41,33 +48,35 @@ impl Iterator for CatalogIter {
     }
 }
 
-impl Drop for CatalogIter {
-    fn drop(&mut self) {
-        let page_id = self.buf.borrow().page_id;
-        if let Some(page_id) = page_id {
-            self.bpm.borrow_mut().unpin(page_id).unwrap();
-        }
-    }
-}
-
 impl Catalog {
+    pub fn get_page_id(&self) -> PageID {
+        self.page.borrow().page_id.unwrap()
+    }
     pub fn new_database_catalog(bpm: BufferPoolManagerRef) -> Catalog {
-        Self { bpm, page_id: 0 }
+        let page = if bpm.borrow().num_pages().unwrap() > 0 {
+            bpm.borrow_mut().fetch(0).unwrap()
+        } else {
+            let page = bpm.borrow_mut().alloc().unwrap();
+            page.borrow_mut().buffer[0..4].copy_from_slice(&0u32.to_le_bytes());
+            page
+        };
+        page.borrow_mut().is_dirty = true;
+        Self { bpm, page }
     }
     pub fn new_with_page_id(bpm: BufferPoolManagerRef, page_id: PageID) -> Catalog {
-        Self { bpm, page_id }
+        let page = bpm.borrow_mut().fetch(page_id).unwrap();
+        Self { bpm, page }
     }
     pub fn new_empty(bpm: BufferPoolManagerRef) -> Result<Catalog, CatalogError> {
         let page = bpm.borrow_mut().alloc().unwrap();
-        let page_id = page.borrow().page_id.unwrap();
-        page.borrow_mut().buffer[0..4].copy_from_slice(&0u32.to_le_bytes());
-        bpm.borrow_mut().unpin(page_id).unwrap();
-        Ok(Self { bpm, page_id })
+        page.borrow_mut().buffer[0..4].copy_from_slice(&(0u32.to_le_bytes()));
+        page.borrow_mut().is_dirty = true;
+        Ok(Self { bpm, page })
     }
     pub fn iter(&self) -> CatalogIter {
         CatalogIter {
             offset: 0,
-            buf: self.bpm.borrow_mut().fetch(self.page_id).unwrap(),
+            buf: self.page.clone(),
             bpm: self.bpm.clone(),
         }
     }
@@ -79,14 +88,14 @@ impl Catalog {
                 return Err(CatalogError::OutOfRange);
             }
         }
-        let page = self.bpm.borrow_mut().fetch(self.page_id).unwrap();
         let len = name.len();
-        page.borrow_mut().buffer[last..last + 4].copy_from_slice(&(len as u32).to_le_bytes());
-        page.borrow_mut().buffer[last + 4..last + 8]
-            .copy_from_slice(&(page_id as u32).to_le_bytes());
-        page.borrow_mut().buffer[last + 8..last + 8 + len].copy_from_slice(name.as_bytes());
-        page.borrow_mut().is_dirty = true;
-        self.bpm.borrow_mut().unpin(self.page_id)?;
+        {
+            let buffer = &mut self.page.borrow_mut().buffer;
+            buffer[last..last + 4].copy_from_slice(&(len as u32).to_le_bytes());
+            buffer[last + 4..last + 8].copy_from_slice(&(page_id as u32).to_le_bytes());
+            buffer[last + 8..last + 8 + len].copy_from_slice(name.as_bytes());
+        }
+        self.page.borrow_mut().is_dirty = true;
         Ok(())
     }
 }

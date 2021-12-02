@@ -238,7 +238,8 @@ impl Slice {
         let head = self.get_head();
         self.set_head(head + 4);
         // set offset
-        self.page.borrow_mut().buffer[head..head + 4].copy_from_slice(&(last_tail as u32).to_le_bytes());
+        self.page.borrow_mut().buffer[head..head + 4]
+            .copy_from_slice(&(last_tail as u32).to_le_bytes());
         // increase num_tuple
         let num_tuple = self.get_num_tuple();
         self.set_num_tuple(num_tuple + 1);
