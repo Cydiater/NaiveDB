@@ -35,7 +35,7 @@ impl Executor for DescExecutor {
                 (DataType::new_varchar(false), "Type".to_string()),
                 (DataType::new_varchar(false), "Nullable".to_string()),
             ]);
-            let mut desc = Slice::new_empty(self.bpm.clone(), Rc::new(desc_schema));
+            let mut desc = Slice::new(self.bpm.clone(), Rc::new(desc_schema));
             table.schema.iter().for_each(|c| {
                 desc.add(vec![
                     Datum::VarChar(Some(c.desc.clone())),

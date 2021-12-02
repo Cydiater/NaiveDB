@@ -14,7 +14,7 @@ impl Planner {
             .borrow()
             .find_table(stmt.table_name.clone())
             .unwrap();
-        let child = Box::new(self.plan_values(stmt.values, table.schema));
+        let child = Box::new(self.plan_values(stmt.values, table.schema.clone()));
         Plan::Insert(InsertPlan {
             table_name: stmt.table_name,
             child,

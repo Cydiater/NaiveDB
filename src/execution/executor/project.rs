@@ -33,7 +33,7 @@ impl Executor for ProjectExecutor {
             .collect_vec();
         let schema = Rc::new(Schema::from_slice(type_and_names.as_slice()));
         println!("schema = {:#?}", schema);
-        let mut slice = Slice::new_empty(self.bpm.clone(), schema);
+        let mut slice = Slice::new(self.bpm.clone(), schema);
         loop {
             if self.buffer.is_empty() {
                 let from_child = self.child.execute()?;
@@ -48,7 +48,7 @@ impl Executor for ProjectExecutor {
                         let datums = columns.iter_mut().map(|v| v.remove(0)).collect_vec();
                         self.buffer.push(datums);
                     }
-                } else if slice.len() == 0 {
+                } else if slice.get_num_tuple() == 0 {
                     return Ok(None);
                 } else {
                     return Ok(Some(slice));

@@ -28,7 +28,7 @@ impl Executor for InsertExecutor {
                 .catalog
                 .borrow_mut()
                 .find_table(self.table_name.clone())?;
-            let len = input.len();
+            let len = input.get_num_tuple();
             for idx in 0..len {
                 let tuple = input.at(idx)?;
                 info!("insert tuple {:?}", tuple);
@@ -78,7 +78,7 @@ mod tests {
             catalog.borrow_mut().use_database("d".to_string()).unwrap();
             catalog
                 .borrow_mut()
-                .create_table("t".to_string(), table.page_id)
+                .create_table("t".to_string(), table.get_page_id())
                 .unwrap();
             let mut insert_executor = ExecutorImpl::Insert(InsertExecutor::new(
                 "t".to_string(),

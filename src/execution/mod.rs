@@ -65,7 +65,7 @@ impl Engine {
                     .find_table(plan.table_name)
                     .unwrap();
                 let schema = table.schema.clone();
-                let page_id = table.get_page_id_of_root_slice();
+                let page_id = table.get_page_id_of_first_slice();
                 ExecutorImpl::SeqScan(SeqScanExecutor::new(
                     self.bpm.clone(),
                     Some(page_id),

@@ -268,7 +268,7 @@ mod tests {
                 (DataType::new_int(false), "v1".to_string()),
                 (DataType::new_varchar(false), "v2".to_string()),
             ]);
-            let mut slice = Slice::new_empty(bpm.clone(), Rc::new(schema));
+            let mut slice = Slice::new(bpm.clone(), Rc::new(schema));
             // insert (1, 'foo'), (2, 'bar'), (3, 'hello'), (4, 'world')
             slice
                 .add(vec![
