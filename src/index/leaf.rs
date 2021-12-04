@@ -3,9 +3,8 @@ use crate::index::{
     utils::{datums_from_index_key, index_key_from_datums},
     IndexError, RecordID,
 };
-use crate::storage::{BufferPoolManagerRef, PageID, PageRef};
+use crate::storage::{BufferPoolManagerRef, PageID, PageRef, PAGE_SIZE};
 use std::convert::TryInto;
-use std::mem::size_of;
 use std::ops::Range;
 
 ///
@@ -77,9 +76,9 @@ impl LeafNode {
         let page = bpm.borrow_mut().alloc().unwrap();
         {
             let buffer = &mut page.borrow_mut().buffer;
-            // set not leaf
-            buffer[Self::IS_LEAF].copy_from_slice(&[0u8]);
-            // set num_child as 0
+            // set leaf
+            buffer[Self::IS_LEAF].copy_from_slice(&[1u8]);
+            // set num_record as 0
             buffer[Self::NUM_RECORD].copy_from_slice(&0u32.to_le_bytes());
             // set parent_page_id as none
             buffer[Self::PARENT_PAGE_ID].copy_from_slice(&0u32.to_le_bytes());
@@ -93,6 +92,14 @@ impl LeafNode {
             key_size,
             is_inlined,
         }
+    }
+
+    pub fn ok_to_insert(&self) -> bool {
+        let num_record = self.get_num_record();
+        let all_space = PAGE_SIZE;
+        let used_space = Self::SIZE_OF_META + num_record * (self.key_size + 8);
+        let free_space = all_space - used_space;
+        free_space >= self.key_size + 8
     }
 
     pub fn open(
@@ -121,6 +128,10 @@ impl LeafNode {
                 .try_into()
                 .unwrap(),
         ) as usize
+    }
+
+    pub fn get_page_id(&self) -> PageID {
+        self.page.borrow().page_id.unwrap()
     }
 
     fn set_num_record(&self, num_child: usize) {
@@ -155,11 +166,11 @@ impl LeafNode {
 
     fn end(&self) -> usize {
         let num_child = self.get_num_record();
-        self.offset_of_nth_value(num_child) + size_of::<RecordID>()
+        self.offset_of_nth_value(num_child) + 8
     }
 
     pub fn offset_of_nth_key(&self, idx: usize) -> usize {
-        Self::SIZE_OF_META + idx * (self.key_size + size_of::<RecordID>())
+        Self::SIZE_OF_META + idx * (self.key_size + 8)
     }
 
     pub fn offset_of_nth_value(&self, idx: usize) -> usize {
@@ -229,6 +240,40 @@ impl LeafNode {
         }
     }
 
+    pub fn split(&mut self) -> Self {
+        let num_record = self.get_num_record();
+        let num_record_left = num_record / 2;
+        let num_record_right = num_record - num_record_left;
+        let page_right = self.bpm.borrow_mut().alloc().unwrap();
+        {
+            let buffer = &mut page_right.borrow_mut().buffer;
+            // set is leaf
+            buffer[Self::IS_LEAF].copy_from_slice(&[1u8]);
+            // set num_record = num_record_right
+            buffer[Self::NUM_RECORD].copy_from_slice(&(num_record_right as u32).to_le_bytes());
+            // leave parent as none, the job should not be done by node
+            buffer[Self::PARENT_PAGE_ID].copy_from_slice(&0u32.to_le_bytes());
+            // move data
+            let start_lhs = self.offset_of_nth_key(num_record_left);
+            let end_lhs = self.end();
+            let start_rhs = Self::SIZE_OF_META;
+            let end_rhs = start_rhs + end_lhs - start_lhs;
+            buffer[start_rhs..end_rhs]
+                .copy_from_slice(&self.page.borrow().buffer[start_lhs..end_lhs]);
+        }
+        // mark dirty
+        page_right.borrow_mut().is_dirty = true;
+        // shrink self
+        self.set_num_record(num_record_left);
+        Self {
+            page: page_right,
+            bpm: self.bpm.clone(),
+            key_data_types: self.key_data_types.clone(),
+            key_size: self.key_size,
+            is_inlined: self.is_inlined,
+        }
+    }
+
     pub fn insert(
         &mut self,
         key: &[Datum],
@@ -242,8 +287,8 @@ impl LeafNode {
         self.page
             .borrow_mut()
             .buffer
-            .copy_within(start..end, start + self.key_size + size_of::<RecordID>());
-        let end = start + self.key_size + size_of::<RecordID>();
+            .copy_within(start..end, start + self.key_size + 8);
+        let end = start + self.key_size + 8;
         let mut bytes = index_key_from_datums(
             self.bpm.clone(),
             self.key_data_types.as_slice(),
