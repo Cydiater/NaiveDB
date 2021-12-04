@@ -31,7 +31,7 @@ impl Datum {
             Self::VarChar(_) => false,
         }
     }
-    pub fn into_bytes(self, data_type: &DataType) -> Vec<u8> {
+    pub fn to_bytes(&self, data_type: &DataType) -> Vec<u8> {
         match (self, data_type) {
             (Self::Int(v), DataType::Int(_)) => {
                 if let Some(v) = v {

@@ -1,5 +1,8 @@
 use crate::datum::{DataType, Datum};
-use crate::index::{IndexError, RecordID};
+use crate::index::{
+    utils::{datums_from_index_key, index_key_from_datums},
+    IndexError, RecordID,
+};
 use crate::storage::{BufferPoolManagerRef, PageID, PageRef};
 use std::convert::TryInto;
 use std::ops::Range;
@@ -37,26 +40,6 @@ use std::ops::Range;
 /// for data field of inlined case, we can simply to to_bytes func in datum, and assume they are
 /// always not null value.
 ///
-fn datums_from_index_key(
-    _bpm: BufferPoolManagerRef,
-    data_types: &[DataType],
-    bytes: &[u8],
-    is_inlined: bool,
-) -> Vec<Datum> {
-    let mut datums = vec![];
-    if is_inlined {
-        let mut offset = 0usize;
-        for data_type in data_types {
-            let width = data_type.width_of_value().unwrap();
-            let datum = Datum::from_bytes(data_type, bytes[offset..(offset + width)].to_vec());
-            offset += width;
-            datums.push(datum)
-        }
-        datums
-    } else {
-        todo!()
-    }
-}
 
 impl Drop for InternalNode {
     fn drop(&mut self) {
@@ -257,18 +240,13 @@ impl InternalNode {
         }
         let start = end;
         let end = start + self.key_size;
-        if self.is_inlined {
-            let bytes =
-                key.iter()
-                    .zip(self.key_data_types.iter())
-                    .fold(vec![], |mut bytes, (d, t)| {
-                        bytes.extend_from_slice(d.clone().into_bytes(t).as_slice());
-                        bytes
-                    });
-            self.page.borrow_mut().buffer[start..end].copy_from_slice(bytes.as_slice());
-        } else {
-            todo!()
-        }
+        let bytes = index_key_from_datums(
+            self.bpm.clone(),
+            self.key_data_types.as_slice(),
+            key,
+            self.is_inlined,
+        );
+        self.page.borrow_mut().buffer[start..end].copy_from_slice(bytes.as_slice());
         let num_child = self.get_num_child();
         self.set_num_child(num_child + 1);
         self.page.borrow_mut().is_dirty = true;

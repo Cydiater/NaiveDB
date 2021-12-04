@@ -1,5 +1,8 @@
 use crate::datum::{DataType, Datum};
-use crate::index::{utils::datums_from_index_key, IndexError, RecordID};
+use crate::index::{
+    utils::{datums_from_index_key, index_key_from_datums},
+    IndexError, RecordID,
+};
 use crate::storage::{BufferPoolManagerRef, PageID, PageRef};
 use std::convert::TryInto;
 use std::mem::size_of;
@@ -9,7 +12,7 @@ use std::ops::Range;
 ///
 /// LeafNode Format:
 ///
-///     | Meta | key[0] | rid[0] | ... | key[n - 1] | rid[n - 1]
+///     | Meta | key[0] | rid[0] | ... | key[n - 1] | rid[n - 1] |
 ///
 /// Meta Format:
 ///
@@ -155,12 +158,12 @@ impl LeafNode {
         self.offset_of_nth_value(num_child) + size_of::<RecordID>()
     }
 
-    pub fn offset_of_nth_value(&self, idx: usize) -> usize {
+    pub fn offset_of_nth_key(&self, idx: usize) -> usize {
         Self::SIZE_OF_META + idx * (self.key_size + size_of::<RecordID>())
     }
 
-    pub fn offset_of_nth_key(&self, idx: usize) -> usize {
-        self.offset_of_nth_value(idx) + size_of::<RecordID>()
+    pub fn offset_of_nth_value(&self, idx: usize) -> usize {
+        self.offset_of_nth_key(idx) + self.key_size
     }
 
     pub fn datums_at(&self, idx: usize) -> Vec<Datum> {
@@ -190,17 +193,69 @@ impl LeafNode {
         (page_id, offset)
     }
 
-    /// return the index of child where this key belong
-    pub fn index_of(&self, _key: &[Datum]) -> usize {
-        todo!()
+    /// find the first record with key greater than input
+    pub fn lower_bound(&self, key: &[Datum]) -> Option<usize> {
+        let num_record = self.get_num_record();
+        let mut left = 0;
+        let mut right = num_record - 1;
+        let mut mid;
+        while left + 1 < right {
+            mid = (left + right) / 2;
+            if self.datums_at(mid).as_slice() < key {
+                left = mid;
+            } else {
+                right = mid;
+            }
+        }
+        if self.datums_at(left).as_slice() >= key {
+            Some(left)
+        } else if self.datums_at(right).as_slice() >= key {
+            Some(right)
+        } else {
+            None
+        }
+    }
+
+    pub fn index_of(&self, key: &[Datum]) -> Option<usize> {
+        let lower_bound_idx = self.lower_bound(key);
+        if let Some(idx) = lower_bound_idx {
+            if self.datums_at(idx) == key {
+                Some(idx)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 
     pub fn insert(
         &mut self,
-        _key: &[Datum],
+        key: &[Datum],
         _rid: &RecordID,
-        _record_id: RecordID,
+        record_id: RecordID,
     ) -> Result<(), IndexError> {
-        todo!()
+        let num_record = self.get_num_record();
+        let lower_bound_idx = self.lower_bound(key).unwrap_or(num_record);
+        let start = self.offset_of_nth_key(lower_bound_idx);
+        let end = self.end();
+        self.page
+            .borrow_mut()
+            .buffer
+            .copy_within(start..end, start + self.key_size + size_of::<RecordID>());
+        let end = start + self.key_size + size_of::<RecordID>();
+        let mut bytes = index_key_from_datums(
+            self.bpm.clone(),
+            self.key_data_types.as_slice(),
+            key,
+            self.is_inlined,
+        );
+        bytes.extend_from_slice(&(record_id.0 as u32).to_le_bytes());
+        bytes.extend_from_slice(&(record_id.1 as u32).to_le_bytes());
+        self.page.borrow_mut().buffer[start..end].copy_from_slice(bytes.as_slice());
+        let num_record = self.get_num_record();
+        self.set_num_record(num_record + 1);
+        self.page.borrow_mut().is_dirty = true;
+        Ok(())
     }
 }
