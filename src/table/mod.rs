@@ -18,14 +18,6 @@ pub use slice::Slice;
 ///
 ///     | page_id_of_first_slice | Schema |
 ///
-/// Schema Format:
-///
-///     | desc_len | desc | DataType |
-///
-/// DataType Format:
-///
-///     | data_type_id | related_data |
-///
 
 pub struct Table {
     pub schema: SchemaRef,
@@ -92,26 +84,7 @@ impl Table {
         // fetch page from bpm
         let page = bpm.borrow_mut().fetch(page_id).unwrap();
         // reconstruct schema
-        let mut offset = 4;
-        let mut cols = vec![];
-        loop {
-            let desc_len =
-                u32::from_le_bytes(page.borrow().buffer[offset..offset + 4].try_into().unwrap())
-                    as usize;
-            if desc_len == 0 {
-                break;
-            }
-            offset += 4;
-            let name = String::from_utf8(page.borrow().buffer[offset..offset + desc_len].to_vec())
-                .unwrap();
-            offset += desc_len;
-            let dat =
-                DataType::from_bytes(&page.borrow().buffer[offset..offset + 5].try_into().unwrap())
-                    .unwrap();
-            offset += 5;
-            cols.push((dat, name));
-        }
-        let schema = Rc::new(Schema::from_slice(cols.as_slice()));
+        let schema = Rc::new(Schema::from_bytes(&page.borrow().buffer[4..]));
         Self { schema, bpm, page }
     }
     /// create a table
@@ -125,18 +98,11 @@ impl Table {
         page.borrow_mut().buffer[0..4]
             .copy_from_slice(&(page_id_of_root_slice as u32).to_le_bytes());
         // set schema
-        let mut offset = 4;
-        schema.iter().for_each(|col| {
-            let desc_len = col.desc.len();
-            let buffer = &mut page.borrow_mut().buffer;
-            buffer[offset..offset + 4].copy_from_slice(&(desc_len as u32).to_le_bytes());
-            offset += 4;
-            buffer[offset..offset + desc_len].copy_from_slice(col.desc.as_bytes());
-            offset += desc_len;
-            buffer[offset..offset + 5].copy_from_slice(&col.data_type.as_bytes());
-            offset += 5;
-            buffer[offset..offset + 4].copy_from_slice(&[0u8; 4]);
-        });
+        let offset = 4;
+        let bytes = schema.to_bytes();
+        let start = offset;
+        let end = offset + bytes.len();
+        page.borrow_mut().buffer[start..end].copy_from_slice(&bytes);
         // mark dirty
         page.borrow_mut().is_dirty = true;
         Self { schema, bpm, page }

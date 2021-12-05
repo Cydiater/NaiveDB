@@ -1,7 +1,18 @@
 use crate::table::DataType;
 use itertools::Itertools;
+use std::convert::TryInto;
 use std::rc::Rc;
 use std::slice::{Iter, IterMut};
+
+///
+/// Schema Format:
+///
+///     | num_column | Column[0] | Column[1] | ... |
+///
+/// Column Format:
+///
+///     | offset | len_desc | desc_content | DataType |
+///
 
 #[derive(Debug, PartialEq)]
 pub struct Column {
@@ -30,9 +41,31 @@ impl Column {
             })
             .collect_vec()
     }
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = vec![];
+        let desc_len = self.desc.len();
+        bytes.extend_from_slice(&(self.offset as u32).to_le_bytes());
+        bytes.extend_from_slice(&(desc_len as u32).to_le_bytes());
+        bytes.extend_from_slice(self.desc.as_bytes());
+        bytes.extend_from_slice(&self.data_type.as_bytes());
+        bytes
+    }
+    pub fn from_bytes(bytes: &[u8]) -> Self {
+        let offset = u32::from_le_bytes(bytes[0..4].try_into().unwrap()) as usize;
+        let desc_len = u32::from_le_bytes(bytes[4..8].try_into().unwrap()) as usize;
+        let desc = String::from_utf8(bytes[8..8 + desc_len].to_vec()).unwrap();
+        let data_type =
+            DataType::from_bytes(bytes[8 + desc_len..8 + desc_len + 5].try_into().unwrap())
+                .unwrap();
+        Self {
+            offset,
+            desc,
+            data_type,
+        }
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Schema {
     columns: Vec<Column>,
 }
@@ -60,6 +93,30 @@ impl Schema {
     pub fn type_at(&self, idx: usize) -> DataType {
         self.columns[idx].data_type
     }
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = vec![];
+        // num_column
+        bytes.extend_from_slice(&(self.columns.len() as u32).to_le_bytes());
+        for col in self.columns.iter() {
+            bytes.extend_from_slice(col.to_bytes().as_slice());
+        }
+        bytes
+    }
+    pub fn from_bytes(bytes: &[u8]) -> Self {
+        let num_column = u32::from_le_bytes(bytes[0..4].try_into().unwrap());
+        let mut columns = vec![];
+        let mut offset = 4;
+        for _ in 0..num_column {
+            let len_desc =
+                u32::from_le_bytes(bytes[offset + 4..offset + 8].try_into().unwrap()) as usize;
+            let start = offset;
+            let end = offset + len_desc + 4 + 4 + 5;
+            let column = Column::from_bytes(&bytes[start..end]);
+            columns.push(column);
+            offset = end;
+        }
+        Self { columns }
+    }
 }
 
 #[cfg(test)]
@@ -83,5 +140,17 @@ mod tests {
                 Column::new(34, DataType::new_varchar(false), "v3".to_string()),
             ]
         );
+    }
+
+    #[test]
+    fn test_to_from_bytes() {
+        let type_and_names = vec![
+            (DataType::new_int(false), "v1".to_string()),
+            (DataType::new_char(20, false), "v2".to_string()),
+            (DataType::new_varchar(false), "v3".to_string()),
+        ];
+        let schema = Schema::from_slice(type_and_names.as_slice());
+        let bytes = schema.to_bytes();
+        assert_eq!(Schema::from_bytes(&bytes), schema);
     }
 }

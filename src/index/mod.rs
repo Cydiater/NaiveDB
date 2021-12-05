@@ -1,7 +1,8 @@
-use crate::datum::{DataType, Datum};
 use crate::storage::{BufferPoolManagerRef, PageID, PageRef};
+use crate::table::Schema;
 use std::convert::TryInto;
 use std::ops::Range;
+use std::rc::Rc;
 use thiserror::Error;
 
 #[allow(dead_code)]
@@ -15,7 +16,7 @@ impl Drop for BPTIndex {
 }
 
 ///
-/// | page_id_of_root | key_size | num_data_types | data_type[0] | ...
+/// | page_id_of_root | key_size | KeySchema |
 ///
 
 #[allow(dead_code)]
@@ -25,18 +26,18 @@ pub struct BPTIndex {
 }
 
 mod internal;
+mod key;
 mod leaf;
-mod utils;
 
 use internal::InternalNode;
+use key::IndexKey;
 use leaf::LeafNode;
 
 #[allow(dead_code)]
 impl BPTIndex {
     const PAGE_ID_OF_ROOT: Range<usize> = 0..4;
     const KEY_SIZE: Range<usize> = 4..8;
-    const NUM_DATA_TYPES: Range<usize> = 8..12;
-    const SIZE_OF_META: usize = 12;
+    const SIZE_OF_META: usize = 8;
 
     const INLINED_LIMIT: usize = 256;
 
@@ -48,6 +49,10 @@ impl BPTIndex {
         ) as usize
     }
 
+    pub fn get_key_schema(&self) -> Schema {
+        Schema::from_bytes(&self.page.borrow().buffer[Self::SIZE_OF_META..])
+    }
+
     pub fn get_key_size(&self) -> usize {
         u32::from_le_bytes(
             self.page.borrow().buffer[Self::KEY_SIZE]
@@ -56,40 +61,27 @@ impl BPTIndex {
         ) as usize
     }
 
-    pub fn get_num_data_types(&self) -> usize {
-        u32::from_le_bytes(
-            self.page.borrow().buffer[Self::NUM_DATA_TYPES]
-                .try_into()
-                .unwrap(),
-        ) as usize
-    }
-
-    pub fn get_data_types(&self) -> Vec<DataType> {
-        let num_data_types = self.get_num_data_types();
-        let mut data_types = vec![];
-        for idx in 0..num_data_types {
-            let start = Self::SIZE_OF_META + idx * 5;
-            let end = start + 5;
-            let data_type =
-                DataType::from_bytes(self.page.borrow().buffer[start..end].try_into().unwrap())
-                    .unwrap();
-            data_types.push(data_type)
-        }
-        data_types
-    }
-
     pub fn split_on_internal(&mut self, _internal_node: &mut InternalNode) {
         todo!()
     }
 
-    pub fn set_root(&mut self, _key: &[Datum], _page_id_lhs: PageID, _page_id_rhs: PageID) {
+    pub fn set_root(&mut self, key: &IndexKey, page_id_lhs: PageID, page_id_rhs: PageID) {
+        let _root_node = InternalNode::new_root(
+            self.bpm.clone(),
+            Rc::new(self.get_key_schema()),
+            self.get_key_size(),
+            self.get_key_size() <= Self::INLINED_LIMIT,
+            key,
+            page_id_lhs,
+            page_id_rhs,
+        );
         todo!()
     }
 
     pub fn split_on_leaf(&mut self, leaf_node: &mut LeafNode) {
         let lhs_node = leaf_node;
         let rhs_node = lhs_node.split();
-        let _new_key = rhs_node.datums_at(0);
+        let _new_key = rhs_node.key_at(0);
         let _new_value = rhs_node.get_page_id();
         let parent_page_id = lhs_node.get_parent_page_id();
         if parent_page_id.is_none() {
@@ -102,14 +94,14 @@ impl BPTIndex {
     /// 2. find the leaf node corresponding to the inserting key;
     /// 3. have enough space ? insert => done : split => 4
     /// 4. split, insert into parent => 3
-    pub fn insert(&mut self, key: Vec<Datum>, _rid: RecordID) -> Result<(), IndexError> {
+    pub fn insert(&mut self, key: &IndexKey, _rid: RecordID) -> Result<(), IndexError> {
         let mut page_id_of_current_node = self.get_page_id_of_root();
         let key_size = self.get_key_size();
-        let data_types = self.get_data_types();
+        let key_schema = Rc::new(self.get_key_schema());
         let mut leaf_node = loop {
             if let Ok(leaf_node) = LeafNode::open(
                 self.bpm.clone(),
-                data_types.clone(),
+                key_schema.clone(),
                 key_size,
                 key_size <= Self::INLINED_LIMIT,
                 page_id_of_current_node,
@@ -118,12 +110,12 @@ impl BPTIndex {
             }
             let internal_node = InternalNode::open(
                 self.bpm.clone(),
-                data_types.clone(),
+                key_schema.clone(),
                 key_size,
                 key_size <= Self::INLINED_LIMIT,
                 page_id_of_current_node,
             )?;
-            let branch_idx = internal_node.index_of(key.as_slice());
+            let branch_idx = internal_node.index_of(key);
             page_id_of_current_node = internal_node.value_at(branch_idx).unwrap()
         };
         if !leaf_node.ok_to_insert() {

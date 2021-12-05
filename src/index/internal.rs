@@ -1,9 +1,7 @@
-use crate::datum::{DataType, Datum};
-use crate::index::{
-    utils::{datums_from_index_key, index_key_from_datums},
-    IndexError, RecordID,
-};
+use crate::datum::DataType;
+use crate::index::{IndexError, IndexKey};
 use crate::storage::{BufferPoolManagerRef, PageID, PageRef};
+use crate::table::SchemaRef;
 use std::convert::TryInto;
 use std::ops::Range;
 
@@ -52,7 +50,7 @@ impl Drop for InternalNode {
 pub struct InternalNode {
     page: PageRef,
     bpm: BufferPoolManagerRef,
-    key_data_types: Vec<DataType>,
+    key_schema: SchemaRef,
     key_size: usize,
     is_inlined: bool,
 }
@@ -67,11 +65,14 @@ impl InternalNode {
     /// key_size: the maximum size of key, we can not infer key_size from combined of
     /// key_data_types and is_inlined because for variable data_type, it can be inlined
     /// so we don't know the actually maximum size.
-    pub fn new(
+    pub fn new_root(
         bpm: BufferPoolManagerRef,
-        key_data_types: Vec<DataType>,
+        key_schema: SchemaRef,
         key_size: usize,
         is_inlined: bool,
+        key: &IndexKey,
+        page_id_lhs: PageID,
+        page_id_rhs: PageID,
     ) -> Self {
         let page = bpm.borrow_mut().alloc().unwrap();
         {
@@ -79,18 +80,25 @@ impl InternalNode {
             // set not leaf
             buffer[Self::IS_LEAF].copy_from_slice(&[0u8]);
             // set num_child as 1
-            buffer[Self::NUM_CHILD].copy_from_slice(&1u32.to_le_bytes());
+            buffer[Self::NUM_CHILD].copy_from_slice(&2u32.to_le_bytes());
             // set parent_page_id as none
             buffer[Self::PARENT_PAGE_ID].copy_from_slice(&0u32.to_le_bytes());
-            // set first child as none
-            buffer[8..12].copy_from_slice(&0u32.to_le_bytes());
+            // set first_child
+            buffer[Self::SIZE_OF_META..Self::SIZE_OF_META + 4]
+                .copy_from_slice(&(page_id_lhs as u32).to_le_bytes());
+            // set key
+            buffer[Self::SIZE_OF_META + 4..Self::SIZE_OF_META + 4 + key_size]
+                .copy_from_slice(&key.to_bytes());
+            // set second child
+            buffer[Self::SIZE_OF_META + 4 + key_size..Self::SIZE_OF_META + 4 + key_size + 4]
+                .copy_from_slice(&(page_id_rhs as u32).to_le_bytes());
         }
         // mark dirty
         page.borrow_mut().is_dirty = true;
         Self {
             page,
             bpm,
-            key_data_types,
+            key_schema,
             key_size,
             is_inlined,
         }
@@ -98,7 +106,7 @@ impl InternalNode {
 
     pub fn open(
         bpm: BufferPoolManagerRef,
-        key_data_types: Vec<DataType>,
+        key_schema: SchemaRef,
         key_size: usize,
         is_inlined: bool,
         page_id: PageID,
@@ -110,7 +118,7 @@ impl InternalNode {
         Ok(Self {
             page,
             bpm,
-            key_data_types,
+            key_schema,
             key_size,
             is_inlined,
         })
@@ -167,16 +175,11 @@ impl InternalNode {
         self.offset_of_nth_value(idx) + std::mem::size_of::<u32>()
     }
 
-    pub fn datums_at(&self, idx: usize) -> Vec<Datum> {
+    pub fn key_at(&self, idx: usize) -> IndexKey {
         let start = self.offset_of_nth_key(idx);
         let end = start + self.key_size;
         let bytes = &self.page.borrow().buffer[start..end];
-        datums_from_index_key(
-            self.bpm.clone(),
-            &self.key_data_types,
-            bytes,
-            self.is_inlined,
-        )
+        IndexKey::from_bytes_and_schema(bytes, self.key_schema.clone())
     }
 
     pub fn value_at(&self, idx: usize) -> Option<PageID> {
@@ -192,7 +195,7 @@ impl InternalNode {
     }
 
     /// return the index of child where this key belong
-    pub fn index_of(&self, key: &[Datum]) -> usize {
+    pub fn index_of(&self, key: &IndexKey) -> usize {
         let num_child = self.get_num_child();
         // if we have only one child
         if num_child == 1 {
@@ -204,28 +207,23 @@ impl InternalNode {
         let mut mid;
         while left + 1 < right {
             mid = (left + right) / 2;
-            if key < self.datums_at(mid).as_slice() {
+            if key < &self.key_at(mid) {
                 right = mid;
             } else {
                 left = mid;
             }
         }
-        if key >= self.datums_at(right).as_slice() {
+        if key >= &self.key_at(right) {
             right + 1
-        } else if key >= self.datums_at(left).as_slice() {
+        } else if key >= &self.key_at(left) {
             left + 1
         } else {
             0
         }
     }
 
-    pub fn insert(
-        &mut self,
-        key: &[Datum],
-        _rid: &RecordID,
-        page_id: PageID,
-    ) -> Result<(), IndexError> {
-        let idx = self.index_of(key);
+    pub fn insert(&mut self, key: IndexKey, page_id: PageID) -> Result<(), IndexError> {
+        let idx = self.index_of(&key);
         let start = self.offset_of_nth_value(idx);
         let end = self.end();
         let delta = self.key_size + std::mem::size_of::<u32>();
@@ -240,12 +238,7 @@ impl InternalNode {
         }
         let start = end;
         let end = start + self.key_size;
-        let bytes = index_key_from_datums(
-            self.bpm.clone(),
-            self.key_data_types.as_slice(),
-            key,
-            self.is_inlined,
-        );
+        let bytes = key.to_bytes();
         self.page.borrow_mut().buffer[start..end].copy_from_slice(bytes.as_slice());
         let num_child = self.get_num_child();
         self.set_num_child(num_child + 1);
@@ -308,23 +301,53 @@ mod tests {
                     Datum::VarChar(Some("world".to_string())),
                 ])
                 .unwrap();
-            let rids = (0..4)
+            let _rids = (0..4)
                 .into_iter()
                 .map(|idx| slice.record_id_at(idx))
                 .collect_vec();
-            let mut node =
-                InternalNode::new(bpm.clone(), vec![(DataType::new_int(false))], 5, true);
+            let key_schema = Rc::new(Schema::from_slice(&[(
+                DataType::new_int(false),
+                "v1".to_string(),
+            )]));
             let dummy_page_id = 10;
-            node.insert(&[Datum::Int(Some(1))], &rids[0], dummy_page_id)
-                .unwrap();
-            node.insert(&[Datum::Int(Some(2))], &rids[1], dummy_page_id)
-                .unwrap();
-            node.insert(&[Datum::Int(Some(4))], &rids[2], dummy_page_id)
-                .unwrap();
-            node.insert(&[Datum::Int(Some(8))], &rids[3], dummy_page_id)
-                .unwrap();
-            assert_eq!(node.index_of(&[Datum::Int(Some(5))]), 3);
-            assert_eq!(node.index_of(&[Datum::Int(Some(-5))]), 0);
+            let mut node = InternalNode::new_root(
+                bpm.clone(),
+                key_schema.clone(),
+                6,
+                true,
+                &IndexKey::new_inlined(vec![Datum::Int(Some(1))], key_schema.clone()),
+                dummy_page_id,
+                dummy_page_id,
+            );
+            node.insert(
+                IndexKey::new_inlined(vec![Datum::Int(Some(2))], key_schema.clone()),
+                dummy_page_id,
+            )
+            .unwrap();
+            node.insert(
+                IndexKey::new_inlined(vec![Datum::Int(Some(4))], key_schema.clone()),
+                dummy_page_id,
+            )
+            .unwrap();
+            node.insert(
+                IndexKey::new_inlined(vec![Datum::Int(Some(8))], key_schema.clone()),
+                dummy_page_id,
+            )
+            .unwrap();
+            assert_eq!(
+                node.index_of(&IndexKey::new_inlined(
+                    vec![Datum::Int(Some(5))],
+                    key_schema.clone()
+                )),
+                3
+            );
+            assert_eq!(
+                node.index_of(&IndexKey::new_inlined(
+                    vec![Datum::Int(Some(-5))],
+                    key_schema.clone()
+                )),
+                0
+            );
             filename
         };
         remove_file(filename).unwrap()

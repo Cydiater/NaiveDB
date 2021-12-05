@@ -1,9 +1,6 @@
-use crate::datum::{DataType, Datum};
-use crate::index::{
-    utils::{datums_from_index_key, index_key_from_datums},
-    IndexError, RecordID,
-};
+use crate::index::{IndexError, IndexKey, RecordID};
 use crate::storage::{BufferPoolManagerRef, PageID, PageRef, PAGE_SIZE};
+use crate::table::SchemaRef;
 use std::convert::TryInto;
 use std::ops::Range;
 
@@ -52,7 +49,7 @@ impl Drop for LeafNode {
 pub struct LeafNode {
     page: PageRef,
     bpm: BufferPoolManagerRef,
-    key_data_types: Vec<DataType>,
+    key_schema: SchemaRef,
     key_size: usize,
     is_inlined: bool,
 }
@@ -69,7 +66,7 @@ impl LeafNode {
     /// so we don't know the actually maximum size.
     pub fn new(
         bpm: BufferPoolManagerRef,
-        key_data_types: Vec<DataType>,
+        key_schema: SchemaRef,
         key_size: usize,
         is_inlined: bool,
     ) -> Self {
@@ -88,7 +85,7 @@ impl LeafNode {
         Self {
             page,
             bpm,
-            key_data_types,
+            key_schema,
             key_size,
             is_inlined,
         }
@@ -104,7 +101,7 @@ impl LeafNode {
 
     pub fn open(
         bpm: BufferPoolManagerRef,
-        key_data_types: Vec<DataType>,
+        key_schema: SchemaRef,
         key_size: usize,
         is_inlined: bool,
         page_id: PageID,
@@ -116,7 +113,7 @@ impl LeafNode {
         Ok(Self {
             page,
             bpm,
-            key_data_types,
+            key_schema,
             key_size,
             is_inlined,
         })
@@ -177,16 +174,11 @@ impl LeafNode {
         self.offset_of_nth_key(idx) + self.key_size
     }
 
-    pub fn datums_at(&self, idx: usize) -> Vec<Datum> {
+    pub fn key_at(&self, idx: usize) -> IndexKey {
         let start = self.offset_of_nth_key(idx);
         let end = start + self.key_size;
         let bytes = &self.page.borrow().buffer[start..end];
-        datums_from_index_key(
-            self.bpm.clone(),
-            &self.key_data_types,
-            bytes,
-            self.is_inlined,
-        )
+        IndexKey::from_bytes_and_schema(bytes, self.key_schema.clone())
     }
 
     pub fn value_at(&self, idx: usize) -> RecordID {
@@ -205,32 +197,32 @@ impl LeafNode {
     }
 
     /// find the first record with key greater than input
-    pub fn lower_bound(&self, key: &[Datum]) -> Option<usize> {
+    pub fn lower_bound(&self, key: &IndexKey) -> Option<usize> {
         let num_record = self.get_num_record();
         let mut left = 0;
         let mut right = num_record - 1;
         let mut mid;
         while left + 1 < right {
             mid = (left + right) / 2;
-            if self.datums_at(mid).as_slice() < key {
+            if &self.key_at(mid) < key {
                 left = mid;
             } else {
                 right = mid;
             }
         }
-        if self.datums_at(left).as_slice() >= key {
+        if &self.key_at(left) >= key {
             Some(left)
-        } else if self.datums_at(right).as_slice() >= key {
+        } else if &self.key_at(right) >= key {
             Some(right)
         } else {
             None
         }
     }
 
-    pub fn index_of(&self, key: &[Datum]) -> Option<usize> {
+    pub fn index_of(&self, key: &IndexKey) -> Option<usize> {
         let lower_bound_idx = self.lower_bound(key);
         if let Some(idx) = lower_bound_idx {
-            if self.datums_at(idx) == key {
+            if &self.key_at(idx) == key {
                 Some(idx)
             } else {
                 None
@@ -268,20 +260,15 @@ impl LeafNode {
         Self {
             page: page_right,
             bpm: self.bpm.clone(),
-            key_data_types: self.key_data_types.clone(),
+            key_schema: self.key_schema.clone(),
             key_size: self.key_size,
             is_inlined: self.is_inlined,
         }
     }
 
-    pub fn insert(
-        &mut self,
-        key: &[Datum],
-        _rid: &RecordID,
-        record_id: RecordID,
-    ) -> Result<(), IndexError> {
+    pub fn insert(&mut self, key: IndexKey, record_id: RecordID) -> Result<(), IndexError> {
         let num_record = self.get_num_record();
-        let lower_bound_idx = self.lower_bound(key).unwrap_or(num_record);
+        let lower_bound_idx = self.lower_bound(&key).unwrap_or(num_record);
         let start = self.offset_of_nth_key(lower_bound_idx);
         let end = self.end();
         self.page
@@ -289,12 +276,7 @@ impl LeafNode {
             .buffer
             .copy_within(start..end, start + self.key_size + 8);
         let end = start + self.key_size + 8;
-        let mut bytes = index_key_from_datums(
-            self.bpm.clone(),
-            self.key_data_types.as_slice(),
-            key,
-            self.is_inlined,
-        );
+        let mut bytes = key.to_bytes();
         bytes.extend_from_slice(&(record_id.0 as u32).to_le_bytes());
         bytes.extend_from_slice(&(record_id.1 as u32).to_le_bytes());
         self.page.borrow_mut().buffer[start..end].copy_from_slice(bytes.as_slice());

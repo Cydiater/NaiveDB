@@ -172,7 +172,7 @@ impl Slice {
                 let start = offset;
                 let end = start + col.data_type.width_of_value().unwrap();
                 let bytes = self.page.borrow().buffer[start..end].to_vec();
-                Datum::from_bytes(&col.data_type, bytes)
+                Datum::from_bytes(&col.data_type, &bytes)
             } else {
                 let start = u32::from_le_bytes(
                     self.page.borrow().buffer[offset..offset + 4]
@@ -185,7 +185,7 @@ impl Slice {
                         .unwrap(),
                 ) as usize;
                 let bytes = self.page.borrow().buffer[start..end].to_vec();
-                Datum::from_bytes(&col.data_type, bytes)
+                Datum::from_bytes(&col.data_type, &bytes)
             };
             tuple.push(datum);
         }
