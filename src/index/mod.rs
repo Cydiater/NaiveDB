@@ -81,13 +81,23 @@ impl BPTIndex {
     pub fn split_on_leaf(&mut self, leaf_node: &mut LeafNode) {
         let lhs_node = leaf_node;
         let rhs_node = lhs_node.split();
-        let _new_key = rhs_node.key_at(0);
-        let _new_value = rhs_node.get_page_id();
+        let new_key = rhs_node.key_at(0);
+        let new_value = rhs_node.get_page_id();
         let parent_page_id = lhs_node.get_parent_page_id();
         if parent_page_id.is_none() {
             todo!()
         }
-        todo!()
+        let parent_page_id = parent_page_id.unwrap();
+        let mut parent_node = InternalNode::open(
+            self.bpm.clone(),
+            Rc::new(self.get_key_schema()),
+            self.get_key_size(),
+            self.get_key_size() <= Self::INLINED_LIMIT,
+            parent_page_id,
+        )
+        .unwrap();
+        parent_node.insert(new_key, new_value).unwrap();
+        rhs_node.set_parent_page_id(Some(parent_page_id))
     }
 
     /// 1. fetch the root node;
