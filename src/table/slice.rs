@@ -172,7 +172,7 @@ impl Slice {
                 let start = offset;
                 let end = start + col.data_type.width_of_value().unwrap();
                 let bytes = self.page.borrow().buffer[start..end].to_vec();
-                Datum::from_bytes(&col.data_type, bytes)
+                Datum::from_bytes(&col.data_type, &bytes)
             } else {
                 let start = u32::from_le_bytes(
                     self.page.borrow().buffer[offset..offset + 4]
@@ -185,7 +185,7 @@ impl Slice {
                         .unwrap(),
                 ) as usize;
                 let bytes = self.page.borrow().buffer[start..end].to_vec();
-                Datum::from_bytes(&col.data_type, bytes)
+                Datum::from_bytes(&col.data_type, &bytes)
             };
             tuple.push(datum);
         }
@@ -215,7 +215,7 @@ impl Slice {
         let mut not_inlined_data = Vec::<(usize, DataType, Datum)>::new();
         for (col, dat) in self.schema.iter().zip(datums.into_iter()) {
             let tail = if dat.is_inlined() {
-                self.push(dat.into_bytes(&col.data_type).as_slice())?
+                self.push(dat.to_bytes(&col.data_type).as_slice())?
             } else {
                 let tail = self.push(&[0u8; 8])?;
                 not_inlined_data.push((tail, col.data_type, dat));
@@ -226,7 +226,7 @@ impl Slice {
         // variable part
         for (offset, data_type, dat) in not_inlined_data {
             let end = self.get_tail();
-            let tail = self.push(&dat.into_bytes(&data_type))?;
+            let tail = self.push(&dat.to_bytes(&data_type))?;
             let start = tail;
             self.set_tail(tail);
             self.page.borrow_mut().buffer[offset..offset + 4]

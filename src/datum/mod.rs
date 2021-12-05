@@ -31,7 +31,7 @@ impl Datum {
             Self::VarChar(_) => false,
         }
     }
-    pub fn into_bytes(self, data_type: &DataType) -> Vec<u8> {
+    pub fn to_bytes(&self, data_type: &DataType) -> Vec<u8> {
         match (self, data_type) {
             (Self::Int(v), DataType::Int(_)) => {
                 if let Some(v) = v {
@@ -54,6 +54,7 @@ impl Datum {
             (Self::VarChar(v), DataType::VarChar(_)) => {
                 if let Some(v) = v {
                     let mut bytes = vec![1];
+                    bytes.extend_from_slice(&(v.len() as u32).to_le_bytes());
                     bytes.extend_from_slice(v.as_bytes());
                     bytes
                 } else {
@@ -63,7 +64,7 @@ impl Datum {
             _ => todo!(),
         }
     }
-    pub fn from_bytes(data_type: &DataType, bytes: Vec<u8>) -> Self {
+    pub fn from_bytes(data_type: &DataType, bytes: &[u8]) -> Self {
         match data_type {
             DataType::Int(_) => {
                 if bytes[0] == 0 {
@@ -88,8 +89,9 @@ impl Datum {
                 if bytes[0] == 0 {
                     Datum::VarChar(None)
                 } else {
+                    let len = u32::from_le_bytes(bytes[1..5].try_into().unwrap()) as usize;
                     Datum::VarChar(Some(
-                        String::from_utf8(bytes[1..].try_into().unwrap()).unwrap(),
+                        String::from_utf8(bytes[5..5 + len].try_into().unwrap()).unwrap(),
                     ))
                 }
             }
