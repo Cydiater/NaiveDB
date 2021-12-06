@@ -73,6 +73,30 @@ impl InternalNode {
         Self { page, bpm, schema }
     }
 
+    pub fn new_single_child(
+        bpm: BufferPoolManagerRef,
+        schema: SchemaRef,
+        page_id: Option<PageID>,
+    ) -> Self {
+        let page = bpm.borrow_mut().alloc().unwrap();
+        {
+            let buffer = &mut page.borrow_mut().buffer;
+            // not leaf
+            buffer[Self::IS_LEAF].copy_from_slice(&[0u8]);
+            // no parent
+            buffer[Self::PARENT_PAGE_ID].copy_from_slice(&[0u8; 4]);
+            // set head
+            buffer[Self::HEAD].copy_from_slice(&((Self::SIZE_OF_META + 4) as u32).to_le_bytes());
+            // set tail
+            buffer[Self::TAIL].copy_from_slice(&(PAGE_SIZE as u32).to_le_bytes());
+            // page_id
+            buffer[Self::SIZE_OF_META..Self::SIZE_OF_META + 4]
+                .copy_from_slice(&(page_id.unwrap_or(0) as u32).to_le_bytes());
+        }
+        page.borrow_mut().is_dirty = true;
+        Self { page, bpm, schema }
+    }
+
     pub fn open(
         bpm: BufferPoolManagerRef,
         schema: SchemaRef,
@@ -96,6 +120,10 @@ impl InternalNode {
         } else {
             Some(parent_page_id)
         }
+    }
+
+    pub fn get_page_id(&self) -> PageID {
+        self.page.borrow().page_id.unwrap()
     }
 
     fn get_head(&self) -> usize {
@@ -184,8 +212,65 @@ impl InternalNode {
         }
     }
 
-    pub fn insert(&mut self, key: &[Datum], page_id: PageID) -> Result<(), IndexError> {
+    pub fn split(&mut self) -> Self {
+        let len = self.len();
+        let mut keys = vec![];
+        let mut page_ids = vec![];
+        // collect keys and page_ids
+        for idx in 0..len - 1 {
+            let key = self.key_at(idx);
+            keys.push(key);
+        }
+        for idx in 0..len {
+            let page_id = self.page_id_at(idx);
+            page_ids.push(page_id);
+        }
+        // clear lhs
+        self.set_head(Self::SIZE_OF_META);
+        self.set_tail(PAGE_SIZE);
+        let len_lhs = (len - 1) / 2;
+        self.set_left_most_page_id(page_ids.remove(0));
+        for idx in 0..len_lhs {
+            self.append(keys[idx].as_slice(), page_ids[idx].unwrap_or(0));
+        }
+        self.page.borrow_mut().is_dirty = true;
+        // setup rhs
+        let mut rhs = Self::new_single_child(self.bpm.clone(), self.schema.clone(), None);
+        for idx in len_lhs..len - 1 {
+            rhs.append(keys[idx].as_slice(), page_ids[idx].unwrap_or(0));
+        }
+        // set parent_page_id
+        rhs.set_parent_page_id(self.get_parent_page_id());
+        rhs.page.borrow_mut().is_dirty = true;
+        rhs
+    }
+
+    pub fn ok_to_insert(&self, datums: &[Datum]) -> bool {
+        let bytes = Datum::to_bytes_with_schema(datums, self.schema.clone());
+        let head = self.get_head();
+        let tail = self.get_tail();
+        head + 8 + bytes.len() <= tail
+    }
+
+    /// since you can't modify left-most page_id with insert
+    pub fn set_left_most_page_id(&mut self, page_id: Option<PageID>) {
+        self.page.borrow_mut().buffer[Self::SIZE_OF_META..Self::SIZE_OF_META + 4]
+            .copy_from_slice(&(page_id.unwrap_or(0) as u32).to_le_bytes());
+        self.page.borrow_mut().is_dirty = true;
+    }
+
+    /// append to the end, the order should be preserved
+    pub fn append(&mut self, key: &[Datum], page_id: PageID) {
+        self.insert_at(self.len(), key, page_id);
+    }
+
+    /// random insert
+    pub fn insert(&mut self, key: &[Datum], page_id: PageID) {
         let idx = self.index_of(key);
+        self.insert_at(idx, key, page_id);
+    }
+
+    pub fn insert_at(&mut self, idx: usize, key: &[Datum], page_id: PageID) {
         // | offset[idx - 1] | page_id[idx] | offset[idx] | ... | page_id[n - 1] |
         //                                start                                 end
         //                      =>
@@ -215,7 +300,6 @@ impl InternalNode {
             .copy_from_slice(&(page_id as u32).to_le_bytes());
         // mark dirty
         self.page.borrow_mut().is_dirty = true;
-        Ok(())
     }
 }
 
@@ -278,9 +362,9 @@ mod tests {
                 dummy_page_id,
                 dummy_page_id,
             );
-            node.insert(&[Datum::Int(Some(2))], dummy_page_id).unwrap();
-            node.insert(&[Datum::Int(Some(4))], dummy_page_id).unwrap();
-            node.insert(&[Datum::Int(Some(8))], dummy_page_id).unwrap();
+            node.insert(&[Datum::Int(Some(2))], dummy_page_id);
+            node.insert(&[Datum::Int(Some(4))], dummy_page_id);
+            node.insert(&[Datum::Int(Some(8))], dummy_page_id);
             assert_eq!(node.index_of(&[Datum::Int(Some(5))]), 3);
             assert_eq!(node.index_of(&[Datum::Int(Some(-5))]), 0);
             filename

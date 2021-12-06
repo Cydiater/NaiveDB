@@ -32,11 +32,9 @@ pub struct BPTIndex {
 }
 
 mod internal;
-mod key;
 mod leaf;
 
 use internal::InternalNode;
-use key::IndexKey;
 use leaf::LeafNode;
 
 #[allow(dead_code)]
@@ -52,22 +50,27 @@ impl BPTIndex {
         ) as usize
     }
 
+    pub fn set_page_id_of_root(&self, page_id: PageID) {
+        self.page.borrow_mut().buffer[Self::PAGE_ID_OF_ROOT]
+            .copy_from_slice(&(page_id as u32).to_le_bytes())
+    }
+
     pub fn get_key_schema(&self) -> Schema {
         Schema::from_bytes(&self.page.borrow().buffer[Self::SIZE_OF_META..])
     }
 
-    pub fn split_on_internal(&mut self, _internal_node: &mut InternalNode) {
-        todo!()
-    }
-
     pub fn set_root(&mut self, key: &[Datum], page_id_lhs: PageID, page_id_rhs: PageID) {
-        let _root_node = InternalNode::new_root(
+        let root_node = InternalNode::new_root(
             self.bpm.clone(),
             Rc::new(self.get_key_schema()),
             key,
             page_id_lhs,
             page_id_rhs,
         );
+        self.set_page_id_of_root(root_node.get_page_id());
+    }
+
+    pub fn split_on_internal(&mut self, _internal_node: &mut InternalNode) {
         todo!()
     }
 
@@ -78,7 +81,8 @@ impl BPTIndex {
         let new_value = rhs_node.get_page_id();
         let parent_page_id = lhs_node.get_parent_page_id();
         if parent_page_id.is_none() {
-            todo!()
+            self.set_root(&new_key, lhs_node.get_page_id(), new_value);
+            return;
         }
         let parent_page_id = parent_page_id.unwrap();
         let mut parent_node = InternalNode::open(
@@ -87,8 +91,10 @@ impl BPTIndex {
             parent_page_id,
         )
         .unwrap();
-        parent_node.insert(new_key.as_slice(), new_value).unwrap();
-        rhs_node.set_parent_page_id(Some(parent_page_id))
+        if !parent_node.ok_to_insert(new_key.as_slice()) {
+            self.split_on_internal(&mut parent_node);
+        }
+        parent_node.insert(&new_key, new_value);
     }
 
     /// 1. fetch the root node;

@@ -1,5 +1,5 @@
 use crate::datum::Datum;
-use crate::index::{IndexError, IndexKey, RecordID};
+use crate::index::{IndexError, RecordID};
 use crate::storage::{BufferPoolManagerRef, PageID, PageRef, PAGE_SIZE};
 use crate::table::SchemaRef;
 use std::convert::TryInto;
@@ -128,7 +128,7 @@ impl LeafNode {
     }
 
     pub fn record_id_at(&self, idx: usize) -> RecordID {
-        let start = Self::SIZE_OF_META + idx * 8 + 4;
+        let start = Self::SIZE_OF_META + idx * 12 + 4;
         let page_id = u32::from_le_bytes(
             self.page.borrow().buffer[start..start + 4]
                 .try_into()
@@ -189,11 +189,78 @@ impl LeafNode {
         head + 12 + bytes.len() <= tail
     }
 
+    /// split current node into two node, the lhs node have the front half while the rhs node have
+    /// the back half, and they have the same parent_id
     pub fn split(&mut self) -> Self {
-        todo!()
+        let len = self.len();
+        // collect keys and record_ids
+        let mut keys = vec![];
+        let mut record_ids = vec![];
+        for idx in 0..len {
+            let key = self.key_at(idx);
+            let record_id = self.record_id_at(idx);
+            keys.push(key);
+            record_ids.push(record_id);
+        }
+        // clear lhs
+        self.set_head(Self::SIZE_OF_META);
+        self.set_tail(PAGE_SIZE);
+        let len_lhs = len / 2;
+        // setup lhs node
+        for idx in 0..len_lhs {
+            self.append(keys[idx].as_slice(), record_ids[idx]);
+        }
+        // new rhs
+        let rhs = LeafNode::new(self.bpm.clone(), self.schema.clone());
+        for idx in len_lhs..len {
+            self.append(keys[idx].as_slice(), record_ids[idx]);
+        }
+        // set parent_page_id
+        rhs.set_parent_page_id(self.get_parent_page_id());
+        rhs.page.borrow_mut().is_dirty = true;
+        self.page.borrow_mut().is_dirty = true;
+        rhs
     }
 
-    pub fn insert(&mut self, _key: IndexKey, _record_id: RecordID) -> Result<(), IndexError> {
-        todo!()
+    /// append to the end, the order should be preserved
+    pub fn append(&mut self, key: &[Datum], record_id: RecordID) {
+        self.insert_at(self.len(), key, record_id);
+    }
+
+    /// random insert
+    pub fn insert(&mut self, key: &[Datum], record_id: RecordID) {
+        let idx = self.lower_bound(key).unwrap_or_else(|| self.len());
+        self.insert_at(idx, key, record_id);
+    }
+
+    /// insert at specific position
+    pub fn insert_at(&mut self, idx: usize, key: &[Datum], record_id: RecordID) {
+        let start = Self::SIZE_OF_META + idx * 12;
+        let end = Self::SIZE_OF_META + self.len() * 12;
+        self.page
+            .borrow_mut()
+            .buffer
+            .copy_within(start..end, start + 12);
+        let bytes = Datum::to_bytes_with_schema(key, self.schema.clone());
+        let end = self.get_tail();
+        let start = end - bytes.len();
+        self.page.borrow_mut().buffer[start..end].copy_from_slice(&bytes);
+        self.set_tail(start);
+        let head = self.get_head();
+        self.set_head(head + 12);
+        // set offset
+        let start = Self::SIZE_OF_META + idx * 12;
+        self.page.borrow_mut().buffer[start..start + 4]
+            .copy_from_slice(&(end as u32).to_le_bytes());
+        // set page_id
+        let start = start + 4;
+        self.page.borrow_mut().buffer[start..start + 4]
+            .copy_from_slice(&(record_id.0 as u32).to_le_bytes());
+        // set offset
+        let start = start + 4;
+        self.page.borrow_mut().buffer[start..start + 4]
+            .copy_from_slice(&(record_id.1 as u32).to_le_bytes());
+        // mark dirty
+        self.page.borrow_mut().is_dirty = true;
     }
 }
