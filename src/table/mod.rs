@@ -125,11 +125,11 @@ impl Table {
             page_id_of_first_slice,
         );
         if slice.ok_to_add(&datums) {
-            slice.add(datums).unwrap();
+            slice.add(&datums).unwrap();
             Ok(())
         } else {
             let mut new_slice = Slice::new(self.bpm.clone(), self.schema.clone());
-            new_slice.add(datums).unwrap();
+            new_slice.add(&datums).unwrap();
             self.set_page_id_of_first_slice(new_slice.get_page_id());
             new_slice.set_next_page_id(Some(slice.get_page_id()));
             Ok(())

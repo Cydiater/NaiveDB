@@ -33,7 +33,7 @@ impl Executor for ValuesExecutor {
                     .map(|e| e.eval(None).remove(0))
                     .collect_vec();
                 info!("generate tuple {:?}", datums);
-                slice.add(datums)?;
+                slice.add(&datums)?;
             }
             self.executed = true;
             Ok(Some(slice))

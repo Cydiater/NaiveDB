@@ -1,3 +1,4 @@
+use crate::datum::Datum;
 use crate::index::{IndexError, IndexKey, RecordID};
 use crate::storage::{BufferPoolManagerRef, PageID, PageRef, PAGE_SIZE};
 use crate::table::SchemaRef;
@@ -5,37 +6,14 @@ use std::convert::TryInto;
 use std::ops::Range;
 
 ///
-///
 /// LeafNode Format:
 ///
-///     | Meta | key[0] | rid[0] | ... | key[n - 1] | rid[n - 1] |
+///     | Meta | offset[0] | record_id[0] | ...
+///                                       ... | data[1] | data[0] |
 ///
 /// Meta Format:
 ///
-///     | is_leaf | num_record | parent_page_id |
-///
-/// the value of page_id must larger than 0, if the field is 0, then we see this page_id as none,
-/// when we insert new page_id, we must check that the value of page_id is not none
-///
-/// Note that the width of key is fixed
-///
-/// generate key datums used for index, there should be two
-/// situations
-///
-///  - inlined: where total serialized byte length of key datums is less than 256 bytes,
-///  we can just put the original byte representation of the datums.
-///
-///  - non-inlined: where the total length exceed 256 bytes, we just put the rid of tuple
-///  and fetch the datums from buffer.
-///
-/// format of key binary:
-///
-///  - inlined: | data1 | data2 | ...
-///
-///  - non-inlined: | page_id | offset |
-///
-/// for data field of inlined case, we can simply to to_bytes func in datum, and assume they are
-/// always not null value.
+///     | is_leaf | parent_page_id | head | tail |
 ///
 
 impl Drop for LeafNode {
@@ -49,92 +27,55 @@ impl Drop for LeafNode {
 pub struct LeafNode {
     page: PageRef,
     bpm: BufferPoolManagerRef,
-    key_schema: SchemaRef,
-    key_size: usize,
-    is_inlined: bool,
+    schema: SchemaRef,
 }
 
 #[allow(dead_code)]
 impl LeafNode {
     const IS_LEAF: Range<usize> = 0..1;
-    const NUM_RECORD: Range<usize> = 1..5;
-    const PARENT_PAGE_ID: Range<usize> = 5..9;
-    const SIZE_OF_META: usize = 9;
+    const PARENT_PAGE_ID: Range<usize> = 1..5;
+    const HEAD: Range<usize> = 5..9;
+    const TAIL: Range<usize> = 9..13;
+    const SIZE_OF_META: usize = 13;
 
-    /// key_size: the maximum size of key, we can not infer key_size from combined of
-    /// key_data_types and is_inlined because for variable data_type, it can be inlined
-    /// so we don't know the actually maximum size.
-    pub fn new(
-        bpm: BufferPoolManagerRef,
-        key_schema: SchemaRef,
-        key_size: usize,
-        is_inlined: bool,
-    ) -> Self {
+    fn get_head(&self) -> usize {
+        u32::from_le_bytes(self.page.borrow().buffer[Self::HEAD].try_into().unwrap()) as usize
+    }
+
+    fn get_tail(&self) -> usize {
+        u32::from_le_bytes(self.page.borrow().buffer[Self::TAIL].try_into().unwrap()) as usize
+    }
+
+    fn set_head(&self, head: usize) {
+        self.page.borrow_mut().buffer[Self::HEAD].copy_from_slice(&(head as u32).to_le_bytes());
+        self.page.borrow_mut().is_dirty = true;
+    }
+
+    fn set_tail(&self, tail: usize) {
+        self.page.borrow_mut().buffer[Self::TAIL].copy_from_slice(&(tail as u32).to_le_bytes());
+        self.page.borrow_mut().is_dirty = true;
+    }
+
+    pub fn new(bpm: BufferPoolManagerRef, schema: SchemaRef) -> Self {
         let page = bpm.borrow_mut().alloc().unwrap();
         {
             let buffer = &mut page.borrow_mut().buffer;
             // set leaf
             buffer[Self::IS_LEAF].copy_from_slice(&[1u8]);
-            // set num_record as 0
-            buffer[Self::NUM_RECORD].copy_from_slice(&0u32.to_le_bytes());
             // set parent_page_id as none
             buffer[Self::PARENT_PAGE_ID].copy_from_slice(&0u32.to_le_bytes());
+            // set head = SIZE_OF_META
+            buffer[Self::HEAD].copy_from_slice(&(Self::SIZE_OF_META as u32).to_le_bytes());
+            // set tail = PAGE_SIZE
+            buffer[Self::TAIL].copy_from_slice(&(PAGE_SIZE as u32).to_le_bytes());
         }
         // mark dirty
         page.borrow_mut().is_dirty = true;
-        Self {
-            page,
-            bpm,
-            key_schema,
-            key_size,
-            is_inlined,
-        }
-    }
-
-    pub fn ok_to_insert(&self) -> bool {
-        let num_record = self.get_num_record();
-        let all_space = PAGE_SIZE;
-        let used_space = Self::SIZE_OF_META + num_record * (self.key_size + 8);
-        let free_space = all_space - used_space;
-        free_space >= self.key_size + 8
-    }
-
-    pub fn open(
-        bpm: BufferPoolManagerRef,
-        key_schema: SchemaRef,
-        key_size: usize,
-        is_inlined: bool,
-        page_id: PageID,
-    ) -> Result<Self, IndexError> {
-        let page = bpm.borrow_mut().fetch(page_id).unwrap();
-        if page.borrow().buffer[Self::IS_LEAF] == [1u8] {
-            return Err(IndexError::NotLeafIndexNode);
-        }
-        Ok(Self {
-            page,
-            bpm,
-            key_schema,
-            key_size,
-            is_inlined,
-        })
-    }
-
-    fn get_num_record(&self) -> usize {
-        u32::from_le_bytes(
-            self.page.borrow().buffer[Self::NUM_RECORD]
-                .try_into()
-                .unwrap(),
-        ) as usize
+        Self { page, bpm, schema }
     }
 
     pub fn get_page_id(&self) -> PageID {
         self.page.borrow().page_id.unwrap()
-    }
-
-    fn set_num_record(&self, num_child: usize) {
-        self.page.borrow_mut().buffer[Self::NUM_RECORD]
-            .copy_from_slice(&(num_child as u32).to_le_bytes());
-        self.page.borrow_mut().is_dirty = true;
     }
 
     pub fn get_parent_page_id(&self) -> Option<PageID> {
@@ -161,33 +102,38 @@ impl LeafNode {
         self.page.borrow_mut().is_dirty = true;
     }
 
-    fn end(&self) -> usize {
-        let num_child = self.get_num_record();
-        self.offset_of_nth_value(num_child) + 8
+    pub fn open(
+        bpm: BufferPoolManagerRef,
+        schema: SchemaRef,
+        page_id: PageID,
+    ) -> Result<Self, IndexError> {
+        let page = bpm.borrow_mut().fetch(page_id).unwrap();
+        if page.borrow().buffer[Self::IS_LEAF] == [1u8] {
+            return Err(IndexError::NotLeafIndexNode);
+        }
+        Ok(Self { page, bpm, schema })
     }
 
-    pub fn offset_of_nth_key(&self, idx: usize) -> usize {
-        Self::SIZE_OF_META + idx * (self.key_size + 8)
+    fn offset_at(&self, idx: usize) -> usize {
+        let start = Self::SIZE_OF_META + idx * 12;
+        let end = start + 4;
+        let bytes: [u8; 4] = self.page.borrow().buffer[start..end].try_into().unwrap();
+        u32::from_le_bytes(bytes) as usize
     }
 
-    pub fn offset_of_nth_value(&self, idx: usize) -> usize {
-        self.offset_of_nth_key(idx) + self.key_size
+    pub fn key_at(&self, idx: usize) -> Vec<Datum> {
+        let base_offset = self.offset_at(idx);
+        let bytes = &self.page.borrow().buffer[..base_offset];
+        Datum::from_bytes_and_schema(self.schema.clone(), bytes)
     }
 
-    pub fn key_at(&self, idx: usize) -> IndexKey {
-        let start = self.offset_of_nth_key(idx);
-        let end = start + self.key_size;
-        let bytes = &self.page.borrow().buffer[start..end];
-        IndexKey::from_bytes_and_schema(bytes, self.key_schema.clone())
-    }
-
-    pub fn value_at(&self, idx: usize) -> RecordID {
-        let start = self.offset_of_nth_value(idx);
+    pub fn record_id_at(&self, idx: usize) -> RecordID {
+        let start = Self::SIZE_OF_META + idx * 8 + 4;
         let page_id = u32::from_le_bytes(
             self.page.borrow().buffer[start..start + 4]
                 .try_into()
                 .unwrap(),
-        ) as usize;
+        ) as PageID;
         let offset = u32::from_le_bytes(
             self.page.borrow().buffer[start + 4..start + 8]
                 .try_into()
@@ -196,33 +142,37 @@ impl LeafNode {
         (page_id, offset)
     }
 
+    pub fn len(&self) -> usize {
+        let head = self.get_head();
+        (head - Self::SIZE_OF_META) / 12
+    }
+
     /// find the first record with key greater than input
-    pub fn lower_bound(&self, key: &IndexKey) -> Option<usize> {
-        let num_record = self.get_num_record();
+    pub fn lower_bound(&self, key: &[Datum]) -> Option<usize> {
         let mut left = 0;
-        let mut right = num_record - 1;
+        let mut right = self.len() - 1;
         let mut mid;
         while left + 1 < right {
             mid = (left + right) / 2;
-            if &self.key_at(mid) < key {
+            if self.key_at(mid).as_slice() < key {
                 left = mid;
             } else {
                 right = mid;
             }
         }
-        if &self.key_at(left) >= key {
+        if self.key_at(left).as_slice() >= key {
             Some(left)
-        } else if &self.key_at(right) >= key {
+        } else if self.key_at(right).as_slice() >= key {
             Some(right)
         } else {
             None
         }
     }
 
-    pub fn index_of(&self, key: &IndexKey) -> Option<usize> {
+    pub fn index_of(&self, key: &[Datum]) -> Option<usize> {
         let lower_bound_idx = self.lower_bound(key);
         if let Some(idx) = lower_bound_idx {
-            if &self.key_at(idx) == key {
+            if self.key_at(idx) == key {
                 Some(idx)
             } else {
                 None
@@ -232,57 +182,18 @@ impl LeafNode {
         }
     }
 
-    pub fn split(&mut self) -> Self {
-        let num_record = self.get_num_record();
-        let num_record_left = num_record / 2;
-        let num_record_right = num_record - num_record_left;
-        let page_right = self.bpm.borrow_mut().alloc().unwrap();
-        {
-            let buffer = &mut page_right.borrow_mut().buffer;
-            // set is leaf
-            buffer[Self::IS_LEAF].copy_from_slice(&[1u8]);
-            // set num_record = num_record_right
-            buffer[Self::NUM_RECORD].copy_from_slice(&(num_record_right as u32).to_le_bytes());
-            // leave parent as none, the job should not be done by node
-            buffer[Self::PARENT_PAGE_ID].copy_from_slice(&0u32.to_le_bytes());
-            // move data
-            let start_lhs = self.offset_of_nth_key(num_record_left);
-            let end_lhs = self.end();
-            let start_rhs = Self::SIZE_OF_META;
-            let end_rhs = start_rhs + end_lhs - start_lhs;
-            buffer[start_rhs..end_rhs]
-                .copy_from_slice(&self.page.borrow().buffer[start_lhs..end_lhs]);
-        }
-        // mark dirty
-        page_right.borrow_mut().is_dirty = true;
-        // shrink self
-        self.set_num_record(num_record_left);
-        Self {
-            page: page_right,
-            bpm: self.bpm.clone(),
-            key_schema: self.key_schema.clone(),
-            key_size: self.key_size,
-            is_inlined: self.is_inlined,
-        }
+    pub fn ok_to_insert(&self, datums: &[Datum]) -> bool {
+        let bytes = Datum::to_bytes_with_schema(datums, self.schema.clone());
+        let head = self.get_head();
+        let tail = self.get_tail();
+        head + 12 + bytes.len() <= tail
     }
 
-    pub fn insert(&mut self, key: IndexKey, record_id: RecordID) -> Result<(), IndexError> {
-        let num_record = self.get_num_record();
-        let lower_bound_idx = self.lower_bound(&key).unwrap_or(num_record);
-        let start = self.offset_of_nth_key(lower_bound_idx);
-        let end = self.end();
-        self.page
-            .borrow_mut()
-            .buffer
-            .copy_within(start..end, start + self.key_size + 8);
-        let end = start + self.key_size + 8;
-        let mut bytes = key.to_bytes();
-        bytes.extend_from_slice(&(record_id.0 as u32).to_le_bytes());
-        bytes.extend_from_slice(&(record_id.1 as u32).to_le_bytes());
-        self.page.borrow_mut().buffer[start..end].copy_from_slice(bytes.as_slice());
-        let num_record = self.get_num_record();
-        self.set_num_record(num_record + 1);
-        self.page.borrow_mut().is_dirty = true;
-        Ok(())
+    pub fn split(&mut self) -> Self {
+        todo!()
+    }
+
+    pub fn insert(&mut self, _key: IndexKey, _record_id: RecordID) -> Result<(), IndexError> {
+        todo!()
     }
 }
