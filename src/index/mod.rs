@@ -9,6 +9,38 @@ use thiserror::Error;
 #[allow(dead_code)]
 pub type RecordID = (PageID, usize);
 
+enum IndexNode {
+    Leaf(LeafNode),
+    Internal(InternalNode),
+}
+
+impl IndexNode {
+    pub fn get_parent_page_id(&self) -> Option<PageID> {
+        match self {
+            Self::Leaf(node) => node.get_parent_page_id(),
+            Self::Internal(node) => node.get_parent_page_id(),
+        }
+    }
+    pub fn get_page_id(&self) -> PageID {
+        match self {
+            Self::Leaf(node) => node.get_page_id(),
+            Self::Internal(node) => node.get_page_id(),
+        }
+    }
+    pub fn key_at(&self, idx: usize) -> Vec<Datum> {
+        match self {
+            Self::Leaf(node) => node.key_at(idx),
+            Self::Internal(node) => node.key_at(idx),
+        }
+    }
+    pub fn split(&mut self) -> Self {
+        match self {
+            Self::Leaf(node) => Self::Leaf(node.split()),
+            Self::Internal(node) => Self::Internal(node.split()),
+        }
+    }
+}
+
 impl Drop for BPTIndex {
     fn drop(&mut self) {
         let page_id = self.page.borrow().page_id.unwrap();
@@ -70,12 +102,8 @@ impl BPTIndex {
         self.set_page_id_of_root(root_node.get_page_id());
     }
 
-    pub fn split_on_internal(&mut self, _internal_node: &mut InternalNode) {
-        todo!()
-    }
-
-    pub fn split_on_leaf(&mut self, leaf_node: &mut LeafNode) {
-        let lhs_node = leaf_node;
+    fn split(&mut self, node: &mut IndexNode) {
+        let lhs_node = node;
         let rhs_node = lhs_node.split();
         let new_key = rhs_node.key_at(0);
         let new_value = rhs_node.get_page_id();
@@ -92,7 +120,7 @@ impl BPTIndex {
         )
         .unwrap();
         if !parent_node.ok_to_insert(new_key.as_slice()) {
-            self.split_on_internal(&mut parent_node);
+            self.split(&mut IndexNode::Internal(parent_node.clone()));
         }
         parent_node.insert(&new_key, new_value);
     }
@@ -101,7 +129,7 @@ impl BPTIndex {
     /// 2. find the leaf node corresponding to the inserting key;
     /// 3. have enough space ? insert => done : split => 4
     /// 4. split, insert into parent => 3
-    pub fn insert(&mut self, key: &[Datum], _rid: RecordID) -> Result<(), IndexError> {
+    pub fn insert(&mut self, key: &[Datum], record_id: RecordID) -> Result<(), IndexError> {
         let mut page_id_of_current_node = self.get_page_id_of_root();
         let schema = Rc::new(self.get_key_schema());
         let mut leaf_node = loop {
@@ -116,9 +144,10 @@ impl BPTIndex {
             page_id_of_current_node = internal_node.page_id_at(branch_idx).unwrap();
         };
         if !leaf_node.ok_to_insert(key) {
-            self.split_on_leaf(&mut leaf_node);
+            self.split(&mut IndexNode::Leaf(leaf_node.clone()));
         }
-        todo!()
+        leaf_node.insert(key, record_id);
+        Ok(())
     }
 }
 

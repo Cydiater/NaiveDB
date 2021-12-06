@@ -24,6 +24,7 @@ impl Drop for InternalNode {
 }
 
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct InternalNode {
     page: PageRef,
     bpm: BufferPoolManagerRef,

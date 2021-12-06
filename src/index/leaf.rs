@@ -24,6 +24,7 @@ impl Drop for LeafNode {
 }
 
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct LeafNode {
     page: PageRef,
     bpm: BufferPoolManagerRef,
