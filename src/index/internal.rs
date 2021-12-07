@@ -104,7 +104,7 @@ impl InternalNode {
         page_id: PageID,
     ) -> Result<Self, IndexError> {
         let page = bpm.borrow_mut().fetch(page_id).unwrap();
-        if page.borrow().buffer[Self::IS_LEAF] == [0u8] {
+        if page.borrow().buffer[Self::IS_LEAF] != [0u8] {
             return Err(IndexError::NotInternalIndexNode);
         }
         Ok(Self { page, bpm, schema })
@@ -158,7 +158,7 @@ impl InternalNode {
             0
         };
         self.page.borrow_mut().buffer[Self::PARENT_PAGE_ID]
-            .copy_from_slice(&(page_id.to_le_bytes()));
+            .copy_from_slice(&((page_id as u32).to_le_bytes()));
         self.page.borrow_mut().is_dirty = true;
     }
 
@@ -180,6 +180,7 @@ impl InternalNode {
     }
 
     pub fn key_at(&self, idx: usize) -> Vec<Datum> {
+        assert!(idx < self.len() - 1);
         let base_offset = self.offset_at(idx);
         let bytes = &self.page.borrow().buffer[..base_offset];
         Datum::from_bytes_and_schema(self.schema.clone(), bytes)
@@ -227,7 +228,7 @@ impl InternalNode {
             page_ids.push(page_id);
         }
         // clear lhs
-        self.set_head(Self::SIZE_OF_META);
+        self.set_head(Self::SIZE_OF_META + 4);
         self.set_tail(PAGE_SIZE);
         let len_lhs = (len - 1) / 2;
         self.set_left_most_page_id(page_ids.remove(0));
@@ -262,7 +263,7 @@ impl InternalNode {
 
     /// append to the end, the order should be preserved
     pub fn append(&mut self, key: &[Datum], page_id: PageID) {
-        self.insert_at(self.len(), key, page_id);
+        self.insert_at(self.len() - 1, key, page_id);
     }
 
     /// random insert
@@ -296,7 +297,7 @@ impl InternalNode {
         self.page.borrow_mut().buffer[start..start + 4]
             .copy_from_slice(&(end as u32).to_le_bytes());
         // set page_id
-        let start = Self::SIZE_OF_META + idx * 8;
+        let start = Self::SIZE_OF_META + idx * 8 + 8;
         self.page.borrow_mut().buffer[start..start + 4]
             .copy_from_slice(&(page_id as u32).to_le_bytes());
         // mark dirty
@@ -318,7 +319,7 @@ mod tests {
     use super::*;
     use crate::datum::{DataType, Datum};
     use crate::storage::BufferPoolManager;
-    use crate::table::{Schema, Slice};
+    use crate::table::Schema;
     use std::fs::remove_file;
     use std::rc::Rc;
 
@@ -327,30 +328,6 @@ mod tests {
         let filename = {
             let bpm = BufferPoolManager::new_random_shared(10);
             let filename = bpm.borrow().filename();
-            let schema = Schema::from_slice(&[
-                (DataType::new_int(false), "v1".to_string()),
-                (DataType::new_varchar(false), "v2".to_string()),
-            ]);
-            let mut slice = Slice::new(bpm.clone(), Rc::new(schema));
-            // insert (1, 'foo'), (2, 'bar'), (3, 'hello'), (4, 'world')
-            slice
-                .add(&[Datum::Int(Some(1)), Datum::VarChar(Some("foo".to_string()))])
-                .unwrap();
-            slice
-                .add(&[Datum::Int(Some(2)), Datum::VarChar(Some("bar".to_string()))])
-                .unwrap();
-            slice
-                .add(&[
-                    Datum::Int(Some(4)),
-                    Datum::VarChar(Some("hello".to_string())),
-                ])
-                .unwrap();
-            slice
-                .add(&[
-                    Datum::Int(Some(8)),
-                    Datum::VarChar(Some("world".to_string())),
-                ])
-                .unwrap();
             let key_schema = Rc::new(Schema::from_slice(&[(
                 DataType::new_int(false),
                 "v1".to_string(),

@@ -99,7 +99,7 @@ impl LeafNode {
             0
         };
         self.page.borrow_mut().buffer[Self::PARENT_PAGE_ID]
-            .copy_from_slice(&(page_id.to_le_bytes()));
+            .copy_from_slice(&((page_id as u32).to_le_bytes()));
         self.page.borrow_mut().is_dirty = true;
     }
 
@@ -116,6 +116,7 @@ impl LeafNode {
     }
 
     fn offset_at(&self, idx: usize) -> usize {
+        assert!(idx < self.len());
         let start = Self::SIZE_OF_META + idx * 12;
         let end = start + 4;
         let bytes: [u8; 4] = self.page.borrow().buffer[start..end].try_into().unwrap();
@@ -123,6 +124,7 @@ impl LeafNode {
     }
 
     pub fn key_at(&self, idx: usize) -> Vec<Datum> {
+        assert!(idx < self.len());
         let base_offset = self.offset_at(idx);
         let bytes = &self.page.borrow().buffer[..base_offset];
         Datum::from_bytes_and_schema(self.schema.clone(), bytes)
@@ -215,9 +217,9 @@ impl LeafNode {
             self.append(keys[idx].as_slice(), record_ids[idx]);
         }
         // new rhs
-        let rhs = LeafNode::new(self.bpm.clone(), self.schema.clone());
+        let mut rhs = LeafNode::new(self.bpm.clone(), self.schema.clone());
         for idx in len_lhs..len {
-            self.append(keys[idx].as_slice(), record_ids[idx]);
+            rhs.append(keys[idx].as_slice(), record_ids[idx]);
         }
         // set parent_page_id
         rhs.set_parent_page_id(self.get_parent_page_id());
@@ -266,5 +268,35 @@ impl LeafNode {
             .copy_from_slice(&(record_id.1 as u32).to_le_bytes());
         // mark dirty
         self.page.borrow_mut().is_dirty = true;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::datum::DataType;
+    use crate::storage::BufferPoolManager;
+    use crate::table::Schema;
+    use std::fs::remove_file;
+    use std::rc::Rc;
+
+    #[test]
+    fn test_append() {
+        let filename = {
+            let bpm = BufferPoolManager::new_random_shared(10);
+            let filename = bpm.borrow().filename();
+            let schema = Rc::new(Schema::from_slice(&[(
+                DataType::new_int(false),
+                "v1".to_string(),
+            )]));
+            let dummy_record_id = (0, 0);
+            let mut node = LeafNode::new(bpm.clone(), schema.clone());
+            node.append(&[Datum::Int(Some(0))], dummy_record_id);
+            node.append(&[Datum::Int(Some(1))], dummy_record_id);
+            node.append(&[Datum::Int(Some(2))], dummy_record_id);
+            assert_eq!(node.len(), 3);
+            filename
+        };
+        remove_file(filename).unwrap()
     }
 }

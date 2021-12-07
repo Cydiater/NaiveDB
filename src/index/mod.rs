@@ -39,6 +39,12 @@ impl IndexNode {
             Self::Internal(node) => Self::Internal(node.split()),
         }
     }
+    pub fn set_parent_page_id(&mut self, parent_page_id: Option<PageID>) {
+        match self {
+            Self::Leaf(node) => node.set_parent_page_id(parent_page_id),
+            Self::Internal(node) => node.set_parent_page_id(parent_page_id),
+        }
+    }
 }
 
 impl Drop for BPTIndex {
@@ -116,30 +122,46 @@ impl BPTIndex {
         self.set_page_id_of_root(root_node.get_page_id());
     }
 
-    fn split(&mut self, node: &mut IndexNode) {
-        let lhs_node = node;
-        let rhs_node = lhs_node.split();
+    /// split an IndexNode, return the middle key and node at rhs
+    fn split(&mut self, node: &mut IndexNode) -> (Vec<Datum>, IndexNode) {
+        let mut rhs_node = node.split();
         let new_key = rhs_node.key_at(0);
         let new_value = rhs_node.get_page_id();
-        let parent_page_id = lhs_node.get_parent_page_id();
+        let parent_page_id = node.get_parent_page_id();
         if parent_page_id.is_none() {
-            self.set_root(&new_key, lhs_node.get_page_id(), new_value);
-            return;
+            self.set_root(&new_key, node.get_page_id(), new_value);
+            let page_id_of_root = self.get_page_id_of_root();
+            node.set_parent_page_id(Some(page_id_of_root));
+            rhs_node.set_parent_page_id(Some(page_id_of_root));
+            return (new_key, rhs_node);
         }
         let parent_page_id = parent_page_id.unwrap();
-        let mut parent_node = InternalNode::open(
+        let parent_node = InternalNode::open(
             self.bpm.clone(),
             Rc::new(self.get_key_schema()),
             parent_page_id,
         )
         .unwrap();
-        if !parent_node.ok_to_insert(new_key.as_slice()) {
-            self.split(&mut IndexNode::Internal(parent_node.clone()));
-        }
-        parent_node.insert(&new_key, new_value);
+        let mut node = if !parent_node.ok_to_insert(new_key.as_slice()) {
+            let (middle_key, rhs_node) = self.split(&mut IndexNode::Internal(parent_node.clone()));
+            if new_key >= middle_key {
+                if let IndexNode::Internal(rhs_node) = rhs_node {
+                    rhs_node
+                } else {
+                    unreachable!()
+                }
+            } else {
+                parent_node
+            }
+        } else {
+            parent_node
+        };
+        node.insert(&new_key, new_value);
+        rhs_node.set_parent_page_id(node.get_parent_page_id());
+        (new_key, rhs_node)
     }
 
-    pub fn find_leaf(&self, key: &[Datum]) -> Option<LeafNode> {
+    fn find_leaf(&self, key: &[Datum]) -> Option<LeafNode> {
         let mut page_id_of_current_node = self.get_page_id_of_root();
         let schema = Rc::new(self.get_key_schema());
         loop {
@@ -166,15 +188,29 @@ impl BPTIndex {
     /// 3. have enough space ? insert => done : split => 4
     /// 4. split, insert into parent => 3
     pub fn insert(&mut self, key: &[Datum], record_id: RecordID) -> Result<(), IndexError> {
-        let mut leaf_node = if let Some(leaf_node) = self.find_leaf(key) {
+        let leaf_node = if let Some(leaf_node) = self.find_leaf(key) {
             leaf_node
         } else {
             return Err(IndexError::KeyNotFound);
         };
-        if !leaf_node.ok_to_insert(key) {
-            self.split(&mut IndexNode::Leaf(leaf_node.clone()));
-        }
-        leaf_node.insert(key, record_id);
+        let mut node = if !leaf_node.ok_to_insert(key) {
+            let mut index_node = IndexNode::Leaf(leaf_node);
+            let (middle_key, rhs_node) = self.split(&mut index_node);
+            if key >= middle_key.as_slice() {
+                if let IndexNode::Leaf(rhs_node) = rhs_node {
+                    rhs_node
+                } else {
+                    unreachable!()
+                }
+            } else if let IndexNode::Leaf(node) = index_node {
+                node
+            } else {
+                unreachable!()
+            }
+        } else {
+            leaf_node
+        };
+        node.insert(key, record_id);
         Ok(())
     }
 
@@ -223,6 +259,30 @@ mod tests {
             index.insert(&[Datum::Int(Some(4))], (4, 0)).unwrap();
             assert_eq!(index.find(&[Datum::Int(Some(2))]), Some((2, 0)));
             assert_eq!(index.find(&[Datum::Int(Some(4))]), Some((4, 0)));
+            filename
+        };
+        remove_file(filename).unwrap();
+    }
+
+    #[test]
+    fn test_split_find() {
+        let filename = {
+            let bpm = BufferPoolManager::new_random_shared(2000);
+            let filename = bpm.borrow().filename();
+            let schema = Rc::new(Schema::from_slice(&[(
+                DataType::new_int(false),
+                "v1".to_string(),
+            )]));
+            let mut index = BPTIndex::new(bpm, schema);
+            for idx in 0..40000usize {
+                index
+                    .insert(&[Datum::Int(Some(idx as i32))], (idx, idx))
+                    .unwrap();
+                assert_eq!(
+                    index.find(&[Datum::Int(Some(idx as i32))]),
+                    Some((idx, idx)),
+                );
+            }
             filename
         };
         remove_file(filename).unwrap();
