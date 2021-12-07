@@ -109,7 +109,7 @@ impl LeafNode {
         page_id: PageID,
     ) -> Result<Self, IndexError> {
         let page = bpm.borrow_mut().fetch(page_id).unwrap();
-        if page.borrow().buffer[Self::IS_LEAF] == [1u8] {
+        if page.borrow().buffer[Self::IS_LEAF] != [1u8] {
             return Err(IndexError::NotLeafIndexNode);
         }
         Ok(Self { page, bpm, schema })
@@ -150,6 +150,9 @@ impl LeafNode {
 
     /// find the first record with key greater than input
     pub fn lower_bound(&self, key: &[Datum]) -> Option<usize> {
+        if self.len() == 0 {
+            return None;
+        }
         let mut left = 0;
         let mut right = self.len() - 1;
         let mut mid;
