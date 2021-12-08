@@ -1,4 +1,5 @@
-pub use crate::datum::DataType;
+use crate::datum::DataType;
+use crate::expr::BinaryOp;
 
 #[derive(Debug)]
 pub enum Statement {
@@ -30,9 +31,17 @@ pub struct ColumnRefExprNode {
 }
 
 #[derive(Debug)]
+pub struct BinaryExprNode {
+    pub lhs: Box<ExprNode>,
+    pub rhs: Box<ExprNode>,
+    pub op: BinaryOp,
+}
+
+#[derive(Debug)]
 pub enum ExprNode {
     Constant(ConstantExprNode),
     ColumnRef(ColumnRefExprNode),
+    Binary(BinaryExprNode),
 }
 
 #[derive(Debug)]
@@ -45,6 +54,7 @@ pub enum Selectors {
 pub struct SelectStmt {
     pub table_name: String,
     pub selectors: Selectors,
+    pub where_exprs: Option<Vec<ExprNode>>,
 }
 
 #[derive(Debug)]

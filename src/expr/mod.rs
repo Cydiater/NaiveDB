@@ -2,10 +2,13 @@ use crate::catalog::{CatalogError, CatalogManagerRef};
 use crate::datum::{DataType, Datum};
 use crate::parser::ast::{ConstantValue, ExprNode};
 use crate::table::Slice;
-pub use column_ref::ColumnRefExpr;
-pub use constant::ConstantExpr;
 use thiserror::Error;
 
+pub use binary::BinaryOp;
+pub use column_ref::ColumnRefExpr;
+pub use constant::ConstantExpr;
+
+mod binary;
 mod column_ref;
 mod constant;
 
@@ -91,6 +94,7 @@ impl ExprImpl {
                     node.column_name,
                 )))
             }
+            _ => todo!(),
         }
     }
 }

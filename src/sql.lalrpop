@@ -1,5 +1,6 @@
 use std::str::FromStr;
 use crate::datum::DataType;
+use crate::expr::BinaryOp;
 use crate::parser::ast::*;
 
 grammar;
@@ -8,6 +9,7 @@ pub Statements = Semicolon<Statement>;
 pub Fields = Comma<Field>;
 pub Exprs = Comma<Expr>;
 pub Tuples = Comma<Tuple>;
+pub WhereExprs = And<Expr>;
 
 Comma<T>: Vec<T> = {
     <mut v:(<T> ",")*> <e:T?> => match e {
@@ -29,9 +31,34 @@ Semicolon<T>: Vec<T> = {
     },
 };
 
-pub Expr: ExprNode = {
+And<T>: Vec<T> = {
+    <mut v:(<T> "and")*> <e:T?> => match e {
+        None => v,
+        Some(stmt) => {
+            v.push(stmt);
+            v
+        }
+    },
+}
+
+BooleanExpr: ExprNode = {
+    <binary_expr: BinaryExpr> => ExprNode::Binary(binary_expr),
+}
+
+ValueExpr: ExprNode = {
     <constant_expr: ConstantExpr> => ExprNode::Constant(constant_expr),
     <column_ref_expr: ColumnRefExpr> => ExprNode::ColumnRef(column_ref_expr),
+}
+
+pub Expr: ExprNode = {
+    BooleanExpr,
+    ValueExpr,
+}
+
+BinaryExpr: BinaryExprNode = {
+    <lhs: ValueExpr> "=" <rhs: ValueExpr> => BinaryExprNode { lhs: Box::new(lhs), rhs: Box::new(rhs), op: BinaryOp::Equal },
+    <lhs: ValueExpr> "<=" <rhs: ValueExpr> => BinaryExprNode { lhs: Box::new(lhs), rhs: Box::new(rhs), op: BinaryOp::LessThan },
+    <lhs: ValueExpr> ">=" <rhs: ValueExpr> => BinaryExprNode { lhs: Box::new(lhs), rhs: Box::new(rhs), op: BinaryOp::GreaterThan },
 }
 
 ColumnRefExpr: ColumnRefExprNode = {
@@ -74,13 +101,15 @@ pub Statement: Statement = {
     SelectStmt,
 }
 
+WhereClauses: Vec<ExprNode> = "where" <exprs: WhereExprs> => exprs;
+
 Selectors: Selectors = {
     "*" => Selectors::All,
     <exprs: Exprs> => Selectors::Exprs(exprs),
 }
 
 SelectStmt: Statement = {
-    "select" <selectors: Selectors> "from" <table_name: Identifier> ";" => Statement::Select(SelectStmt { table_name, selectors }),
+    "select" <selectors: Selectors> "from" <table_name: Identifier> <where_exprs: WhereClauses?> ";" => Statement::Select(SelectStmt { table_name, selectors, where_exprs }),
 }
 
 DescStmt: Statement = {

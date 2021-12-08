@@ -59,5 +59,9 @@ mod tests {
         assert!(sql::StatementsParser::new()
             .parse("select v1, v2, v3 from t;")
             .is_ok());
+        // where
+        assert!(sql::StatementsParser::new()
+            .parse("select * from t where v1 = 3;")
+            .is_ok());
     }
 }
