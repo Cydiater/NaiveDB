@@ -111,7 +111,8 @@ impl BufferPoolManager {
         let frame_id = self.replacer.victim()?;
         // fetch the page corresponding to the frame_id
         let page = self.buf[frame_id].clone();
-        if let Some(this_page_id) = page.borrow().page_id {
+        let this_page_id = page.borrow().page_id;
+        if let Some(this_page_id) = this_page_id {
             // write back
             if page.borrow_mut().is_dirty {
                 self.disk.write(page.clone())?;
@@ -206,6 +207,21 @@ mod tests {
         bpm.unpin(page_id).unwrap();
         assert_eq!(page.borrow().page_id, Some(page_id));
         // remove file
+        remove_file(filename).unwrap();
+    }
+
+    #[test]
+    fn stress_test() {
+        let filename = {
+            let bpm = BufferPoolManager::new_random_shared(200);
+            let filename = bpm.borrow().filename();
+            for _ in 0..10000 {
+                let page = bpm.borrow_mut().alloc().unwrap();
+                let page_id = page.borrow().page_id.unwrap();
+                bpm.borrow_mut().unpin(page_id).unwrap();
+            }
+            filename
+        };
         remove_file(filename).unwrap();
     }
 }
