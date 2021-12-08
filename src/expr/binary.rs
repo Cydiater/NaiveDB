@@ -58,7 +58,7 @@ impl BinaryExpr {
 }
 
 impl Expr for BinaryExpr {
-    fn eval(&mut self, slice: Option<&Slice>) -> Vec<Datum> {
+    fn eval(&self, slice: Option<&Slice>) -> Vec<Datum> {
         let datums_lhs = self.lhs.eval(slice);
         let datums_rhs = self.rhs.eval(slice);
         let func = self.op.gen_func();

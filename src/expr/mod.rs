@@ -13,7 +13,7 @@ mod column_ref;
 mod constant;
 
 pub trait Expr {
-    fn eval(&mut self, slice: Option<&Slice>) -> Vec<Datum>;
+    fn eval(&self, slice: Option<&Slice>) -> Vec<Datum>;
     fn return_type(&self) -> DataType;
     fn name(&self) -> String;
 }
@@ -26,7 +26,7 @@ pub enum ExprImpl {
 }
 
 impl ExprImpl {
-    pub fn eval(&mut self, slice: Option<&Slice>) -> Vec<Datum> {
+    pub fn eval(&self, slice: Option<&Slice>) -> Vec<Datum> {
         match self {
             ExprImpl::Constant(expr) => expr.eval(slice),
             ExprImpl::ColumnRef(expr) => expr.eval(slice),
@@ -105,12 +105,7 @@ impl ExprImpl {
                     table_name.clone(),
                     data_type_hint,
                 )?;
-                let rhs = Self::from_ast(
-                    *node.rhs,
-                    catalog,
-                    table_name,
-                    data_type_hint,
-                )?;
+                let rhs = Self::from_ast(*node.rhs, catalog, table_name, data_type_hint)?;
                 Ok(ExprImpl::Binary(BinaryExpr::new(
                     Box::new(lhs),
                     Box::new(rhs),

@@ -103,6 +103,9 @@ mod tests {
                     vec![Datum::Int(Some(3))],
                 ]
             );
+            let table = db.run("select v1 from t where v1 = 1;").unwrap();
+            let tuples = table.iter().collect_vec();
+            assert_eq!(tuples, vec![vec![Datum::Int(Some(1))],]);
             filename
         };
         remove_file(filename).unwrap();

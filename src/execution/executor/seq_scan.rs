@@ -19,6 +19,9 @@ impl SeqScanExecutor {
 }
 
 impl Executor for SeqScanExecutor {
+    fn schema(&self) -> SchemaRef {
+        self.schema.clone()
+    }
     fn execute(&mut self) -> Result<Option<Slice>, ExecutionError> {
         if let Some(page_id) = self.page_id {
             let slice = Slice::open(self.bpm.clone(), self.schema.clone(), page_id);

@@ -20,7 +20,7 @@ impl ColumnRefExpr {
 }
 
 impl Expr for ColumnRefExpr {
-    fn eval(&mut self, slice: Option<&Slice>) -> Vec<Datum> {
+    fn eval(&self, slice: Option<&Slice>) -> Vec<Datum> {
         if let Some(slice) = slice {
             let len = slice.get_num_tuple();
             let mut res = vec![];

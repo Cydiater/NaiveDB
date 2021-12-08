@@ -24,6 +24,9 @@ impl ValuesExecutor {
 }
 
 impl Executor for ValuesExecutor {
+    fn schema(&self) -> SchemaRef {
+        self.schema.clone()
+    }
     fn execute(&mut self) -> Result<Option<Slice>, ExecutionError> {
         if !self.executed {
             let mut slice = Slice::new(self.bpm.clone(), self.schema.clone());

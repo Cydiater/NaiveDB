@@ -149,8 +149,8 @@ impl Table {
             schema: self.schema.clone(),
         }
     }
-    pub fn from_slice(slices: Vec<Slice>, bpm: BufferPoolManagerRef) -> Self {
-        let mut table = Table::new(slices[0].schema.clone(), bpm);
+    pub fn from_slice(slices: Vec<Slice>, schema: SchemaRef, bpm: BufferPoolManagerRef) -> Self {
+        let mut table = Table::new(schema, bpm);
         slices.iter().for_each(|s| {
             let num_tuple = s.get_num_tuple();
             for idx in 0..num_tuple {

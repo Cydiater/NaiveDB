@@ -2,7 +2,7 @@ use crate::catalog::CatalogManagerRef;
 use crate::datum::{DataType, Datum};
 use crate::execution::{ExecutionError, Executor};
 use crate::storage::BufferPoolManagerRef;
-use crate::table::{Schema, Slice};
+use crate::table::{Schema, SchemaRef, Slice};
 use std::rc::Rc;
 
 pub struct DescExecutor {
@@ -24,18 +24,21 @@ impl DescExecutor {
 }
 
 impl Executor for DescExecutor {
+    fn schema(&self) -> SchemaRef {
+        Rc::new(Schema::from_slice(&[
+            (DataType::new_varchar(false), "Field".to_string()),
+            (DataType::new_varchar(false), "Type".to_string()),
+            (DataType::new_varchar(false), "Nullable".to_string()),
+        ]))
+    }
     fn execute(&mut self) -> Result<Option<Slice>, ExecutionError> {
         if !self.executed {
             let table = self
                 .catalog
                 .borrow_mut()
                 .find_table(self.table_name.clone())?;
-            let desc_schema = Schema::from_slice(&[
-                (DataType::new_varchar(false), "Field".to_string()),
-                (DataType::new_varchar(false), "Type".to_string()),
-                (DataType::new_varchar(false), "Nullable".to_string()),
-            ]);
-            let mut desc = Slice::new(self.bpm.clone(), Rc::new(desc_schema));
+            let desc_schema = self.schema();
+            let mut desc = Slice::new(self.bpm.clone(), desc_schema);
             table.schema.iter().for_each(|c| {
                 desc.add(&[
                     Datum::VarChar(Some(c.desc.clone())),
