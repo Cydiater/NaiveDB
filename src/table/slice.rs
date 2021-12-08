@@ -51,7 +51,7 @@ impl Slice {
     ) -> Result<Self, TableError> {
         let schema = Schema::from_slice(&[(DataType::new_varchar(false), header)]);
         let mut slice = Self::new(bpm, Rc::new(schema));
-        slice.add(vec![Datum::VarChar(Some(message))])?;
+        slice.add(&[Datum::VarChar(Some(message))])?;
         Ok(slice)
     }
 
@@ -140,16 +140,6 @@ impl Slice {
         self.page.borrow_mut().is_dirty = true;
     }
 
-    pub fn push(&self, data: &[u8]) -> Result<usize, TableError> {
-        let tail = self.get_tail();
-        let next_tail = tail - data.len();
-        // copy data
-        self.page.borrow_mut().buffer[next_tail..tail].copy_from_slice(data);
-        // mark dirty
-        self.page.borrow_mut().is_dirty = true;
-        Ok(next_tail)
-    }
-
     #[allow(dead_code)]
     pub fn record_id_at(&self, idx: usize) -> RecordID {
         let offset = Self::SIZE_OF_META + idx * std::mem::size_of::<u32>();
@@ -163,33 +153,9 @@ impl Slice {
                 .try_into()
                 .unwrap(),
         ) as usize;
-        assert!(base_offset <= PAGE_SIZE);
-        let mut tuple = Vec::<Datum>::new();
-        for col in self.schema.iter() {
-            let offset = base_offset - col.offset;
-            assert!(offset < PAGE_SIZE);
-            let datum = if col.data_type.is_inlined() {
-                let start = offset;
-                let end = start + col.data_type.width_of_value().unwrap();
-                let bytes = self.page.borrow().buffer[start..end].to_vec();
-                Datum::from_bytes(&col.data_type, &bytes)
-            } else {
-                let start = u32::from_le_bytes(
-                    self.page.borrow().buffer[offset..offset + 4]
-                        .try_into()
-                        .unwrap(),
-                ) as usize;
-                let end = u32::from_le_bytes(
-                    self.page.borrow().buffer[offset + 4..offset + 8]
-                        .try_into()
-                        .unwrap(),
-                ) as usize;
-                let bytes = self.page.borrow().buffer[start..end].to_vec();
-                Datum::from_bytes(&col.data_type, &bytes)
-            };
-            tuple.push(datum);
-        }
-        Ok(tuple)
+        let bytes = &self.page.borrow().buffer[..base_offset];
+        let datums = Datum::from_bytes_and_schema(self.schema.clone(), bytes);
+        Ok(datums)
     }
 
     pub fn ok_to_add(&self, datums: &[Datum]) -> bool {
@@ -201,45 +167,25 @@ impl Slice {
         delta_size <= self.get_free_size()
     }
 
-    pub fn add(&mut self, datums: Vec<Datum>) -> Result<(), TableError> {
+    pub fn add(&mut self, datums: &[Datum]) -> Result<(), TableError> {
         // check schema
         if datums.len() != self.schema.len() {
             return Err(TableError::DatumSchemaNotMatch);
         }
         // check if ok to insert into the slice
-        if !self.ok_to_add(&datums) {
+        if !self.ok_to_add(datums) {
             return Err(TableError::SliceOutOfSpace);
         }
-        let last_tail = self.get_tail();
-        // fixed part
-        let mut not_inlined_data = Vec::<(usize, DataType, Datum)>::new();
-        for (col, dat) in self.schema.iter().zip(datums.into_iter()) {
-            let tail = if dat.is_inlined() {
-                self.push(dat.to_bytes(&col.data_type).as_slice())?
-            } else {
-                let tail = self.push(&[0u8; 8])?;
-                not_inlined_data.push((tail, col.data_type, dat));
-                tail
-            };
-            self.set_tail(tail);
-        }
-        // variable part
-        for (offset, data_type, dat) in not_inlined_data {
-            let end = self.get_tail();
-            let tail = self.push(&dat.to_bytes(&data_type))?;
-            let start = tail;
-            self.set_tail(tail);
-            self.page.borrow_mut().buffer[offset..offset + 4]
-                .copy_from_slice(&(start as u32).to_le_bytes());
-            self.page.borrow_mut().buffer[offset + 4..offset + 8]
-                .copy_from_slice(&(end as u32).to_le_bytes());
-        }
+        let bytes = Datum::to_bytes_with_schema(datums, self.schema.clone());
+        let end = self.get_tail();
+        let start = end - bytes.len();
+        self.page.borrow_mut().buffer[start..end].copy_from_slice(bytes.as_slice());
+        self.set_tail(start);
         // move head
         let head = self.get_head();
         self.set_head(head + 4);
         // set offset
-        self.page.borrow_mut().buffer[head..head + 4]
-            .copy_from_slice(&(last_tail as u32).to_le_bytes());
+        self.page.borrow_mut().buffer[head..head + 4].copy_from_slice(&(end as u32).to_le_bytes());
         // increase num_tuple
         let num_tuple = self.get_num_tuple();
         self.set_num_tuple(num_tuple + 1);
@@ -292,8 +238,8 @@ mod tests {
             let tuple3 = vec![Datum::Int(Some(40)), Datum::Char(Some("foo".to_string()))];
             let page_id = {
                 let mut slice = Slice::new(bpm.clone(), Rc::new(schema));
-                slice.add(tuple1.clone()).unwrap();
-                slice.add(tuple2.clone()).unwrap();
+                slice.add(tuple1.as_slice()).unwrap();
+                slice.add(tuple2.as_slice()).unwrap();
                 assert_eq!(slice.at(0).unwrap(), tuple1);
                 assert_eq!(slice.at(1).unwrap(), tuple2);
                 slice.get_page_id()
@@ -304,7 +250,7 @@ mod tests {
                 (DataType::new_char(20, false), "v2".to_string()),
             ]);
             let mut slice = Slice::open(bpm.clone(), Rc::new(schema), page_id);
-            slice.add(tuple3.clone()).unwrap();
+            slice.add(tuple3.as_slice()).unwrap();
             assert_eq!(slice.at(0).unwrap(), tuple1);
             assert_eq!(slice.at(1).unwrap(), tuple2);
             assert_eq!(slice.at(2).unwrap(), tuple3);
@@ -321,9 +267,9 @@ mod tests {
             let schema = Schema::from_slice(&[(DataType::new_int(false), "v1".to_string())]);
             let mut slice = Slice::new(bpm.clone(), Rc::new(schema));
             for i in 0..453 {
-                slice.add(vec![Datum::Int(Some(i))]).unwrap();
+                slice.add(&[Datum::Int(Some(i))]).unwrap();
             }
-            assert!(slice.add(vec![Datum::Int(Some(0))]).is_err());
+            assert!(slice.add(&[Datum::Int(Some(0))]).is_err());
             filename
         };
         remove_file(filename).unwrap();
@@ -348,8 +294,8 @@ mod tests {
                 Datum::Int(Some(30)),
                 Datum::VarChar(Some("world".to_string())),
             ];
-            slice.add(tuple1.clone()).unwrap();
-            slice.add(tuple2.clone()).unwrap();
+            slice.add(tuple1.as_slice()).unwrap();
+            slice.add(tuple2.as_slice()).unwrap();
             assert_eq!(slice.at(0).unwrap(), tuple1);
             assert_eq!(slice.at(1).unwrap(), tuple2);
             filename

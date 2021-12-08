@@ -64,8 +64,8 @@ impl BufferPoolManager {
     pub fn fetch(&mut self, page_id: PageID) -> Result<PageRef, StorageError> {
         // if we can find this page in buffer
         if let Some(&frame_id) = self.page_table.get(&page_id) {
-            self.replacer.pin(frame_id);
             let page = self.buf[frame_id].clone();
+            self.replacer.pin(frame_id);
             page.borrow_mut().pin_count += 1;
             return Ok(page);
         }
@@ -81,6 +81,7 @@ impl BufferPoolManager {
             self.page_table.remove(&this_page_id);
         }
         // reset meta
+        self.replacer.pin(frame_id);
         page.borrow_mut().pin_count = 1;
         page.borrow_mut().is_dirty = false;
         page.borrow_mut().page_id = Some(page_id);
@@ -121,6 +122,7 @@ impl BufferPoolManager {
         }
         // ask disk for allocating page
         self.disk.allocate(page.clone())?;
+        self.replacer.pin(frame_id);
         // update page table
         self.page_table
             .insert(page.borrow().page_id.unwrap(), frame_id);
