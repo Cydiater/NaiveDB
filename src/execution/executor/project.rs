@@ -55,7 +55,7 @@ impl Executor for ProjectExecutor {
                 }
             }
             if slice.ok_to_add(&self.buffer[0]) {
-                slice.add(self.buffer.remove(0))?;
+                slice.add(&self.buffer.remove(0))?;
             } else {
                 break;
             }
