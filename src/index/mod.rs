@@ -274,7 +274,7 @@ mod tests {
                 "v1".to_string(),
             )]));
             let mut index = BPTIndex::new(bpm, schema);
-            for idx in 0..40000usize {
+            for idx in 0..400000usize {
                 index
                     .insert(&[Datum::Int(Some(idx as i32))], (idx, idx))
                     .unwrap();
