@@ -2,7 +2,7 @@ use crate::datum::Datum;
 use crate::execution::{ExecutionError, Executor, ExecutorImpl};
 use crate::expr::ExprImpl;
 use crate::storage::BufferPoolManagerRef;
-use crate::table::{Schema, Slice};
+use crate::table::{Schema, SchemaRef, Slice};
 use itertools::Itertools;
 use std::rc::Rc;
 
@@ -25,14 +25,16 @@ impl ProjectExecutor {
 }
 
 impl Executor for ProjectExecutor {
-    fn execute(&mut self) -> Result<Option<Slice>, ExecutionError> {
+    fn schema(&self) -> SchemaRef {
         let type_and_names = self
             .exprs
             .iter()
             .map(|e| (e.return_type(), e.name()))
             .collect_vec();
-        let schema = Rc::new(Schema::from_slice(type_and_names.as_slice()));
-        println!("schema = {:#?}", schema);
+        Rc::new(Schema::from_slice(type_and_names.as_slice()))
+    }
+    fn execute(&mut self) -> Result<Option<Slice>, ExecutionError> {
+        let schema = self.schema();
         let mut slice = Slice::new(self.bpm.clone(), schema);
         loop {
             if self.buffer.is_empty() {

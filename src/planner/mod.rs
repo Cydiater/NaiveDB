@@ -1,11 +1,12 @@
 use crate::catalog::CatalogManagerRef;
 use crate::parser::ast::Statement;
+use log::info;
+
 pub use create_database::CreateDatabasePlan;
 pub use create_table::CreateTablePlan;
 pub use desc::DescPlan;
 pub use insert::InsertPlan;
-use log::info;
-pub use select::{ProjectPlan, SeqScanPlan};
+pub use select::{FilterPlan, ProjectPlan, SeqScanPlan};
 pub use use_database::UseDatabasePlan;
 pub use values::ValuesPlan;
 
@@ -28,6 +29,7 @@ pub enum Plan {
     Desc(DescPlan),
     SeqScan(SeqScanPlan),
     Project(ProjectPlan),
+    Filter(FilterPlan),
 }
 
 pub struct Planner {

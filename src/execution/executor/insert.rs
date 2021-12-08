@@ -1,6 +1,6 @@
 use crate::catalog::CatalogManagerRef;
 use crate::execution::{ExecutionError, Executor, ExecutorImpl};
-use crate::table::Slice;
+use crate::table::{SchemaRef, Slice};
 use log::info;
 
 #[allow(dead_code)]
@@ -21,6 +21,9 @@ impl InsertExecutor {
 }
 
 impl Executor for InsertExecutor {
+    fn schema(&self) -> SchemaRef {
+        self.child.schema()
+    }
     fn execute(&mut self) -> Result<Option<Slice>, ExecutionError> {
         let input = self.child.execute()?;
         if let Some(input) = input {

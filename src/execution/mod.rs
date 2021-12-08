@@ -80,6 +80,14 @@ impl Engine {
                     self.bpm.clone(),
                 ))
             }
+            Plan::Filter(plan) => {
+                let child = self.build(*plan.child);
+                ExecutorImpl::Filter(FilterExecutor::new(
+                    self.bpm.clone(),
+                    Box::new(child),
+                    plan.exprs,
+                ))
+            }
         }
     }
     pub fn new(catalog: CatalogManagerRef, bpm: BufferPoolManagerRef) -> Self {
@@ -91,7 +99,8 @@ impl Engine {
         while let Some(slice) = executor.execute()? {
             slices.push(slice);
         }
-        Ok(Table::from_slice(slices, self.bpm.clone()))
+        let schema = executor.schema();
+        Ok(Table::from_slice(slices, schema, self.bpm.clone()))
     }
 }
 
