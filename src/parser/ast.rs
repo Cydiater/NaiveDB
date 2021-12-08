@@ -12,7 +12,7 @@ pub enum Statement {
     Select(SelectStmt),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ConstantValue {
     Null,
     String(String),

@@ -4,7 +4,7 @@ use crate::parser::ast::{ConstantValue, ExprNode};
 use crate::table::Slice;
 use thiserror::Error;
 
-pub use binary::BinaryOp;
+pub use binary::{BinaryExpr, BinaryOp};
 pub use column_ref::ColumnRefExpr;
 pub use constant::ConstantExpr;
 
@@ -22,6 +22,7 @@ pub trait Expr {
 pub enum ExprImpl {
     Constant(ConstantExpr),
     ColumnRef(ColumnRefExpr),
+    Binary(BinaryExpr),
 }
 
 impl ExprImpl {
@@ -29,18 +30,21 @@ impl ExprImpl {
         match self {
             ExprImpl::Constant(expr) => expr.eval(slice),
             ExprImpl::ColumnRef(expr) => expr.eval(slice),
+            ExprImpl::Binary(expr) => expr.eval(slice),
         }
     }
     pub fn return_type(&self) -> DataType {
         match self {
             ExprImpl::Constant(expr) => expr.return_type(),
             ExprImpl::ColumnRef(expr) => expr.return_type(),
+            ExprImpl::Binary(expr) => expr.return_type(),
         }
     }
     pub fn name(&self) -> String {
         match self {
             ExprImpl::Constant(expr) => expr.name(),
             ExprImpl::ColumnRef(expr) => expr.name(),
+            ExprImpl::Binary(expr) => expr.name(),
         }
     }
     pub fn from_ast(
@@ -94,7 +98,25 @@ impl ExprImpl {
                     node.column_name,
                 )))
             }
-            _ => todo!(),
+            ExprNode::Binary(node) => {
+                let lhs = Self::from_ast(
+                    *node.lhs,
+                    catalog.clone(),
+                    table_name.clone(),
+                    data_type_hint,
+                )?;
+                let rhs = Self::from_ast(
+                    *node.rhs,
+                    catalog,
+                    table_name,
+                    data_type_hint,
+                )?;
+                Ok(ExprImpl::Binary(BinaryExpr::new(
+                    Box::new(lhs),
+                    Box::new(rhs),
+                    node.op,
+                )))
+            }
         }
     }
 }

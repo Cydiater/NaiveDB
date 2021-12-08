@@ -3,7 +3,7 @@ use crate::expr::{Expr, ExprImpl};
 use crate::table::Slice;
 use itertools::Itertools;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum BinaryOp {
     Equal,
     LessThan,
@@ -38,11 +38,23 @@ impl BinaryOp {
     }
 }
 
+#[derive(Debug)]
 pub struct BinaryExpr {
     lhs: Box<ExprImpl>,
     rhs: Box<ExprImpl>,
     op: BinaryOp,
     desc: String,
+}
+
+impl BinaryExpr {
+    pub fn new(lhs: Box<ExprImpl>, rhs: Box<ExprImpl>, op: BinaryOp) -> Self {
+        Self {
+            lhs,
+            rhs,
+            op,
+            desc: "".to_string(),
+        }
+    }
 }
 
 impl Expr for BinaryExpr {
