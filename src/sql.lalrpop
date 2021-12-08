@@ -57,8 +57,8 @@ pub Expr: ExprNode = {
 
 BinaryExpr: BinaryExprNode = {
     <lhs: ValueExpr> "=" <rhs: ValueExpr> => BinaryExprNode { lhs: Box::new(lhs), rhs: Box::new(rhs), op: BinaryOp::Equal },
-    <lhs: ValueExpr> "<=" <rhs: ValueExpr> => BinaryExprNode { lhs: Box::new(lhs), rhs: Box::new(rhs), op: BinaryOp::LessThan },
-    <lhs: ValueExpr> ">=" <rhs: ValueExpr> => BinaryExprNode { lhs: Box::new(lhs), rhs: Box::new(rhs), op: BinaryOp::GreaterThan },
+    <lhs: ValueExpr> "<" <rhs: ValueExpr> => BinaryExprNode { lhs: Box::new(lhs), rhs: Box::new(rhs), op: BinaryOp::LessThan },
+    <lhs: ValueExpr> ">" <rhs: ValueExpr> => BinaryExprNode { lhs: Box::new(lhs), rhs: Box::new(rhs), op: BinaryOp::GreaterThan },
 }
 
 ColumnRefExpr: ColumnRefExprNode = {
