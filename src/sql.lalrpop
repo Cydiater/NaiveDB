@@ -10,6 +10,7 @@ pub Fields = Comma<Field>;
 pub Exprs = Comma<Expr>;
 pub Tuples = Comma<Tuple>;
 pub WhereExprs = And<Expr>;
+pub Columns = Comma<Identifier>;
 
 Comma<T>: Vec<T> = {
     <mut v:(<T> ",")*> <e:T?> => match e {
@@ -99,6 +100,7 @@ pub Statement: Statement = {
     InsertStmt,
     DescStmt,
     SelectStmt,
+    AddIndexStmt,
 }
 
 WhereClauses: Vec<ExprNode> = "where" <exprs: WhereExprs> => exprs;
@@ -106,6 +108,10 @@ WhereClauses: Vec<ExprNode> = "where" <exprs: WhereExprs> => exprs;
 Selectors: Selectors = {
     "*" => Selectors::All,
     <exprs: Exprs> => Selectors::Exprs(exprs),
+}
+
+AddIndexStmt: Statement = {
+    "alter" "table" <table_name: Identifier> "add" "index" "("<columns: Columns> ")" ";" => Statement::AddIndex(AddIndexStmt { table_name, columns }),
 }
 
 SelectStmt: Statement = {

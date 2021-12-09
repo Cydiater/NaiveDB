@@ -63,5 +63,9 @@ mod tests {
         assert!(sql::StatementsParser::new()
             .parse("select * from t where v1 = 3;")
             .is_ok());
+        // add index
+        assert!(sql::StatementsParser::new()
+            .parse("alter table t add index (v1, v2);")
+            .is_ok());
     }
 }

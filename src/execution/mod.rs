@@ -88,6 +88,7 @@ impl Engine {
                     plan.exprs,
                 ))
             }
+            Plan::AddIndex(_) => todo!(),
         }
     }
     pub fn new(catalog: CatalogManagerRef, bpm: BufferPoolManagerRef) -> Self {

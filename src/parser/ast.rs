@@ -10,6 +10,7 @@ pub enum Statement {
     Insert(InsertStmt),
     Desc(DescStmt),
     Select(SelectStmt),
+    AddIndex(AddIndexStmt),
 }
 
 #[derive(Debug, Clone)]
@@ -87,6 +88,12 @@ pub struct InsertStmt {
 #[derive(Debug)]
 pub enum Field {
     Normal(NormalField),
+}
+
+#[derive(Debug)]
+pub struct AddIndexStmt {
+    pub table_name: String,
+    pub columns: Vec<String>,
 }
 
 #[derive(Debug)]
