@@ -79,6 +79,21 @@ impl CatalogManager {
             Err(CatalogError::NotUsingDatabase)
         }
     }
+    #[allow(dead_code)]
+    pub fn add_index(
+        &mut self,
+        table_name: String,
+        columns: Vec<String>,
+        page_id: PageID,
+    ) -> Result<(), CatalogError> {
+        if let Some(table_catalog) = self.table_catalog.as_mut() {
+            let key = table_name + ":" + &columns.join(":");
+            table_catalog.insert(page_id, key)?;
+            Ok(())
+        } else {
+            Err(CatalogError::NotUsingDatabase)
+        }
+    }
     pub fn iter(&self) -> CatalogIter {
         self.database_catalog.iter()
     }
