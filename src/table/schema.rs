@@ -1,3 +1,4 @@
+use crate::expr::ExprImpl;
 use crate::table::DataType;
 use itertools::Itertools;
 use std::convert::TryInto;
@@ -83,6 +84,13 @@ impl Schema {
     }
     pub fn from_slice(type_and_names: &[(DataType, String)]) -> Self {
         Schema::new(Column::from_slice(type_and_names))
+    }
+    pub fn from_exprs(exprs: &[ExprImpl]) -> Self {
+        let type_and_names = exprs
+            .iter()
+            .map(|e| (e.return_type(), e.name()))
+            .collect_vec();
+        Self::from_slice(&type_and_names)
     }
     pub fn iter(&self) -> Iter<Column> {
         self.columns.iter()

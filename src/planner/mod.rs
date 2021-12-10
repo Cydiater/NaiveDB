@@ -2,6 +2,7 @@ use crate::catalog::CatalogManagerRef;
 use crate::parser::ast::Statement;
 use log::info;
 
+pub use add_index::AddIndexPlan;
 pub use create_database::CreateDatabasePlan;
 pub use create_table::CreateTablePlan;
 pub use desc::DescPlan;
@@ -10,6 +11,7 @@ pub use select::{FilterPlan, ProjectPlan, SeqScanPlan};
 pub use use_database::UseDatabasePlan;
 pub use values::ValuesPlan;
 
+mod add_index;
 mod create_database;
 mod create_table;
 mod desc;
@@ -30,6 +32,7 @@ pub enum Plan {
     SeqScan(SeqScanPlan),
     Project(ProjectPlan),
     Filter(FilterPlan),
+    AddIndex(AddIndexPlan),
 }
 
 pub struct Planner {
@@ -50,6 +53,7 @@ impl Planner {
             Statement::Insert(stmt) => self.plan_insert(stmt),
             Statement::Desc(stmt) => self.plan_desc(stmt),
             Statement::Select(stmt) => self.plan_select(stmt),
+            Statement::AddIndex(stmt) => self.plan_add_index(stmt),
         }
     }
 }

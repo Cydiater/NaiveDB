@@ -110,8 +110,14 @@ impl Table {
     pub fn get_page_id(&self) -> PageID {
         self.page.borrow().page_id.unwrap()
     }
-    pub fn get_page_id_of_first_slice(&self) -> PageID {
-        u32::from_le_bytes(self.page.borrow().buffer[0..4].try_into().unwrap()) as usize
+    pub fn get_page_id_of_first_slice(&self) -> Option<PageID> {
+        let page_id =
+            u32::from_le_bytes(self.page.borrow().buffer[0..4].try_into().unwrap()) as usize;
+        if page_id == 0 {
+            None
+        } else {
+            Some(page_id)
+        }
     }
     pub fn set_page_id_of_first_slice(&self, page_id: PageID) {
         self.page.borrow_mut().buffer[0..4].copy_from_slice(&(page_id as u32).to_le_bytes());
@@ -119,11 +125,15 @@ impl Table {
     }
     pub fn insert(&mut self, datums: Vec<Datum>) -> Result<(), TableError> {
         let page_id_of_first_slice = self.get_page_id_of_first_slice();
-        let mut slice = Slice::open(
-            self.bpm.clone(),
-            self.schema.clone(),
-            page_id_of_first_slice,
-        );
+        let mut slice = if let Some(page_id_of_first_slice) = page_id_of_first_slice {
+            Slice::open(
+                self.bpm.clone(),
+                self.schema.clone(),
+                page_id_of_first_slice,
+            )
+        } else {
+            Slice::new(self.bpm.clone(), self.schema.clone())
+        };
         if slice.ok_to_add(&datums) {
             slice.add(&datums).unwrap();
             Ok(())
@@ -137,11 +147,15 @@ impl Table {
     }
     pub fn iter(&self) -> TableIter {
         let page_id_of_first_slice = self.get_page_id_of_first_slice();
-        let slice = Slice::open(
-            self.bpm.clone(),
-            self.schema.clone(),
-            page_id_of_first_slice,
-        );
+        let slice = if let Some(page_id_of_first_slice) = page_id_of_first_slice {
+            Slice::open(
+                self.bpm.clone(),
+                self.schema.clone(),
+                page_id_of_first_slice,
+            )
+        } else {
+            Slice::new(self.bpm.clone(), self.schema.clone())
+        };
         TableIter {
             idx: 0,
             slice,
@@ -159,6 +173,17 @@ impl Table {
             }
         });
         table
+    }
+    pub fn into_slice(self) -> Vec<Slice> {
+        let mut slices = vec![];
+        let mut page_id = self.get_page_id_of_first_slice();
+        while page_id.is_some() {
+            let slice = Slice::open(self.bpm.clone(), self.schema.clone(), page_id.unwrap());
+            let next_page_id = slice.get_next_page_id();
+            slices.push(slice);
+            page_id = next_page_id;
+        }
+        slices
     }
 }
 

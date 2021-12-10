@@ -1,6 +1,7 @@
 use crate::execution::ExecutionError;
 use crate::table::{SchemaRef, Slice};
 
+pub use add_index::AddIndexExecutor;
 pub use create_database::CreateDatabaseExecutor;
 pub use create_table::CreateTableExecutor;
 pub use desc::DescExecutor;
@@ -12,6 +13,7 @@ pub use show_databases::ShowDatabasesExecutor;
 pub use use_database::UseDatabaseExecutor;
 pub use values::ValuesExecutor;
 
+mod add_index;
 mod create_database;
 mod create_table;
 mod desc;
@@ -40,6 +42,7 @@ pub enum ExecutorImpl {
     SeqScan(SeqScanExecutor),
     Project(ProjectExecutor),
     Filter(FilterExecutor),
+    AddIndex(AddIndexExecutor),
 }
 
 impl ExecutorImpl {
@@ -55,6 +58,7 @@ impl ExecutorImpl {
             Self::SeqScan(executor) => executor.execute(),
             Self::Project(executor) => executor.execute(),
             Self::Filter(executor) => executor.execute(),
+            Self::AddIndex(executor) => executor.execute(),
         }
     }
     pub fn schema(&self) -> SchemaRef {
@@ -69,6 +73,7 @@ impl ExecutorImpl {
             Self::SeqScan(executor) => executor.schema(),
             Self::Project(executor) => executor.schema(),
             Self::Filter(executor) => executor.schema(),
+            Self::AddIndex(executor) => executor.schema(),
         }
     }
 }
