@@ -75,7 +75,7 @@ mod tests {
     use std::fs::remove_file;
 
     #[test]
-    fn test_insert_select() {
+    fn basic_test() {
         let filename = {
             let mut db = NaiveDB::new_random();
             let filename = db.filename();
@@ -106,6 +106,7 @@ mod tests {
             let table = db.run("select v1 from t where v1 = 1;").unwrap();
             let tuples = table.iter().collect_vec();
             assert_eq!(tuples, vec![vec![Datum::Int(Some(1))],]);
+            db.run("alter table t add index (v1);").unwrap();
             filename
         };
         remove_file(filename).unwrap();

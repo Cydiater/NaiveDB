@@ -66,11 +66,7 @@ impl Engine {
                     .unwrap();
                 let schema = table.schema.clone();
                 let page_id = table.get_page_id_of_first_slice();
-                ExecutorImpl::SeqScan(SeqScanExecutor::new(
-                    self.bpm.clone(),
-                    page_id,
-                    schema,
-                ))
+                ExecutorImpl::SeqScan(SeqScanExecutor::new(self.bpm.clone(), page_id, schema))
             }
             Plan::Project(plan) => {
                 let child = self.build(*plan.child);
@@ -88,7 +84,12 @@ impl Engine {
                     plan.exprs,
                 ))
             }
-            Plan::AddIndex(_) => todo!(),
+            Plan::AddIndex(plan) => ExecutorImpl::AddIndex(AddIndexExecutor::new(
+                self.bpm.clone(),
+                self.catalog.clone(),
+                plan.table_name,
+                plan.exprs,
+            )),
         }
     }
     pub fn new(catalog: CatalogManagerRef, bpm: BufferPoolManagerRef) -> Self {

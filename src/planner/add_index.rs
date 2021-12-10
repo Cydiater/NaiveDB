@@ -4,10 +4,9 @@ use crate::planner::{Plan, Planner};
 use itertools::Itertools;
 
 #[derive(Debug)]
-#[allow(dead_code)]
 pub struct AddIndexPlan {
-    table_name: String,
-    exprs: Vec<ExprImpl>,
+    pub table_name: String,
+    pub exprs: Vec<ExprImpl>,
 }
 
 impl Planner {

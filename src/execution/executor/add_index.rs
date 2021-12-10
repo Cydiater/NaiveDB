@@ -13,6 +13,24 @@ pub struct AddIndexExecutor {
     catalog: CatalogManagerRef,
     table_name: String,
     exprs: Vec<ExprImpl>,
+    executed: bool,
+}
+
+impl AddIndexExecutor {
+    pub fn new(
+        bpm: BufferPoolManagerRef,
+        catalog: CatalogManagerRef,
+        table_name: String,
+        exprs: Vec<ExprImpl>,
+    ) -> Self {
+        AddIndexExecutor {
+            bpm,
+            catalog,
+            table_name,
+            exprs,
+            executed: false,
+        }
+    }
 }
 
 impl Executor for AddIndexExecutor {
@@ -23,6 +41,10 @@ impl Executor for AddIndexExecutor {
         )]))
     }
     fn execute(&mut self) -> Result<Option<Slice>, ExecutionError> {
+        if self.executed {
+            return Ok(None);
+        }
+        self.executed = true;
         let table = self.catalog.borrow().find_table(self.table_name.clone())?;
         let schema = Rc::new(Schema::from_exprs(&self.exprs));
         let mut index = BPTIndex::new(self.bpm.clone(), schema.clone());
@@ -34,18 +56,15 @@ impl Executor for AddIndexExecutor {
                 .iter_mut()
                 .map(|e| e.eval(Some(&slice)))
                 .collect();
-            let len = columns.len();
-            let rows = columns
-                .into_iter()
-                .fold(vec![vec![]; len], |rows, col| {
-                    rows.into_iter()
-                        .zip(col.into_iter())
-                        .map(|(mut r, d)| {
-                            r.push(d);
-                            r
-                        })
-                        .collect_vec()
-                });
+            let rows = columns.into_iter().fold(vec![vec![]; slice.get_num_tuple()], |rows, col| {
+                rows.into_iter()
+                    .zip(col.into_iter())
+                    .map(|(mut r, d)| {
+                        r.push(d);
+                        r
+                    })
+                    .collect_vec()
+            });
             for (idx, row) in rows.iter().enumerate() {
                 let record_id = slice.record_id_at(idx);
                 index.insert(row, record_id).unwrap();
