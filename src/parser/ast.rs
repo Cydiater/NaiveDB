@@ -93,7 +93,7 @@ pub enum Field {
 #[derive(Debug)]
 pub struct AddIndexStmt {
     pub table_name: String,
-    pub columns: Vec<String>,
+    pub exprs: Vec<ExprNode>,
 }
 
 #[derive(Debug)]

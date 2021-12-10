@@ -80,6 +80,10 @@ impl BPTIndex {
     const PAGE_ID_OF_ROOT: Range<usize> = 0..4;
     const SIZE_OF_META: usize = 4;
 
+    pub fn get_page_id(&self) -> PageID {
+        self.page.borrow().page_id.unwrap()
+    }
+
     pub fn new(bpm: BufferPoolManagerRef, schema: SchemaRef) -> Self {
         let page = bpm.borrow_mut().alloc().unwrap();
         let leaf_node = LeafNode::new(bpm.clone(), schema.clone());

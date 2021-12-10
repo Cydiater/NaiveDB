@@ -68,7 +68,7 @@ impl Engine {
                 let page_id = table.get_page_id_of_first_slice();
                 ExecutorImpl::SeqScan(SeqScanExecutor::new(
                     self.bpm.clone(),
-                    Some(page_id),
+                    page_id,
                     schema,
                 ))
             }

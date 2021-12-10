@@ -1,6 +1,7 @@
 use crate::catalog::{Catalog, CatalogError, CatalogIter};
 use crate::storage::{BufferPoolManagerRef, PageID};
-use crate::table::Table;
+use crate::table::{SchemaRef, Table};
+use itertools::Itertools;
 use log::info;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -83,10 +84,11 @@ impl CatalogManager {
     pub fn add_index(
         &mut self,
         table_name: String,
-        columns: Vec<String>,
+        schema: SchemaRef,
         page_id: PageID,
     ) -> Result<(), CatalogError> {
         if let Some(table_catalog) = self.table_catalog.as_mut() {
+            let columns = schema.iter().map(|c| c.desc.clone()).collect_vec();
             let key = table_name + ":" + &columns.join(":");
             table_catalog.insert(page_id, key)?;
             Ok(())
