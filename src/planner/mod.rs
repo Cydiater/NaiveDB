@@ -20,7 +20,6 @@ mod select;
 mod use_database;
 mod values;
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub enum Plan {
     CreateDatabase(CreateDatabasePlan),
