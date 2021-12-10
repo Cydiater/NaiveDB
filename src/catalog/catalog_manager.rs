@@ -80,7 +80,6 @@ impl CatalogManager {
             Err(CatalogError::NotUsingDatabase)
         }
     }
-    #[allow(dead_code)]
     pub fn add_index(
         &mut self,
         table_name: String,
