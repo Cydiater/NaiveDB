@@ -51,20 +51,18 @@ impl Executor for AddIndexExecutor {
         let slices = table.into_slice();
         let mut indexed_cnt = 0;
         for slice in slices {
-            let columns: Vec<Vec<Datum>> = self
-                .exprs
-                .iter_mut()
-                .map(|e| e.eval(Some(&slice)))
-                .collect();
-            let rows = columns.into_iter().fold(vec![vec![]; slice.get_num_tuple()], |rows, col| {
-                rows.into_iter()
-                    .zip(col.into_iter())
-                    .map(|(mut r, d)| {
-                        r.push(d);
-                        r
-                    })
-                    .collect_vec()
-            });
+            let rows = self.exprs.iter_mut().map(|e| e.eval(Some(&slice))).fold(
+                vec![vec![]; slice.get_num_tuple()],
+                |rows, col| {
+                    rows.into_iter()
+                        .zip(col.into_iter())
+                        .map(|(mut r, d)| {
+                            r.push(d);
+                            r
+                        })
+                        .collect_vec()
+                },
+            );
             for (idx, row) in rows.iter().enumerate() {
                 let record_id = slice.record_id_at(idx);
                 index.insert(row, record_id).unwrap();

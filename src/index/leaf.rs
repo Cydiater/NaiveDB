@@ -35,9 +35,10 @@ pub struct LeafNode {
 impl LeafNode {
     const IS_LEAF: Range<usize> = 0..1;
     const PARENT_PAGE_ID: Range<usize> = 1..5;
-    const HEAD: Range<usize> = 5..9;
-    const TAIL: Range<usize> = 9..13;
-    const SIZE_OF_META: usize = 13;
+    const NEXT_PAGE_ID: Range<usize> = 5..9;
+    const HEAD: Range<usize> = 9..13;
+    const TAIL: Range<usize> = 13..17;
+    const SIZE_OF_META: usize = 17;
 
     fn get_head(&self) -> usize {
         u32::from_le_bytes(self.page.borrow().buffer[Self::HEAD].try_into().unwrap()) as usize
@@ -45,6 +46,26 @@ impl LeafNode {
 
     fn get_tail(&self) -> usize {
         u32::from_le_bytes(self.page.borrow().buffer[Self::TAIL].try_into().unwrap()) as usize
+    }
+
+    pub fn get_next_page_id(&self) -> Option<usize> {
+        let next_page_id = u32::from_le_bytes(
+            self.page.borrow().buffer[Self::NEXT_PAGE_ID]
+                .try_into()
+                .unwrap(),
+        ) as usize;
+        if next_page_id == 0 {
+            None
+        } else {
+            Some(next_page_id)
+        }
+    }
+
+    pub fn set_next_page_id(&mut self, page_id: Option<PageID>) {
+        let page_id = page_id.unwrap_or(0);
+        self.page.borrow_mut().buffer[Self::NEXT_PAGE_ID]
+            .copy_from_slice(&((page_id as u32).to_le_bytes()));
+        self.page.borrow_mut().is_dirty = true;
     }
 
     fn set_head(&self, head: usize) {
@@ -225,6 +246,9 @@ impl LeafNode {
         rhs.set_parent_page_id(self.get_parent_page_id());
         rhs.page.borrow_mut().is_dirty = true;
         self.page.borrow_mut().is_dirty = true;
+        // set next_page_id
+        rhs.set_next_page_id(self.get_next_page_id());
+        self.set_next_page_id(Some(rhs.get_page_id()));
         rhs
     }
 
