@@ -28,7 +28,7 @@ impl Drop for LeafNode {
 pub struct LeafNode {
     page: PageRef,
     bpm: BufferPoolManagerRef,
-    schema: SchemaRef,
+    pub schema: SchemaRef,
 }
 
 #[allow(dead_code)]
@@ -90,6 +90,8 @@ impl LeafNode {
             buffer[Self::HEAD].copy_from_slice(&(Self::SIZE_OF_META as u32).to_le_bytes());
             // set tail = PAGE_SIZE
             buffer[Self::TAIL].copy_from_slice(&(PAGE_SIZE as u32).to_le_bytes());
+            // set next_page_id
+            buffer[Self::NEXT_PAGE_ID].copy_from_slice(&0u32.to_le_bytes());
         }
         // mark dirty
         page.borrow_mut().is_dirty = true;

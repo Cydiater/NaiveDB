@@ -75,6 +75,41 @@ mod leaf;
 use internal::InternalNode;
 use leaf::LeafNode;
 
+pub struct IndexIter {
+    leaf: LeafNode,
+    bpm: BufferPoolManagerRef,
+    idx: usize,
+}
+
+impl IndexIter {
+    pub fn new(leaf: LeafNode, bpm: BufferPoolManagerRef, idx: usize) -> Self {
+        Self { leaf, bpm, idx }
+    }
+}
+
+impl Iterator for IndexIter {
+    type Item = (Vec<Datum>, RecordID);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let len = self.leaf.len();
+        if self.idx == len {
+            let next_page_id = self.leaf.get_next_page_id();
+            if let Some(next_page_id) = next_page_id {
+                self.idx = 0;
+                self.leaf =
+                    LeafNode::open(self.bpm.clone(), self.leaf.schema.clone(), next_page_id)
+                        .unwrap();
+            } else {
+                return None;
+            }
+        }
+        let datums = self.leaf.key_at(self.idx);
+        let record_id = self.leaf.record_id_at(self.idx);
+        self.idx += 1;
+        Some((datums, record_id))
+    }
+}
+
 #[allow(dead_code)]
 impl BPTIndex {
     const PAGE_ID_OF_ROOT: Range<usize> = 0..4;
@@ -161,7 +196,7 @@ impl BPTIndex {
             parent_node
         };
         node.insert(&new_key, new_value);
-        rhs_node.set_parent_page_id(node.get_parent_page_id());
+        rhs_node.set_parent_page_id(Some(node.get_page_id()));
         (new_key, rhs_node)
     }
 
@@ -184,6 +219,16 @@ impl BPTIndex {
                 } else {
                     break None;
                 }
+        }
+    }
+
+    pub fn iter_start_from(&self, key: &[Datum]) -> Option<IndexIter> {
+        let leaf = self.find_leaf(key);
+        if let Some(leaf) = leaf {
+            let idx = leaf.index_of(key).unwrap();
+            Some(IndexIter::new(leaf, self.bpm.clone(), idx))
+        } else {
+            None
         }
     }
 
@@ -244,6 +289,7 @@ mod tests {
     use super::*;
     use crate::datum::DataType;
     use crate::storage::BufferPoolManager;
+    use itertools::Itertools;
     use std::fs::remove_file;
 
     #[test]
@@ -269,7 +315,7 @@ mod tests {
     }
 
     #[test]
-    fn test_split_find() {
+    fn test_split_find_iter() {
         let filename = {
             let bpm = BufferPoolManager::new_random_shared(2000);
             let filename = bpm.borrow().filename();
@@ -282,10 +328,20 @@ mod tests {
                 index
                     .insert(&[Datum::Int(Some(idx as i32))], (idx, idx))
                     .unwrap();
+            }
+            for idx in 0..40000usize {
                 assert_eq!(
-                    index.find(&[Datum::Int(Some(idx as i32))]),
-                    Some((idx, idx)),
+                    index.find(&[Datum::Int(Some(idx as i32))]).unwrap(),
+                    (idx, idx)
                 );
+            }
+            let res = index
+                .iter_start_from(&[Datum::Int(Some(1000))])
+                .unwrap()
+                .take(100)
+                .collect_vec();
+            for idx in 0..100 {
+                assert_eq!(res[idx].0, vec![Datum::Int(Some((idx + 1000) as i32))]);
             }
             filename
         };
