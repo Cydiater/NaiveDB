@@ -7,7 +7,6 @@ use std::ops::Range;
 use std::rc::Rc;
 use thiserror::Error;
 
-#[allow(dead_code)]
 pub type RecordID = (PageID, usize);
 
 enum IndexNode {
