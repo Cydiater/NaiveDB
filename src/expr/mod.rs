@@ -2,6 +2,7 @@ use crate::catalog::{CatalogError, CatalogManagerRef};
 use crate::datum::{DataType, Datum};
 use crate::parser::ast::{ConstantValue, ExprNode};
 use crate::table::Slice;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub use binary::{BinaryExpr, BinaryOp};
@@ -18,7 +19,7 @@ pub trait Expr {
     fn name(&self) -> String;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum ExprImpl {
     Constant(ConstantExpr),
     ColumnRef(ColumnRefExpr),
@@ -123,4 +124,28 @@ pub enum ExprError {
     TableNameNotFound,
     #[error("CatalogError: {0}")]
     CatalogError(#[from] CatalogError),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_serde() {
+        let expr = ExprImpl::Binary(BinaryExpr::new(
+            Box::new(ExprImpl::ColumnRef(ColumnRefExpr::new(
+                0,
+                DataType::new_int(false),
+                "v1".to_string(),
+            ))),
+            Box::new(ExprImpl::Constant(ConstantExpr::new(
+                Datum::Int(Some(1)),
+                DataType::new_int(false),
+            ))),
+            BinaryOp::Equal,
+        ));
+        let serialized = serde_json::to_string(&expr).unwrap();
+        let deserialized: ExprImpl = serde_json::from_str(&serialized).unwrap();
+        assert!(matches!(deserialized, ExprImpl::Binary(_)));
+    }
 }

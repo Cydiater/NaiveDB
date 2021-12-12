@@ -1,5 +1,6 @@
 use crate::table::SchemaRef;
 use pad::PadStr;
+use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::fmt;
 
@@ -7,7 +8,7 @@ pub use types::DataType;
 
 mod types;
 
-#[derive(Debug, PartialEq, PartialOrd, Ord, Eq, Clone)]
+#[derive(Debug, PartialEq, PartialOrd, Ord, Eq, Clone, Serialize, Deserialize)]
 pub enum Datum {
     Int(Option<i32>),
     Char(Option<String>),

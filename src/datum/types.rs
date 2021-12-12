@@ -1,8 +1,9 @@
+use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::fmt;
 use thiserror::Error;
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CharType {
     pub width: usize,
     pub nullable: bool,
@@ -14,7 +15,7 @@ impl CharType {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct IntType {
     pub nullable: bool,
 }
@@ -25,7 +26,7 @@ impl IntType {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct VarCharType {
     pub nullable: bool,
 }
@@ -36,7 +37,7 @@ impl VarCharType {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct BoolType {
     pub nullable: bool,
 }
@@ -47,7 +48,7 @@ impl BoolType {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum DataType {
     Int(IntType),
     Char(CharType),

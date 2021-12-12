@@ -1,8 +1,9 @@
 use crate::datum::{DataType, Datum};
 use crate::expr::Expr;
 use crate::table::Slice;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ColumnRefExpr {
     idx: usize,
     return_type: DataType,
