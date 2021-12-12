@@ -1,6 +1,7 @@
 use crate::datum::Datum;
+use crate::expr::ExprImpl;
 use crate::storage::{BufferPoolManagerRef, PageID, PageRef};
-use crate::table::{Schema, SchemaRef};
+use crate::table::Schema;
 use std::convert::TryInto;
 use std::ops::Range;
 use std::rc::Rc;
@@ -57,7 +58,7 @@ impl Drop for BPTIndex {
 ///
 /// Index Format:
 ///
-///     | page_id_of_root | IndexSchema
+///     | page_id_of_root | len_of_exprs | json_of_exprs
 ///
 /// IndexSchema here is used as the key schema, the page layout of index page is mostly same as
 /// Slice.
@@ -119,18 +120,27 @@ impl BPTIndex {
         self.page.borrow().page_id.unwrap()
     }
 
-    pub fn new(bpm: BufferPoolManagerRef, schema: SchemaRef) -> Self {
+    pub fn new(bpm: BufferPoolManagerRef, exprs: &[ExprImpl]) -> Self {
         let page = bpm.borrow_mut().alloc().unwrap();
-        let leaf_node = LeafNode::new(bpm.clone(), schema.clone());
+        let schema = Rc::new(Schema::from_exprs(exprs));
+        let leaf_node = LeafNode::new(bpm.clone(), schema);
         let page_id_of_root = leaf_node.get_page_id();
         // set page_id_of_root
         page.borrow_mut().buffer[0..4].copy_from_slice(&(page_id_of_root as u32).to_le_bytes());
-        // set schema
-        let bytes = schema.to_bytes();
-        let len = bytes.len();
-        page.borrow_mut().buffer[4..4 + len].copy_from_slice(&bytes);
+        // set exprs
+        let serialized = serde_json::to_string(&exprs).unwrap();
+        let len = serialized.len();
+        page.borrow_mut().buffer[4..8].copy_from_slice(&(len as u32).to_le_bytes());
+        page.borrow_mut().buffer[8..8 + len].copy_from_slice(serialized.as_bytes());
         page.borrow_mut().is_dirty = true;
         Self { bpm, page }
+    }
+
+    pub fn get_exprs(&self) -> Vec<ExprImpl> {
+        let buffer = &self.page.borrow().buffer;
+        let len = u32::from_le_bytes(buffer[4..8].try_into().unwrap()) as usize;
+        let serialized = String::from_utf8(buffer[8..8 + len].to_vec()).unwrap();
+        serde_json::from_str(&serialized).unwrap()
     }
 
     pub fn get_page_id_of_root(&self) -> PageID {
@@ -147,7 +157,8 @@ impl BPTIndex {
     }
 
     pub fn get_key_schema(&self) -> Schema {
-        Schema::from_bytes(&self.page.borrow().buffer[Self::SIZE_OF_META..])
+        let exprs = self.get_exprs();
+        Schema::from_exprs(&exprs)
     }
 
     pub fn set_root(&mut self, key: &[Datum], page_id_lhs: PageID, page_id_rhs: PageID) {
@@ -288,6 +299,7 @@ pub enum IndexError {
 mod tests {
     use super::*;
     use crate::datum::DataType;
+    use crate::expr::ColumnRefExpr;
     use crate::storage::BufferPoolManager;
     use itertools::Itertools;
     use std::fs::remove_file;
@@ -297,11 +309,12 @@ mod tests {
         let filename = {
             let bpm = BufferPoolManager::new_random_shared(20);
             let filename = bpm.borrow().filename();
-            let schema = Rc::new(Schema::from_slice(&[(
+            let exprs = vec![ExprImpl::ColumnRef(ColumnRefExpr::new(
+                0,
                 DataType::new_int(false),
                 "v1".to_string(),
-            )]));
-            let mut index = BPTIndex::new(bpm, schema);
+            ))];
+            let mut index = BPTIndex::new(bpm, &exprs);
             index.insert(&[Datum::Int(Some(0))], (0, 0)).unwrap();
             index.insert(&[Datum::Int(Some(1))], (1, 0)).unwrap();
             index.insert(&[Datum::Int(Some(2))], (2, 0)).unwrap();
@@ -319,11 +332,12 @@ mod tests {
         let filename = {
             let bpm = BufferPoolManager::new_random_shared(2000);
             let filename = bpm.borrow().filename();
-            let schema = Rc::new(Schema::from_slice(&[(
+            let exprs = vec![ExprImpl::ColumnRef(ColumnRefExpr::new(
+                0,
                 DataType::new_int(false),
                 "v1".to_string(),
-            )]));
-            let mut index = BPTIndex::new(bpm, schema);
+            ))];
+            let mut index = BPTIndex::new(bpm, &exprs);
             for idx in 0..40000usize {
                 index
                     .insert(&[Datum::Int(Some(idx as i32))], (idx, idx))
