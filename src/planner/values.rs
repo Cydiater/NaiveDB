@@ -19,7 +19,7 @@ impl Planner {
                     .into_iter()
                     .zip(schema.iter())
                     .map(|(node, col)| {
-                        ExprImpl::from_ast(node, self.catalog.clone(), None, Some(&col.data_type))
+                        ExprImpl::from_ast(&node, self.catalog.clone(), None, Some(&col.data_type))
                             .unwrap()
                     })
                     .collect_vec()

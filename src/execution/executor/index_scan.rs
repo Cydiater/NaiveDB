@@ -9,10 +9,9 @@ pub struct IndexScanExecutor {
     table: Table,
     index: BPTIndex,
     begin_datums: Vec<Datum>,
-    include_begin: bool,
     end_datums: Vec<Datum>,
-    include_end: bool,
     bpm: BufferPoolManagerRef,
+    done: bool,
 }
 
 impl Executor for IndexScanExecutor {
@@ -20,20 +19,23 @@ impl Executor for IndexScanExecutor {
         self.table.schema.clone()
     }
     fn execute(&mut self) -> Result<Option<Slice>, ExecutionError> {
-        let mut _output = Slice::new(self.bpm.clone(), Rc::new(self.index.get_key_schema()));
-        let mut iter = self.index.iter_start_from(&self.begin_datums).unwrap();
-        if !self.include_begin {
-            iter.next();
-            self.include_begin = true;
+        if self.done {
+            return Ok(None);
         }
-        for (datums, _record_id) in iter {
-            if datums == self.end_datums && !self.include_end {
-                break;
-            }
+        let mut output = Slice::new(self.bpm.clone(), Rc::new(self.index.get_key_schema()));
+        let iter = self.index.iter_start_from(&self.begin_datums).unwrap();
+        for (datums, record_id) in iter {
             if datums > self.end_datums {
                 break;
             }
+            let datums = self.table.datums_from_record_id(record_id);
+            if !output.ok_to_add(&datums) {
+                self.begin_datums = datums;
+                return Ok(Some(output));
+            }
+            output.add(&datums)?;
         }
-        todo!()
+        self.done = true;
+        Ok(Some(output))
     }
 }

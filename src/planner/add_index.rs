@@ -16,7 +16,7 @@ impl Planner {
             .exprs
             .into_iter()
             .map(|node| {
-                ExprImpl::from_ast(node, self.catalog.clone(), Some(table_name.clone()), None)
+                ExprImpl::from_ast(&node, self.catalog.clone(), Some(table_name.clone()), None)
                     .unwrap()
             })
             .collect_vec();

@@ -1,5 +1,4 @@
 use crate::datum::{DataType, Datum};
-use crate::index::RecordID;
 use crate::storage::{BufferPoolManagerRef, PageID, PageRef, PAGE_SIZE};
 use crate::table::{Schema, SchemaRef, TableError};
 use itertools::Itertools;
@@ -140,12 +139,6 @@ impl Slice {
         self.page.borrow_mut().is_dirty = true;
     }
 
-    #[allow(dead_code)]
-    pub fn record_id_at(&self, idx: usize) -> RecordID {
-        let offset = Self::SIZE_OF_META + idx * std::mem::size_of::<u32>();
-        (self.get_page_id(), offset)
-    }
-
     pub fn at(&self, idx: usize) -> Result<Vec<Datum>, TableError> {
         let base_offset = u32::from_le_bytes(
             self.page.borrow().buffer[Self::SIZE_OF_META + idx * std::mem::size_of::<u32>()
@@ -249,7 +242,7 @@ mod tests {
                 (DataType::new_int(false), "v1".to_string()),
                 (DataType::new_char(20, false), "v2".to_string()),
             ]);
-            let mut slice = Slice::open(bpm.clone(), Rc::new(schema), page_id);
+            let mut slice = Slice::open(bpm, Rc::new(schema), page_id);
             slice.add(tuple3.as_slice()).unwrap();
             assert_eq!(slice.at(0).unwrap(), tuple1);
             assert_eq!(slice.at(1).unwrap(), tuple2);
@@ -265,7 +258,7 @@ mod tests {
             let bpm = BufferPoolManager::new_random_shared(100);
             let filename = bpm.borrow().filename();
             let schema = Schema::from_slice(&[(DataType::new_int(false), "v1".to_string())]);
-            let mut slice = Slice::new(bpm.clone(), Rc::new(schema));
+            let mut slice = Slice::new(bpm, Rc::new(schema));
             for i in 0..453 {
                 slice.add(&[Datum::Int(Some(i))]).unwrap();
             }
@@ -285,7 +278,7 @@ mod tests {
                 (DataType::new_int(false), "v1".to_string()),
                 (DataType::new_varchar(false), "v2".to_string()),
             ]));
-            let mut slice = Slice::new(bpm.clone(), schema);
+            let mut slice = Slice::new(bpm, schema);
             let tuple1 = vec![
                 Datum::Int(Some(20)),
                 Datum::VarChar(Some("hello".to_string())),
@@ -309,9 +302,8 @@ mod tests {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
             bpm.borrow_mut().clear().unwrap();
-            let slice =
-                Slice::new_simple_message(bpm.clone(), "header".to_string(), "message".to_string())
-                    .unwrap();
+            let slice = Slice::new_simple_message(bpm, "header".to_string(), "message".to_string())
+                .unwrap();
             let tuple = slice.at(0).unwrap();
             assert_eq!(tuple[0], Datum::VarChar(Some("message".to_string())));
             filename

@@ -73,7 +73,7 @@ mod tests {
                 schema.clone(),
                 bpm.clone(),
             ));
-            let table = Table::new(schema.clone(), bpm.clone());
+            let table = Table::new(schema, bpm);
             catalog
                 .borrow_mut()
                 .create_database("d".to_string())
@@ -85,7 +85,7 @@ mod tests {
                 .unwrap();
             let mut insert_executor = ExecutorImpl::Insert(InsertExecutor::new(
                 "t".to_string(),
-                catalog.clone(),
+                catalog,
                 Box::new(values_executor),
             ));
             insert_executor.execute().unwrap();

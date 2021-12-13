@@ -135,6 +135,11 @@ impl BPTIndex {
         Self { bpm, page }
     }
 
+    pub fn open(bpm: BufferPoolManagerRef, page_id: PageID) -> Self {
+        let page = bpm.borrow_mut().fetch(page_id).unwrap();
+        Self { bpm, page }
+    }
+
     pub fn get_exprs(&self) -> Vec<ExprImpl> {
         let buffer = &self.page.borrow().buffer;
         let len = u32::from_le_bytes(buffer[4..8].try_into().unwrap()) as usize;
@@ -353,8 +358,8 @@ mod tests {
                 .unwrap()
                 .take(100)
                 .collect_vec();
-            for idx in 0..100 {
-                assert_eq!(res[idx].0, vec![Datum::Int(Some((idx + 1000) as i32))]);
+            for (idx, res) in res.iter().enumerate() {
+                assert_eq!(res.0, vec![Datum::Int(Some((idx + 1000) as i32))]);
             }
             filename
         };

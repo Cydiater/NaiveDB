@@ -201,7 +201,7 @@ mod tests {
             Datum::Char(Some("bar".to_string())),
         ];
         let bytes = Datum::to_bytes_with_schema(&datums, schema.clone());
-        let datums_to_check = Datum::from_bytes_and_schema(schema.clone(), bytes.as_slice());
+        let datums_to_check = Datum::from_bytes_and_schema(schema, bytes.as_slice());
         assert_eq!(datums, datums_to_check);
     }
 }

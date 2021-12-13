@@ -63,7 +63,7 @@ impl Executor for AddIndexExecutor {
                 },
             );
             for (idx, row) in rows.iter().enumerate() {
-                let record_id = slice.record_id_at(idx);
+                let record_id = (slice.get_page_id(), idx);
                 index.insert(row, record_id).unwrap();
                 indexed_cnt += 1;
             }

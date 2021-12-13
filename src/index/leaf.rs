@@ -316,7 +316,7 @@ mod tests {
                 "v1".to_string(),
             )]));
             let dummy_record_id = (0, 0);
-            let mut node = LeafNode::new(bpm.clone(), schema.clone());
+            let mut node = LeafNode::new(bpm, schema);
             node.append(&[Datum::Int(Some(0))], dummy_record_id);
             node.append(&[Datum::Int(Some(1))], dummy_record_id);
             node.append(&[Datum::Int(Some(2))], dummy_record_id);

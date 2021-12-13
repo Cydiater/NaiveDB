@@ -1,4 +1,5 @@
 use crate::datum::{DataType, Datum};
+use crate::index::RecordID;
 use crate::storage::{BufferPoolManagerRef, PageID, PageRef, StorageError};
 use itertools::Itertools;
 use prettytable::{Cell, Row, Table as PrintTable};
@@ -163,6 +164,10 @@ impl Table {
             schema: self.schema.clone(),
         }
     }
+    pub fn datums_from_record_id(&self, record_id: RecordID) -> Vec<Datum> {
+        let slice = Slice::open(self.bpm.clone(), self.schema.clone(), record_id.0);
+        slice.at(record_id.1).unwrap()
+    }
     pub fn from_slice(slices: Vec<Slice>, schema: SchemaRef, bpm: BufferPoolManagerRef) -> Self {
         let mut table = Table::new(schema, bpm);
         slices.iter().for_each(|s| {
@@ -214,7 +219,7 @@ mod tests {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
             let schema = Schema::from_slice(&[(DataType::new_int(false), "v1".to_string())]);
-            let mut table = Table::new(Rc::new(schema), bpm.clone());
+            let mut table = Table::new(Rc::new(schema), bpm);
             // insert
             for idx in 0..1000 {
                 table.insert(vec![Datum::Int(Some(idx))]).unwrap()
@@ -234,7 +239,7 @@ mod tests {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
             let schema = Schema::from_slice(&[(DataType::new_varchar(false), "v1".to_string())]);
-            let table = Table::new(Rc::new(schema), bpm.clone());
+            let table = Table::new(Rc::new(schema), bpm);
             (filename, table.get_page_id())
         };
         let filename = {
@@ -242,7 +247,7 @@ mod tests {
                 5,
                 filename.clone(),
             )));
-            let table = Table::open(page_id, bpm.clone());
+            let table = Table::open(page_id, bpm);
             assert_eq!(table.schema.len(), 1);
             filename
         };

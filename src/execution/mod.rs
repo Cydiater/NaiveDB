@@ -90,6 +90,7 @@ impl Engine {
                 plan.table_name,
                 plan.exprs,
             )),
+            Plan::IndexScan(_) => todo!(),
         }
     }
     pub fn new(catalog: CatalogManagerRef, bpm: BufferPoolManagerRef) -> Self {

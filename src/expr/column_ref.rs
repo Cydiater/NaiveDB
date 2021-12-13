@@ -3,7 +3,7 @@ use crate::expr::Expr;
 use crate::table::Slice;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct ColumnRefExpr {
     idx: usize,
     return_type: DataType,

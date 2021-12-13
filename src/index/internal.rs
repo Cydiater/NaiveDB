@@ -356,8 +356,8 @@ mod tests {
             )]));
             let dummy_page_id = 10;
             let mut node = InternalNode::new_root(
-                bpm.clone(),
-                key_schema.clone(),
+                bpm,
+                key_schema,
                 &[Datum::Int(Some(1))],
                 dummy_page_id,
                 dummy_page_id,
