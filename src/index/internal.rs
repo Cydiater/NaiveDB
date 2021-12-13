@@ -13,7 +13,7 @@ use std::ops::Range;
 ///
 /// Meta Format:
 ///
-///     | is_leaf | parent_page_id | head | tail |
+///     | is_leaf | parent_page_id | next_page_id | head | tail |
 ///
 
 impl Drop for InternalNode {
@@ -23,7 +23,6 @@ impl Drop for InternalNode {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Clone)]
 pub struct InternalNode {
     page: PageRef,
@@ -31,13 +30,13 @@ pub struct InternalNode {
     schema: SchemaRef,
 }
 
-#[allow(dead_code)]
 impl InternalNode {
     const IS_LEAF: Range<usize> = 0..1;
     const PARENT_PAGE_ID: Range<usize> = 1..5;
-    const HEAD: Range<usize> = 5..9;
-    const TAIL: Range<usize> = 9..13;
-    const SIZE_OF_META: usize = 13;
+    const NEXT_PAGE_ID: Range<usize> = 5..9;
+    const HEAD: Range<usize> = 9..13;
+    const TAIL: Range<usize> = 13..17;
+    const SIZE_OF_META: usize = 17;
 
     pub fn new_root(
         bpm: BufferPoolManagerRef,
@@ -69,9 +68,31 @@ impl InternalNode {
                 .copy_from_slice(&(end as u32).to_le_bytes());
             // set tail
             buffer[Self::TAIL].copy_from_slice(&(start as u32).to_le_bytes());
+            // set next_page_id
+            buffer[Self::NEXT_PAGE_ID].copy_from_slice(&0u32.to_le_bytes());
         }
         page.borrow_mut().is_dirty = true;
         Self { page, bpm, schema }
+    }
+
+    pub fn get_next_page_id(&self) -> Option<usize> {
+        let next_page_id = u32::from_le_bytes(
+            self.page.borrow().buffer[Self::NEXT_PAGE_ID]
+                .try_into()
+                .unwrap(),
+        ) as usize;
+        if next_page_id == 0 {
+            None
+        } else {
+            Some(next_page_id)
+        }
+    }
+
+    pub fn set_next_page_id(&mut self, page_id: Option<PageID>) {
+        let page_id = page_id.unwrap_or(0);
+        self.page.borrow_mut().buffer[Self::NEXT_PAGE_ID]
+            .copy_from_slice(&((page_id as u32).to_le_bytes()));
+        self.page.borrow_mut().is_dirty = true;
     }
 
     pub fn new_single_child(
@@ -93,6 +114,8 @@ impl InternalNode {
             // page_id
             buffer[Self::SIZE_OF_META..Self::SIZE_OF_META + 4]
                 .copy_from_slice(&(page_id.unwrap_or(0) as u32).to_le_bytes());
+            // set next_page_id
+            buffer[Self::NEXT_PAGE_ID].copy_from_slice(&0u32.to_le_bytes());
         }
         page.borrow_mut().is_dirty = true;
         Self { page, bpm, schema }
@@ -152,11 +175,7 @@ impl InternalNode {
     }
 
     pub fn set_parent_page_id(&self, page_id: Option<PageID>) {
-        let page_id = if let Some(page_id) = page_id {
-            page_id
-        } else {
-            0
-        };
+        let page_id = page_id.unwrap_or(0);
         self.page.borrow_mut().buffer[Self::PARENT_PAGE_ID]
             .copy_from_slice(&((page_id as u32).to_le_bytes()));
         self.page.borrow_mut().is_dirty = true;
@@ -244,6 +263,9 @@ impl InternalNode {
         // set parent_page_id
         rhs.set_parent_page_id(self.get_parent_page_id());
         rhs.page.borrow_mut().is_dirty = true;
+        // set next_page_id
+        rhs.set_next_page_id(self.get_next_page_id());
+        self.set_next_page_id(Some(rhs.get_page_id()));
         rhs
     }
 
@@ -334,8 +356,8 @@ mod tests {
             )]));
             let dummy_page_id = 10;
             let mut node = InternalNode::new_root(
-                bpm.clone(),
-                key_schema.clone(),
+                bpm,
+                key_schema,
                 &[Datum::Int(Some(1))],
                 dummy_page_id,
                 dummy_page_id,

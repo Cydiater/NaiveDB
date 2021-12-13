@@ -25,7 +25,6 @@ fn main() {
     let mut db = NaiveDB::new();
     let mut rl = Editor::<()>::new();
     loop {
-        print!("naive_db > ");
         let readline = rl.readline("naive_db > ");
         match readline {
             Ok(line) => {

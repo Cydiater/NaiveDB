@@ -7,7 +7,7 @@ pub use create_database::CreateDatabasePlan;
 pub use create_table::CreateTablePlan;
 pub use desc::DescPlan;
 pub use insert::InsertPlan;
-pub use select::{FilterPlan, ProjectPlan, SeqScanPlan};
+pub use select::{FilterPlan, IndexScanPlan, ProjectPlan, SeqScanPlan};
 pub use use_database::UseDatabasePlan;
 pub use values::ValuesPlan;
 
@@ -33,6 +33,7 @@ pub enum Plan {
     Project(ProjectPlan),
     Filter(FilterPlan),
     AddIndex(AddIndexPlan),
+    IndexScan(IndexScanPlan),
 }
 
 pub struct Planner {

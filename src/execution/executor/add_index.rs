@@ -46,35 +46,34 @@ impl Executor for AddIndexExecutor {
         }
         self.executed = true;
         let table = self.catalog.borrow().find_table(self.table_name.clone())?;
-        let schema = Rc::new(Schema::from_exprs(&self.exprs));
-        let mut index = BPTIndex::new(self.bpm.clone(), schema.clone());
+        let mut index = BPTIndex::new(self.bpm.clone(), &self.exprs);
         let slices = table.into_slice();
         let mut indexed_cnt = 0;
         for slice in slices {
-            let columns: Vec<Vec<Datum>> = self
-                .exprs
-                .iter_mut()
-                .map(|e| e.eval(Some(&slice)))
-                .collect();
-            let rows = columns.into_iter().fold(vec![vec![]; slice.get_num_tuple()], |rows, col| {
-                rows.into_iter()
-                    .zip(col.into_iter())
-                    .map(|(mut r, d)| {
-                        r.push(d);
-                        r
-                    })
-                    .collect_vec()
-            });
+            let rows = self.exprs.iter_mut().map(|e| e.eval(Some(&slice))).fold(
+                vec![vec![]; slice.get_num_tuple()],
+                |rows, col| {
+                    rows.into_iter()
+                        .zip(col.into_iter())
+                        .map(|(mut r, d)| {
+                            r.push(d);
+                            r
+                        })
+                        .collect_vec()
+                },
+            );
             for (idx, row) in rows.iter().enumerate() {
-                let record_id = slice.record_id_at(idx);
+                let record_id = (slice.get_page_id(), idx);
                 index.insert(row, record_id).unwrap();
                 indexed_cnt += 1;
             }
         }
         let page_id = index.get_page_id();
-        self.catalog
-            .borrow_mut()
-            .add_index(self.table_name.clone(), schema, page_id)?;
+        self.catalog.borrow_mut().add_index(
+            self.table_name.clone(),
+            Rc::new(Schema::from_exprs(&self.exprs)),
+            page_id,
+        )?;
         let mut msg = Slice::new(self.bpm.clone(), self.schema());
         msg.add(&[Datum::Int(Some(indexed_cnt))])?;
         Ok(Some(msg))

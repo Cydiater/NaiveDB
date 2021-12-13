@@ -2,6 +2,7 @@ use crate::catalog::{CatalogError, CatalogManagerRef};
 use crate::datum::{DataType, Datum};
 use crate::parser::ast::{ConstantValue, ExprNode};
 use crate::table::Slice;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub use binary::{BinaryExpr, BinaryOp};
@@ -18,7 +19,7 @@ pub trait Expr {
     fn name(&self) -> String;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum ExprImpl {
     Constant(ConstantExpr),
     ColumnRef(ColumnRefExpr),
@@ -48,23 +49,23 @@ impl ExprImpl {
         }
     }
     pub fn from_ast(
-        node: ExprNode,
+        node: &ExprNode,
         catalog: CatalogManagerRef,
         table_name: Option<String>,
         data_type_hint: Option<&DataType>,
     ) -> Result<Self, ExprError> {
         match node {
-            ExprNode::Constant(node) => Ok(match node.value {
+            ExprNode::Constant(node) => Ok(match &node.value {
                 ConstantValue::Int(value) => ExprImpl::Constant(ConstantExpr::new(
-                    Datum::Int(Some(value)),
+                    Datum::Int(Some(*value)),
                     DataType::new_int(false),
                 )),
                 ConstantValue::String(value) => ExprImpl::Constant(ConstantExpr::new(
-                    Datum::VarChar(Some(value)),
+                    Datum::VarChar(Some(value.clone())),
                     DataType::new_varchar(false),
                 )),
                 ConstantValue::Bool(value) => ExprImpl::Constant(ConstantExpr::new(
-                    Datum::Bool(Some(value)),
+                    Datum::Bool(Some(*value)),
                     DataType::new_bool(false),
                 )),
                 ConstantValue::Null => match data_type_hint.unwrap() {
@@ -95,32 +96,55 @@ impl ExprImpl {
                 Ok(ExprImpl::ColumnRef(ColumnRefExpr::new(
                     idx,
                     return_type,
-                    node.column_name,
+                    node.column_name.clone(),
                 )))
             }
             ExprNode::Binary(node) => {
                 let lhs = Self::from_ast(
-                    *node.lhs,
+                    node.lhs.as_ref(),
                     catalog.clone(),
                     table_name.clone(),
                     data_type_hint,
                 )?;
-                let rhs = Self::from_ast(*node.rhs, catalog, table_name, data_type_hint)?;
+                let rhs = Self::from_ast(node.rhs.as_ref(), catalog, table_name, data_type_hint)?;
                 Ok(ExprImpl::Binary(BinaryExpr::new(
                     Box::new(lhs),
                     Box::new(rhs),
-                    node.op,
+                    node.op.clone(),
                 )))
             }
         }
     }
 }
 
-#[allow(dead_code)]
 #[derive(Error, Debug)]
 pub enum ExprError {
     #[error("TableNameNotFound")]
     TableNameNotFound,
     #[error("CatalogError: {0}")]
     CatalogError(#[from] CatalogError),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_serde() {
+        let expr = ExprImpl::Binary(BinaryExpr::new(
+            Box::new(ExprImpl::ColumnRef(ColumnRefExpr::new(
+                0,
+                DataType::new_int(false),
+                "v1".to_string(),
+            ))),
+            Box::new(ExprImpl::Constant(ConstantExpr::new(
+                Datum::Int(Some(1)),
+                DataType::new_int(false),
+            ))),
+            BinaryOp::Equal,
+        ));
+        let serialized = serde_json::to_string(&expr).unwrap();
+        let deserialized: ExprImpl = serde_json::from_str(&serialized).unwrap();
+        assert!(matches!(deserialized, ExprImpl::Binary(_)));
+    }
 }

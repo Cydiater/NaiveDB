@@ -1,5 +1,6 @@
 use crate::table::SchemaRef;
 use pad::PadStr;
+use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::fmt;
 
@@ -7,7 +8,7 @@ pub use types::DataType;
 
 mod types;
 
-#[derive(Debug, PartialEq, PartialOrd, Ord, Eq, Clone)]
+#[derive(Debug, PartialEq, PartialOrd, Ord, Eq, Clone, Serialize, Deserialize)]
 pub enum Datum {
     Int(Option<i32>),
     Char(Option<String>),
@@ -200,7 +201,7 @@ mod tests {
             Datum::Char(Some("bar".to_string())),
         ];
         let bytes = Datum::to_bytes_with_schema(&datums, schema.clone());
-        let datums_to_check = Datum::from_bytes_and_schema(schema.clone(), bytes.as_slice());
+        let datums_to_check = Datum::from_bytes_and_schema(schema, bytes.as_slice());
         assert_eq!(datums, datums_to_check);
     }
 }

@@ -1,4 +1,5 @@
 use crate::datum::{DataType, Datum};
+use crate::index::RecordID;
 use crate::storage::{BufferPoolManagerRef, PageID, PageRef, StorageError};
 use itertools::Itertools;
 use prettytable::{Cell, Row, Table as PrintTable};
@@ -123,7 +124,7 @@ impl Table {
         self.page.borrow_mut().buffer[0..4].copy_from_slice(&(page_id as u32).to_le_bytes());
         self.page.borrow_mut().is_dirty = true;
     }
-    pub fn insert(&mut self, datums: Vec<Datum>) -> Result<(), TableError> {
+    pub fn insert(&mut self, datums: Vec<Datum>) -> Result<RecordID, TableError> {
         let page_id_of_first_slice = self.get_page_id_of_first_slice();
         let mut slice = if let Some(page_id_of_first_slice) = page_id_of_first_slice {
             Slice::open(
@@ -135,14 +136,12 @@ impl Table {
             Slice::new(self.bpm.clone(), self.schema.clone())
         };
         if slice.ok_to_add(&datums) {
-            slice.add(&datums).unwrap();
-            Ok(())
+            slice.add(&datums)
         } else {
             let mut new_slice = Slice::new(self.bpm.clone(), self.schema.clone());
-            new_slice.add(&datums).unwrap();
             self.set_page_id_of_first_slice(new_slice.get_page_id());
             new_slice.set_next_page_id(Some(slice.get_page_id()));
-            Ok(())
+            new_slice.add(&datums)
         }
     }
     pub fn iter(&self) -> TableIter {
@@ -162,6 +161,10 @@ impl Table {
             bpm: self.bpm.clone(),
             schema: self.schema.clone(),
         }
+    }
+    pub fn datums_from_record_id(&self, record_id: RecordID) -> Vec<Datum> {
+        let slice = Slice::open(self.bpm.clone(), self.schema.clone(), record_id.0);
+        slice.at(record_id.1).unwrap()
     }
     pub fn from_slice(slices: Vec<Slice>, schema: SchemaRef, bpm: BufferPoolManagerRef) -> Self {
         let mut table = Table::new(schema, bpm);
@@ -214,10 +217,10 @@ mod tests {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
             let schema = Schema::from_slice(&[(DataType::new_int(false), "v1".to_string())]);
-            let mut table = Table::new(Rc::new(schema), bpm.clone());
+            let mut table = Table::new(Rc::new(schema), bpm);
             // insert
             for idx in 0..1000 {
-                table.insert(vec![Datum::Int(Some(idx))]).unwrap()
+                let _ = table.insert(vec![Datum::Int(Some(idx))]).unwrap();
             }
             // validate
             table.iter().sorted().enumerate().for_each(|(idx, datums)| {
@@ -234,7 +237,7 @@ mod tests {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
             let schema = Schema::from_slice(&[(DataType::new_varchar(false), "v1".to_string())]);
-            let table = Table::new(Rc::new(schema), bpm.clone());
+            let table = Table::new(Rc::new(schema), bpm);
             (filename, table.get_page_id())
         };
         let filename = {
@@ -242,7 +245,7 @@ mod tests {
                 5,
                 filename.clone(),
             )));
-            let table = Table::open(page_id, bpm.clone());
+            let table = Table::open(page_id, bpm);
             assert_eq!(table.schema.len(), 1);
             filename
         };

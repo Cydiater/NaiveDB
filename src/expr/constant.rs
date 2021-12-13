@@ -1,8 +1,9 @@
 use crate::datum::{DataType, Datum};
 use crate::expr::Expr;
 use crate::table::Slice;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct ConstantExpr {
     value: Datum,
     return_type: DataType,
@@ -11,6 +12,9 @@ pub struct ConstantExpr {
 impl ConstantExpr {
     pub fn new(value: Datum, return_type: DataType) -> Self {
         Self { value, return_type }
+    }
+    pub fn get_value(&self) -> Datum {
+        self.value.clone()
     }
 }
 

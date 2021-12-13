@@ -1,4 +1,5 @@
 use crate::catalog::{CatalogError, CatalogManagerRef};
+use crate::index::BPTIndex;
 use crate::planner::Plan;
 use crate::storage::BufferPoolManagerRef;
 use crate::table::{Table, TableError};
@@ -47,11 +48,17 @@ impl Engine {
             )),
             Plan::Insert(plan) => {
                 let child = self.build(*plan.child);
-                ExecutorImpl::Insert(InsertExecutor::new(
-                    plan.table_name,
-                    self.catalog.clone(),
-                    Box::new(child),
-                ))
+                let table = self
+                    .catalog
+                    .borrow()
+                    .find_table(plan.table_name.clone())
+                    .unwrap();
+                let indexes = self
+                    .catalog
+                    .borrow()
+                    .find_indexes_by_table(plan.table_name)
+                    .unwrap();
+                ExecutorImpl::Insert(InsertExecutor::new(table, indexes, Box::new(child)))
             }
             Plan::Desc(plan) => ExecutorImpl::Desc(DescExecutor::new(
                 plan.table_name,
@@ -90,6 +97,18 @@ impl Engine {
                 plan.table_name,
                 plan.exprs,
             )),
+            Plan::IndexScan(plan) => {
+                let index = BPTIndex::open(self.bpm.clone(), plan.index_page_id);
+                let begin_datums = plan.begin_datums.unwrap_or_else(|| index.first_key());
+                let end_datums = plan.end_datums.unwrap_or_else(|| index.last_key());
+                ExecutorImpl::IndexScan(IndexScanExecutor::new(
+                    Table::open(plan.table_page_id, self.bpm.clone()),
+                    index,
+                    begin_datums,
+                    end_datums,
+                    self.bpm.clone(),
+                ))
+            }
         }
     }
     pub fn new(catalog: CatalogManagerRef, bpm: BufferPoolManagerRef) -> Self {

@@ -2,8 +2,9 @@ use crate::datum::{DataType, Datum};
 use crate::expr::{Expr, ExprImpl};
 use crate::table::Slice;
 use itertools::Itertools;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum BinaryOp {
     Equal,
     LessThan,
@@ -38,7 +39,7 @@ impl BinaryOp {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct BinaryExpr {
     lhs: Box<ExprImpl>,
     rhs: Box<ExprImpl>,
@@ -53,6 +54,33 @@ impl BinaryExpr {
             rhs,
             op,
             desc: "".to_string(),
+        }
+    }
+    pub fn get_bound(&self, expr: &ExprImpl) -> (Option<Datum>, Option<Datum>) {
+        if expr == self.lhs.as_ref() {
+            let datum = if let ExprImpl::Constant(c) = self.rhs.as_ref() {
+                c.get_value()
+            } else {
+                return (None, None);
+            };
+            match self.op {
+                BinaryOp::Equal => (Some(datum.clone()), Some(datum)),
+                BinaryOp::LessThan => (None, Some(datum)),
+                BinaryOp::GreaterThan => (Some(datum), None),
+            }
+        } else if expr == self.rhs.as_ref() {
+            let datum = if let ExprImpl::Constant(c) = self.lhs.as_ref() {
+                c.get_value()
+            } else {
+                return (None, None);
+            };
+            match self.op {
+                BinaryOp::Equal => (Some(datum.clone()), Some(datum)),
+                BinaryOp::LessThan => (Some(datum), None),
+                BinaryOp::GreaterThan => (None, Some(datum)),
+            }
+        } else {
+            (None, None)
         }
     }
 }

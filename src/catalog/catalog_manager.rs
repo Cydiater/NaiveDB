@@ -1,4 +1,5 @@
 use crate::catalog::{Catalog, CatalogError, CatalogIter};
+use crate::index::BPTIndex;
 use crate::storage::{BufferPoolManagerRef, PageID};
 use crate::table::{SchemaRef, Table};
 use itertools::Itertools;
@@ -80,6 +81,24 @@ impl CatalogManager {
             Err(CatalogError::NotUsingDatabase)
         }
     }
+    pub fn find_indexes_by_table(&self, table_name: String) -> Result<Vec<BPTIndex>, CatalogError> {
+        if let Some(table_catalog) = &self.table_catalog {
+            let mut indexes = vec![];
+            for (_, page_id, name) in table_catalog.iter() {
+                let parts = name.split(':').collect_vec();
+                if parts.len() == 1 {
+                    continue;
+                }
+                if parts[0] == table_name {
+                    let index = BPTIndex::open(self.bpm.clone(), page_id);
+                    indexes.push(index);
+                }
+            }
+            Ok(indexes)
+        } else {
+            Err(CatalogError::NotUsingDatabase)
+        }
+    }
     pub fn add_index(
         &mut self,
         table_name: String,
@@ -128,7 +147,7 @@ mod tests {
                     DataType::new_int(false),
                     "v1".to_string(),
                 )])),
-                bpm.clone(),
+                bpm,
             );
             // attach in catalog
             catalog_manager

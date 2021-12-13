@@ -6,6 +6,7 @@ pub use create_database::CreateDatabaseExecutor;
 pub use create_table::CreateTableExecutor;
 pub use desc::DescExecutor;
 pub use filter::FilterExecutor;
+pub use index_scan::IndexScanExecutor;
 pub use insert::InsertExecutor;
 pub use project::ProjectExecutor;
 pub use seq_scan::SeqScanExecutor;
@@ -18,6 +19,7 @@ mod create_database;
 mod create_table;
 mod desc;
 mod filter;
+mod index_scan;
 mod insert;
 mod project;
 mod seq_scan;
@@ -40,6 +42,7 @@ pub enum ExecutorImpl {
     Insert(InsertExecutor),
     Desc(DescExecutor),
     SeqScan(SeqScanExecutor),
+    IndexScan(IndexScanExecutor),
     Project(ProjectExecutor),
     Filter(FilterExecutor),
     AddIndex(AddIndexExecutor),
@@ -59,6 +62,7 @@ impl ExecutorImpl {
             Self::Project(executor) => executor.execute(),
             Self::Filter(executor) => executor.execute(),
             Self::AddIndex(executor) => executor.execute(),
+            Self::IndexScan(executor) => executor.execute(),
         }
     }
     pub fn schema(&self) -> SchemaRef {
@@ -74,6 +78,7 @@ impl ExecutorImpl {
             Self::Project(executor) => executor.schema(),
             Self::Filter(executor) => executor.schema(),
             Self::AddIndex(executor) => executor.schema(),
+            Self::IndexScan(executor) => executor.schema(),
         }
     }
 }

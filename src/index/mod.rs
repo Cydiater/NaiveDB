@@ -1,12 +1,12 @@
 use crate::datum::Datum;
+use crate::expr::ExprImpl;
 use crate::storage::{BufferPoolManagerRef, PageID, PageRef};
-use crate::table::{Schema, SchemaRef};
+use crate::table::Schema;
 use std::convert::TryInto;
 use std::ops::Range;
 use std::rc::Rc;
 use thiserror::Error;
 
-#[allow(dead_code)]
 pub type RecordID = (PageID, usize);
 
 enum IndexNode {
@@ -57,7 +57,7 @@ impl Drop for BPTIndex {
 ///
 /// Index Format:
 ///
-///     | page_id_of_root | IndexSchema
+///     | page_id_of_root | len_of_exprs | json_of_exprs
 ///
 /// IndexSchema here is used as the key schema, the page layout of index page is mostly same as
 /// Slice.
@@ -75,6 +75,41 @@ mod leaf;
 use internal::InternalNode;
 use leaf::LeafNode;
 
+pub struct IndexIter {
+    leaf: LeafNode,
+    bpm: BufferPoolManagerRef,
+    idx: usize,
+}
+
+impl IndexIter {
+    pub fn new(leaf: LeafNode, bpm: BufferPoolManagerRef, idx: usize) -> Self {
+        Self { leaf, bpm, idx }
+    }
+}
+
+impl Iterator for IndexIter {
+    type Item = (Vec<Datum>, RecordID);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let len = self.leaf.len();
+        if self.idx == len {
+            let next_page_id = self.leaf.get_next_page_id();
+            if let Some(next_page_id) = next_page_id {
+                self.idx = 0;
+                self.leaf =
+                    LeafNode::open(self.bpm.clone(), self.leaf.schema.clone(), next_page_id)
+                        .unwrap();
+            } else {
+                return None;
+            }
+        }
+        let datums = self.leaf.key_at(self.idx);
+        let record_id = self.leaf.record_id_at(self.idx);
+        self.idx += 1;
+        Some((datums, record_id))
+    }
+}
+
 #[allow(dead_code)]
 impl BPTIndex {
     const PAGE_ID_OF_ROOT: Range<usize> = 0..4;
@@ -84,18 +119,32 @@ impl BPTIndex {
         self.page.borrow().page_id.unwrap()
     }
 
-    pub fn new(bpm: BufferPoolManagerRef, schema: SchemaRef) -> Self {
+    pub fn new(bpm: BufferPoolManagerRef, exprs: &[ExprImpl]) -> Self {
         let page = bpm.borrow_mut().alloc().unwrap();
-        let leaf_node = LeafNode::new(bpm.clone(), schema.clone());
+        let schema = Rc::new(Schema::from_exprs(exprs));
+        let leaf_node = LeafNode::new(bpm.clone(), schema);
         let page_id_of_root = leaf_node.get_page_id();
         // set page_id_of_root
         page.borrow_mut().buffer[0..4].copy_from_slice(&(page_id_of_root as u32).to_le_bytes());
-        // set schema
-        let bytes = schema.to_bytes();
-        let len = bytes.len();
-        page.borrow_mut().buffer[4..4 + len].copy_from_slice(&bytes);
+        // set exprs
+        let serialized = serde_json::to_string(&exprs).unwrap();
+        let len = serialized.len();
+        page.borrow_mut().buffer[4..8].copy_from_slice(&(len as u32).to_le_bytes());
+        page.borrow_mut().buffer[8..8 + len].copy_from_slice(serialized.as_bytes());
         page.borrow_mut().is_dirty = true;
         Self { bpm, page }
+    }
+
+    pub fn open(bpm: BufferPoolManagerRef, page_id: PageID) -> Self {
+        let page = bpm.borrow_mut().fetch(page_id).unwrap();
+        Self { bpm, page }
+    }
+
+    pub fn get_exprs(&self) -> Vec<ExprImpl> {
+        let buffer = &self.page.borrow().buffer;
+        let len = u32::from_le_bytes(buffer[4..8].try_into().unwrap()) as usize;
+        let serialized = String::from_utf8(buffer[8..8 + len].to_vec()).unwrap();
+        serde_json::from_str(&serialized).unwrap()
     }
 
     pub fn get_page_id_of_root(&self) -> PageID {
@@ -112,7 +161,8 @@ impl BPTIndex {
     }
 
     pub fn get_key_schema(&self) -> Schema {
-        Schema::from_bytes(&self.page.borrow().buffer[Self::SIZE_OF_META..])
+        let exprs = self.get_exprs();
+        Schema::from_exprs(&exprs)
     }
 
     pub fn set_root(&mut self, key: &[Datum], page_id_lhs: PageID, page_id_rhs: PageID) {
@@ -161,7 +211,7 @@ impl BPTIndex {
             parent_node
         };
         node.insert(&new_key, new_value);
-        rhs_node.set_parent_page_id(node.get_parent_page_id());
+        rhs_node.set_parent_page_id(Some(node.get_page_id()));
         (new_key, rhs_node)
     }
 
@@ -184,6 +234,16 @@ impl BPTIndex {
                 } else {
                     break None;
                 }
+        }
+    }
+
+    pub fn iter_start_from(&self, key: &[Datum]) -> Option<IndexIter> {
+        let leaf = self.find_leaf(key);
+        if let Some(leaf) = leaf {
+            let idx = leaf.index_of(key).unwrap();
+            Some(IndexIter::new(leaf, self.bpm.clone(), idx))
+        } else {
+            None
         }
     }
 
@@ -218,6 +278,40 @@ impl BPTIndex {
         Ok(())
     }
 
+    pub fn last_key(&self) -> Vec<Datum> {
+        let mut page_id_of_current_node = self.get_page_id_of_root();
+        let schema = Rc::new(self.get_key_schema());
+        let first_leaf = loop {
+            if let Ok(leaf_node) =
+                LeafNode::open(self.bpm.clone(), schema.clone(), page_id_of_current_node)
+            {
+                break leaf_node;
+            }
+            let internal_node =
+                InternalNode::open(self.bpm.clone(), schema.clone(), page_id_of_current_node)
+                    .unwrap();
+            page_id_of_current_node = internal_node.page_id_at(internal_node.len() - 1).unwrap()
+        };
+        first_leaf.key_at(first_leaf.len() - 1)
+    }
+
+    pub fn first_key(&self) -> Vec<Datum> {
+        let mut page_id_of_current_node = self.get_page_id_of_root();
+        let schema = Rc::new(self.get_key_schema());
+        let first_leaf = loop {
+            if let Ok(leaf_node) =
+                LeafNode::open(self.bpm.clone(), schema.clone(), page_id_of_current_node)
+            {
+                break leaf_node;
+            }
+            let internal_node =
+                InternalNode::open(self.bpm.clone(), schema.clone(), page_id_of_current_node)
+                    .unwrap();
+            page_id_of_current_node = internal_node.page_id_at(0).unwrap()
+        };
+        first_leaf.key_at(0)
+    }
+
     pub fn find(&self, key: &[Datum]) -> Option<RecordID> {
         if let Some(leaf_node) = self.find_leaf(key) {
             leaf_node
@@ -243,7 +337,9 @@ pub enum IndexError {
 mod tests {
     use super::*;
     use crate::datum::DataType;
+    use crate::expr::ColumnRefExpr;
     use crate::storage::BufferPoolManager;
+    use itertools::Itertools;
     use std::fs::remove_file;
 
     #[test]
@@ -251,11 +347,12 @@ mod tests {
         let filename = {
             let bpm = BufferPoolManager::new_random_shared(20);
             let filename = bpm.borrow().filename();
-            let schema = Rc::new(Schema::from_slice(&[(
+            let exprs = vec![ExprImpl::ColumnRef(ColumnRefExpr::new(
+                0,
                 DataType::new_int(false),
                 "v1".to_string(),
-            )]));
-            let mut index = BPTIndex::new(bpm, schema);
+            ))];
+            let mut index = BPTIndex::new(bpm, &exprs);
             index.insert(&[Datum::Int(Some(0))], (0, 0)).unwrap();
             index.insert(&[Datum::Int(Some(1))], (1, 0)).unwrap();
             index.insert(&[Datum::Int(Some(2))], (2, 0)).unwrap();
@@ -269,24 +366,37 @@ mod tests {
     }
 
     #[test]
-    fn test_split_find() {
+    fn test_split_find_iter() {
         let filename = {
             let bpm = BufferPoolManager::new_random_shared(2000);
             let filename = bpm.borrow().filename();
-            let schema = Rc::new(Schema::from_slice(&[(
+            let exprs = vec![ExprImpl::ColumnRef(ColumnRefExpr::new(
+                0,
                 DataType::new_int(false),
                 "v1".to_string(),
-            )]));
-            let mut index = BPTIndex::new(bpm, schema);
+            ))];
+            let mut index = BPTIndex::new(bpm, &exprs);
             for idx in 0..40000usize {
                 index
                     .insert(&[Datum::Int(Some(idx as i32))], (idx, idx))
                     .unwrap();
+            }
+            for idx in 0..40000usize {
                 assert_eq!(
-                    index.find(&[Datum::Int(Some(idx as i32))]),
-                    Some((idx, idx)),
+                    index.find(&[Datum::Int(Some(idx as i32))]).unwrap(),
+                    (idx, idx)
                 );
             }
+            let res = index
+                .iter_start_from(&[Datum::Int(Some(1000))])
+                .unwrap()
+                .take(100)
+                .collect_vec();
+            for (idx, res) in res.iter().enumerate() {
+                assert_eq!(res.0, vec![Datum::Int(Some((idx + 1000) as i32))]);
+            }
+            assert_eq!(index.first_key(), vec![Datum::Int(Some(0))]);
+            assert_eq!(index.last_key(), vec![Datum::Int(Some(39999))]);
             filename
         };
         remove_file(filename).unwrap();
