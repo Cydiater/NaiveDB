@@ -3,7 +3,6 @@ use crate::execution::{ExecutionError, Executor};
 use crate::index::BPTIndex;
 use crate::storage::BufferPoolManagerRef;
 use crate::table::{SchemaRef, Slice, Table};
-use std::rc::Rc;
 
 pub struct IndexScanExecutor {
     table: Table,
@@ -41,7 +40,7 @@ impl Executor for IndexScanExecutor {
         if self.done {
             return Ok(None);
         }
-        let mut output = Slice::new(self.bpm.clone(), Rc::new(self.index.get_key_schema()));
+        let mut output = Slice::new(self.bpm.clone(), self.table.schema.clone());
         let iter = self.index.iter_start_from(&self.begin_datums).unwrap();
         for (datums, record_id) in iter {
             if datums > self.end_datums {

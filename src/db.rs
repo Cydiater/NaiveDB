@@ -75,6 +75,37 @@ mod tests {
     use std::fs::remove_file;
 
     #[test]
+    fn index_test() {
+        let filename = {
+            let mut db = NaiveDB::new_random();
+            let filename = db.filename();
+            db.run("create database d;").unwrap();
+            db.run("use d;").unwrap();
+            db.run("create table t (v1 int not null, v2 varchar not null);")
+                .unwrap();
+            db.run("insert into t values (1, '1'), (2, '2'), (3, '3');")
+                .unwrap();
+            db.run("alter table t add index (v1);").unwrap();
+            db.run("select * from t where v1 > 1;").unwrap();
+            db.run("insert into t values (4, '4'), (5, '5'), (6, '6');")
+                .unwrap();
+            let table = db.run("select * from t where v1 > 1 and v1 < 6;").unwrap();
+            let res = table.iter().collect_vec();
+            assert_eq!(
+                res,
+                vec![
+                    vec![Datum::Int(Some(2)), Datum::VarChar(Some("2".to_string()))],
+                    vec![Datum::Int(Some(3)), Datum::VarChar(Some("3".to_string()))],
+                    vec![Datum::Int(Some(4)), Datum::VarChar(Some("4".to_string()))],
+                    vec![Datum::Int(Some(5)), Datum::VarChar(Some("5".to_string()))],
+                ]
+            );
+            filename
+        };
+        remove_file(filename).unwrap()
+    }
+
+    #[test]
     fn basic_test() {
         let filename = {
             let mut db = NaiveDB::new_random();
