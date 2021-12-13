@@ -14,6 +14,25 @@ pub struct IndexScanExecutor {
     done: bool,
 }
 
+impl IndexScanExecutor {
+    pub fn new(
+        table: Table,
+        index: BPTIndex,
+        begin_datums: Vec<Datum>,
+        end_datums: Vec<Datum>,
+        bpm: BufferPoolManagerRef,
+    ) -> Self {
+        Self {
+            table,
+            index,
+            begin_datums,
+            end_datums,
+            bpm,
+            done: false,
+        }
+    }
+}
+
 impl Executor for IndexScanExecutor {
     fn schema(&self) -> SchemaRef {
         self.table.schema.clone()

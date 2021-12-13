@@ -1,4 +1,5 @@
 use crate::catalog::{CatalogError, CatalogManagerRef};
+use crate::index::BPTIndex;
 use crate::planner::Plan;
 use crate::storage::BufferPoolManagerRef;
 use crate::table::{Table, TableError};
@@ -90,7 +91,18 @@ impl Engine {
                 plan.table_name,
                 plan.exprs,
             )),
-            Plan::IndexScan(_) => todo!(),
+            Plan::IndexScan(plan) => {
+                let index = BPTIndex::open(self.bpm.clone(), plan.index_page_id);
+                let begin_datums = plan.begin_datums.unwrap_or(index.first_key());
+                let end_datums = plan.end_datums.unwrap_or(index.last_key());
+                ExecutorImpl::IndexScan(IndexScanExecutor::new(
+                    Table::open(plan.table_page_id, self.bpm.clone()),
+                    index,
+                    begin_datums,
+                    end_datums,
+                    self.bpm.clone(),
+                ))
+            }
         }
     }
     pub fn new(catalog: CatalogManagerRef, bpm: BufferPoolManagerRef) -> Self {

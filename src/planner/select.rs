@@ -5,13 +5,12 @@ use crate::planner::{Plan, Planner};
 use crate::storage::PageID;
 use itertools::Itertools;
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub struct IndexScanPlan {
-    begin_datums: Option<Vec<Datum>>,
-    end_datums: Option<Vec<Datum>>,
-    table_page_id: PageID,
-    index_page_id: PageID,
+    pub begin_datums: Option<Vec<Datum>>,
+    pub end_datums: Option<Vec<Datum>>,
+    pub table_page_id: PageID,
+    pub index_page_id: PageID,
 }
 
 #[derive(Debug)]

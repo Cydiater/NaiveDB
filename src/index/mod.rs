@@ -278,6 +278,40 @@ impl BPTIndex {
         Ok(())
     }
 
+    pub fn last_key(&self) -> Vec<Datum> {
+        let mut page_id_of_current_node = self.get_page_id_of_root();
+        let schema = Rc::new(self.get_key_schema());
+        let first_leaf = loop {
+            if let Ok(leaf_node) =
+                LeafNode::open(self.bpm.clone(), schema.clone(), page_id_of_current_node)
+            {
+                break leaf_node;
+            }
+            let internal_node =
+                InternalNode::open(self.bpm.clone(), schema.clone(), page_id_of_current_node)
+                    .unwrap();
+            page_id_of_current_node = internal_node.page_id_at(internal_node.len() - 1).unwrap()
+        };
+        first_leaf.key_at(first_leaf.len() - 1)
+    }
+
+    pub fn first_key(&self) -> Vec<Datum> {
+        let mut page_id_of_current_node = self.get_page_id_of_root();
+        let schema = Rc::new(self.get_key_schema());
+        let first_leaf = loop {
+            if let Ok(leaf_node) =
+                LeafNode::open(self.bpm.clone(), schema.clone(), page_id_of_current_node)
+            {
+                break leaf_node;
+            }
+            let internal_node =
+                InternalNode::open(self.bpm.clone(), schema.clone(), page_id_of_current_node)
+                    .unwrap();
+            page_id_of_current_node = internal_node.page_id_at(0).unwrap()
+        };
+        first_leaf.key_at(0)
+    }
+
     pub fn find(&self, key: &[Datum]) -> Option<RecordID> {
         if let Some(leaf_node) = self.find_leaf(key) {
             leaf_node
@@ -361,6 +395,8 @@ mod tests {
             for (idx, res) in res.iter().enumerate() {
                 assert_eq!(res.0, vec![Datum::Int(Some((idx + 1000) as i32))]);
             }
+            assert_eq!(index.first_key(), vec![Datum::Int(Some(0))]);
+            assert_eq!(index.last_key(), vec![Datum::Int(Some(39999))]);
             filename
         };
         remove_file(filename).unwrap();
