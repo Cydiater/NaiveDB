@@ -1,20 +1,20 @@
-use crate::catalog::CatalogManagerRef;
 use crate::execution::{ExecutionError, Executor, ExecutorImpl};
-use crate::table::{SchemaRef, Slice};
+use crate::index::BPTIndex;
+use crate::table::{SchemaRef, Slice, Table};
+use itertools::Itertools;
 use log::info;
 
-#[allow(dead_code)]
 pub struct InsertExecutor {
-    table_name: String,
-    catalog: CatalogManagerRef,
+    table: Table,
+    indexes: Vec<BPTIndex>,
     child: Box<ExecutorImpl>,
 }
 
 impl InsertExecutor {
-    pub fn new(table_name: String, catalog: CatalogManagerRef, child: Box<ExecutorImpl>) -> Self {
+    pub fn new(table: Table, indexes: Vec<BPTIndex>, child: Box<ExecutorImpl>) -> Self {
         Self {
-            table_name,
-            catalog,
+            table,
+            indexes,
             child,
         }
     }
@@ -27,71 +27,35 @@ impl Executor for InsertExecutor {
     fn execute(&mut self) -> Result<Option<Slice>, ExecutionError> {
         let input = self.child.execute()?;
         if let Some(input) = input {
-            let mut table = self
-                .catalog
-                .borrow_mut()
-                .find_table(self.table_name.clone())?;
             let len = input.get_num_tuple();
+            let mut indexes_rows = vec![];
+            for index in &mut self.indexes {
+                let exprs = index.get_exprs();
+                let rows = exprs.into_iter().map(|e| e.eval(Some(&input))).fold(
+                    vec![vec![]; input.get_num_tuple()],
+                    |rows, column| {
+                        rows.into_iter()
+                            .zip(column.into_iter())
+                            .map(|(mut row, d)| {
+                                row.push(d);
+                                row
+                            })
+                            .collect_vec()
+                    },
+                );
+                indexes_rows.push(rows);
+            }
             for idx in 0..len {
                 let tuple = input.at(idx)?;
                 info!("insert tuple {:?}", tuple);
-                table.insert(tuple)?;
+                let record_id = self.table.insert(tuple)?;
+                for (rows, index) in indexes_rows.iter().zip(&mut self.indexes) {
+                    index.insert(&rows[idx], record_id).unwrap();
+                }
             }
             Ok(Some(input))
         } else {
             Ok(None)
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::catalog::CatalogManager;
-    use crate::datum::{DataType, Datum};
-    use crate::execution::{ExecutorImpl, InsertExecutor, ValuesExecutor};
-    use crate::expr::{ConstantExpr, ExprImpl};
-    use crate::storage::BufferPoolManager;
-    use crate::table::{Schema, Table};
-    use std::fs::remove_file;
-    use std::rc::Rc;
-
-    #[test]
-    fn test_insert() {
-        let filename = {
-            let bpm = BufferPoolManager::new_random_shared(5);
-            let filename = bpm.borrow().filename();
-            let schema = Rc::new(Schema::from_slice(&[(
-                DataType::new_int(false),
-                "v1".to_string(),
-            )]));
-            let catalog = CatalogManager::new_shared(bpm.clone());
-            let values_executor = ExecutorImpl::Values(ValuesExecutor::new(
-                vec![vec![ExprImpl::Constant(ConstantExpr::new(
-                    Datum::Int(Some(123)),
-                    DataType::new_int(false),
-                ))]],
-                schema.clone(),
-                bpm.clone(),
-            ));
-            let table = Table::new(schema, bpm);
-            catalog
-                .borrow_mut()
-                .create_database("d".to_string())
-                .unwrap();
-            catalog.borrow_mut().use_database("d".to_string()).unwrap();
-            catalog
-                .borrow_mut()
-                .create_table("t".to_string(), table.get_page_id())
-                .unwrap();
-            let mut insert_executor = ExecutorImpl::Insert(InsertExecutor::new(
-                "t".to_string(),
-                catalog,
-                Box::new(values_executor),
-            ));
-            insert_executor.execute().unwrap();
-            assert_eq!(table.iter().count(), 1);
-            filename
-        };
-        remove_file(filename).unwrap();
     }
 }

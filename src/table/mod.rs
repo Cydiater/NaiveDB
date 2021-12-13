@@ -124,7 +124,7 @@ impl Table {
         self.page.borrow_mut().buffer[0..4].copy_from_slice(&(page_id as u32).to_le_bytes());
         self.page.borrow_mut().is_dirty = true;
     }
-    pub fn insert(&mut self, datums: Vec<Datum>) -> Result<(), TableError> {
+    pub fn insert(&mut self, datums: Vec<Datum>) -> Result<RecordID, TableError> {
         let page_id_of_first_slice = self.get_page_id_of_first_slice();
         let mut slice = if let Some(page_id_of_first_slice) = page_id_of_first_slice {
             Slice::open(
@@ -136,14 +136,12 @@ impl Table {
             Slice::new(self.bpm.clone(), self.schema.clone())
         };
         if slice.ok_to_add(&datums) {
-            slice.add(&datums).unwrap();
-            Ok(())
+            slice.add(&datums)
         } else {
             let mut new_slice = Slice::new(self.bpm.clone(), self.schema.clone());
-            new_slice.add(&datums).unwrap();
             self.set_page_id_of_first_slice(new_slice.get_page_id());
             new_slice.set_next_page_id(Some(slice.get_page_id()));
-            Ok(())
+            new_slice.add(&datums)
         }
     }
     pub fn iter(&self) -> TableIter {
@@ -222,7 +220,7 @@ mod tests {
             let mut table = Table::new(Rc::new(schema), bpm);
             // insert
             for idx in 0..1000 {
-                table.insert(vec![Datum::Int(Some(idx))]).unwrap()
+                let _ = table.insert(vec![Datum::Int(Some(idx))]).unwrap();
             }
             // validate
             table.iter().sorted().enumerate().for_each(|(idx, datums)| {

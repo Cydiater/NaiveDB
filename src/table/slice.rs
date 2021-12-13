@@ -1,4 +1,5 @@
 use crate::datum::{DataType, Datum};
+use crate::index::RecordID;
 use crate::storage::{BufferPoolManagerRef, PageID, PageRef, PAGE_SIZE};
 use crate::table::{Schema, SchemaRef, TableError};
 use itertools::Itertools;
@@ -160,7 +161,7 @@ impl Slice {
         delta_size <= self.get_free_size()
     }
 
-    pub fn add(&mut self, datums: &[Datum]) -> Result<(), TableError> {
+    pub fn add(&mut self, datums: &[Datum]) -> Result<RecordID, TableError> {
         // check schema
         if datums.len() != self.schema.len() {
             return Err(TableError::DatumSchemaNotMatch);
@@ -184,7 +185,7 @@ impl Slice {
         self.set_num_tuple(num_tuple + 1);
         // mark dirty
         self.page.borrow_mut().is_dirty = true;
-        Ok(())
+        Ok((self.get_page_id(), num_tuple))
     }
 }
 
