@@ -6,6 +6,7 @@ use crate::storage::PAGE_ID_OF_METADATA;
 use itertools::Itertools;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::rc::Rc;
 
 #[allow(dead_code)]
@@ -28,8 +29,27 @@ impl Drop for BufferPoolManager {
     }
 }
 
-#[allow(dead_code)]
 impl BufferPoolManager {
+    pub fn get_page_id_of_first_free_page(&mut self) -> Option<PageID> {
+        if self.num_pages().unwrap() <= PAGE_ID_OF_METADATA {
+            return None;
+        }
+        let meta_page = self.fetch(PAGE_ID_OF_METADATA).unwrap();
+        let page_id =
+            u32::from_le_bytes(meta_page.borrow().buffer[0..4].try_into().unwrap()) as PageID;
+        self.unpin(PAGE_ID_OF_METADATA).unwrap();
+        match page_id {
+            0 => None,
+            page_id => Some(page_id),
+        }
+    }
+    pub fn set_page_id_of_first_free_page(&mut self, page_id: Option<PageID>) {
+        let page_id = page_id.unwrap_or(0usize);
+        let meta_page = self.fetch(PAGE_ID_OF_METADATA).unwrap();
+        meta_page.borrow_mut().buffer[0..4].copy_from_slice(&(page_id as u32).to_le_bytes());
+        meta_page.borrow_mut().is_dirty = true;
+        self.unpin(PAGE_ID_OF_METADATA).unwrap();
+    }
     pub fn new(size: usize) -> Self {
         Self::new_with_disk(size, DiskManager::new().unwrap())
     }
@@ -70,6 +90,9 @@ impl BufferPoolManager {
         self.disk.clear()
     }
     pub fn fetch(&mut self, page_id: PageID) -> Result<PageRef, StorageError> {
+        if page_id >= self.num_pages()? {
+            return Err(StorageError::PageIDOutOfBound(page_id));
+        }
         // if we can find this page in buffer
         if let Some(&frame_id) = self.page_table.get(&page_id) {
             let page = self.buf[frame_id].clone();
@@ -80,7 +103,8 @@ impl BufferPoolManager {
         // fetch from disk and put in buffer pool
         let frame_id = self.replacer.victim()?;
         let page = self.buf[frame_id].clone();
-        if let Some(this_page_id) = page.borrow().page_id {
+        let this_page_id = page.borrow().page_id;
+        if let Some(this_page_id) = this_page_id {
             // write back
             if page.borrow_mut().is_dirty {
                 self.disk.write(page.clone())?;
@@ -128,8 +152,24 @@ impl BufferPoolManager {
             // remove from page_table
             self.page_table.remove(&this_page_id);
         }
-        // ask disk for allocating page
-        self.disk.allocate(page.clone())?;
+        // if have free page
+        if let Some(page_id) = self.get_page_id_of_first_free_page() {
+            // set page_id
+            page.borrow_mut().page_id = Some(page_id);
+            // read content
+            self.disk.read(page_id, page.clone())?;
+            // get page_id of next free page
+            let page_id_of_next_free_page =
+                u32::from_le_bytes(page.borrow().buffer[0..4].try_into().unwrap()) as PageID;
+            let page_id_of_next_free_page = match page_id_of_next_free_page {
+                0 => None,
+                page_id => Some(page_id),
+            };
+            self.set_page_id_of_first_free_page(page_id_of_next_free_page);
+        } else {
+            // ask disk for allocating page
+            self.disk.allocate(page.clone())?;
+        }
         self.replacer.pin(frame_id);
         // update page table
         self.page_table

@@ -28,4 +28,6 @@ pub enum StorageError {
     IOError(#[from] std::io::Error),
     #[error("ReplacerError: {0}")]
     ReplacerError(String),
+    #[error("PageID Out of Bound: {0}")]
+    PageIDOutOfBound(PageID),
 }
