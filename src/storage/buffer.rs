@@ -2,6 +2,7 @@ use super::{FrameID, PageID, StorageError};
 use crate::storage::clock::ClockReplacer;
 use crate::storage::disk::DiskManager;
 use crate::storage::page::{Page, PageRef};
+use crate::storage::PAGE_ID_OF_METADATA;
 use itertools::Itertools;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -42,12 +43,19 @@ impl BufferPoolManager {
         let buf = (0..size)
             .map(|_| Rc::new(RefCell::new(Page::new())))
             .collect_vec();
-        Self {
+        let mut bpm = Self {
             disk,
             replacer: ClockReplacer::new(size),
             buf,
             page_table: HashMap::new(),
+        };
+        if bpm.num_pages().unwrap() == PAGE_ID_OF_METADATA {
+            let page = bpm.alloc().unwrap();
+            page.borrow_mut().buffer[0..4].copy_from_slice(&0u32.to_le_bytes());
+            page.borrow_mut().is_dirty = true;
+            bpm.unpin(PAGE_ID_OF_METADATA).unwrap();
         }
+        bpm
     }
     pub fn new_shared(size: usize) -> Rc<RefCell<Self>> {
         Rc::new(RefCell::new(Self::new(size)))
@@ -131,7 +139,6 @@ impl BufferPoolManager {
     pub fn num_pages(&self) -> Result<usize, StorageError> {
         self.disk.num_pages()
     }
-    // TODO impl deallocate
 }
 
 #[cfg(test)]
@@ -145,18 +152,16 @@ mod tests {
     fn write_read_test() {
         let filename = {
             // new a BPM
-            let mut bpm = BufferPoolManager::new_random(5);
-            let filename = bpm.filename();
-            // clear content
-            bpm.clear().unwrap();
+            let bpm = BufferPoolManager::new_random_shared(5);
+            let filename = bpm.borrow().filename();
             // alloc 3 pages
-            let page1 = bpm.alloc().unwrap();
-            let page2 = bpm.alloc().unwrap();
-            let page3 = bpm.alloc().unwrap();
+            let page1 = bpm.borrow_mut().alloc().unwrap();
+            let page2 = bpm.borrow_mut().alloc().unwrap();
+            let page3 = bpm.borrow_mut().alloc().unwrap();
             // since it's empty, page_id should increase from 0
-            assert_eq!(page1.borrow().page_id.unwrap(), 0);
-            assert_eq!(page2.borrow().page_id.unwrap(), 1);
-            assert_eq!(page3.borrow().page_id.unwrap(), 2);
+            assert_eq!(page1.borrow().page_id.unwrap(), 1);
+            assert_eq!(page2.borrow().page_id.unwrap(), 2);
+            assert_eq!(page3.borrow().page_id.unwrap(), 3);
             // write random values
             let mut rng = rand::thread_rng();
             for i in 0..PAGE_SIZE {
@@ -171,13 +176,13 @@ mod tests {
             let page_id2 = page2.borrow().page_id.unwrap();
             let page_id3 = page3.borrow().page_id.unwrap();
             // unpin
-            bpm.unpin(page_id1).unwrap();
-            bpm.unpin(page_id2).unwrap();
-            bpm.unpin(page_id3).unwrap();
+            bpm.borrow_mut().unpin(page_id1).unwrap();
+            bpm.borrow_mut().unpin(page_id2).unwrap();
+            bpm.borrow_mut().unpin(page_id3).unwrap();
             // refetch, but in reverse order
-            let page3 = bpm.fetch(page_id3).unwrap();
-            let page2 = bpm.fetch(page_id2).unwrap();
-            let page1 = bpm.fetch(page_id1).unwrap();
+            let page3 = bpm.borrow_mut().fetch(page_id3).unwrap();
+            let page2 = bpm.borrow_mut().fetch(page_id2).unwrap();
+            let page1 = bpm.borrow_mut().fetch(page_id1).unwrap();
             // validate
             for i in 0..PAGE_SIZE {
                 let p1 = page1.borrow().buffer[i];
