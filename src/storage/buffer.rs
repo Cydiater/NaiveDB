@@ -31,7 +31,7 @@ impl Drop for BufferPoolManager {
 
 impl BufferPoolManager {
     pub fn get_page_id_of_first_free_page(&mut self) -> Option<PageID> {
-        if self.num_pages().unwrap() <= PAGE_ID_OF_METADATA {
+        if self.num_pages().unwrap() == PAGE_ID_OF_METADATA {
             return None;
         }
         let meta_page = self.fetch(PAGE_ID_OF_METADATA).unwrap();
