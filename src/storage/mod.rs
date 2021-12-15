@@ -30,4 +30,6 @@ pub enum StorageError {
     ReplacerError(String),
     #[error("PageID Out of Bound: {0}")]
     PageIDOutOfBound(PageID),
+    #[error("Free Pinned Page: {0}")]
+    FreePinnedPage(PageID),
 }

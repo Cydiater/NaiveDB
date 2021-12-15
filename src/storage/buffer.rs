@@ -9,7 +9,6 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::rc::Rc;
 
-#[allow(dead_code)]
 pub struct BufferPoolManager {
     disk: DiskManager,
     replacer: ClockReplacer,
@@ -139,25 +138,13 @@ impl BufferPoolManager {
         Ok(())
     }
     pub fn alloc(&mut self) -> Result<PageRef, StorageError> {
-        // ask replacer for a new frame_id
-        let frame_id = self.replacer.victim()?;
-        // fetch the page corresponding to the frame_id
-        let page = self.buf[frame_id].clone();
-        let this_page_id = page.borrow().page_id;
-        if let Some(this_page_id) = this_page_id {
-            // write back
-            if page.borrow_mut().is_dirty {
-                self.disk.write(page.clone())?;
-            }
-            // remove from page_table
-            self.page_table.remove(&this_page_id);
-        }
         // if have free page
-        if let Some(page_id) = self.get_page_id_of_first_free_page() {
-            // set page_id
-            page.borrow_mut().page_id = Some(page_id);
-            // read content
-            self.disk.read(page_id, page.clone())?;
+        let page = if let Some(page_id) = self.get_page_id_of_first_free_page() {
+            // fetch to disk
+            let page = self.fetch(page_id).unwrap();
+            if page.borrow().pin_count != 1 {
+                return Err(StorageError::FreePinnedPage(page_id));
+            }
             // get page_id of next free page
             let page_id_of_next_free_page =
                 u32::from_le_bytes(page.borrow().buffer[0..4].try_into().unwrap()) as PageID;
@@ -166,15 +153,44 @@ impl BufferPoolManager {
                 page_id => Some(page_id),
             };
             self.set_page_id_of_first_free_page(page_id_of_next_free_page);
+            page
         } else {
+            // ask replacer for a new frame_id
+            let frame_id = self.replacer.victim()?;
+            // fetch the page corresponding to the frame_id
+            let page = self.buf[frame_id].clone();
+            let this_page_id = page.borrow().page_id;
+            if let Some(this_page_id) = this_page_id {
+                // write back
+                if page.borrow_mut().is_dirty {
+                    self.disk.write(page.clone())?;
+                }
+                // remove from page_table
+                self.page_table.remove(&this_page_id);
+            }
             // ask disk for allocating page
             self.disk.allocate(page.clone())?;
-        }
-        self.replacer.pin(frame_id);
-        // update page table
-        self.page_table
-            .insert(page.borrow().page_id.unwrap(), frame_id);
+            self.replacer.pin(frame_id);
+            // update page table
+            self.page_table
+                .insert(page.borrow().page_id.unwrap(), frame_id);
+            page
+        };
         Ok(page)
+    }
+    pub fn free(&mut self, page_id: PageID) -> Result<(), StorageError> {
+        let page = self.fetch(page_id).unwrap();
+        let page_id_of_first_free_page = self.get_page_id_of_first_free_page();
+        page.borrow_mut().buffer[0..4]
+            .copy_from_slice(&(page_id_of_first_free_page.unwrap_or(0usize) as u32).to_le_bytes());
+        page.borrow_mut().is_dirty = true;
+        if page.borrow().pin_count != 1 {
+            return Err(StorageError::FreePinnedPage(page.borrow().page_id.unwrap()));
+        }
+        let page_id = page.borrow().page_id.unwrap();
+        self.unpin(page_id)?;
+        self.set_page_id_of_first_free_page(Some(page_id));
+        Ok(())
     }
     pub fn num_pages(&self) -> Result<usize, StorageError> {
         self.disk.num_pages()
@@ -253,6 +269,33 @@ mod tests {
         assert_eq!(page.borrow().page_id, Some(page_id));
         // remove file
         remove_file(filename).unwrap();
+    }
+
+    #[test]
+    fn free_test() {
+        let filename = {
+            let bpm = BufferPoolManager::new_random_shared(10);
+            let filename = bpm.borrow().filename();
+            let mut page_ids = vec![];
+            for _ in 0..1000 {
+                let page = bpm.borrow_mut().alloc().unwrap();
+                let page_id = page.borrow().page_id.unwrap();
+                bpm.borrow_mut().unpin(page_id).unwrap();
+                page_ids.push(page_id);
+            }
+            for page_id in page_ids {
+                bpm.borrow_mut().free(page_id).unwrap();
+            }
+            let num_pages = bpm.borrow().num_pages().unwrap();
+            for _ in 0..1000 {
+                let page = bpm.borrow_mut().alloc().unwrap();
+                let page_id = page.borrow().page_id.unwrap();
+                bpm.borrow_mut().unpin(page_id).unwrap();
+            }
+            assert_eq!(num_pages, bpm.borrow().num_pages().unwrap());
+            filename
+        };
+        remove_file(filename).unwrap()
     }
 
     #[test]
