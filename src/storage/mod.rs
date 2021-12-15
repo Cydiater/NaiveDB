@@ -11,6 +11,8 @@ pub use page::{Page, PageRef};
 
 pub const PAGE_SIZE: usize = 4096;
 pub const DEFAULT_DB_FILE: &str = "naive.db";
+pub const PAGE_ID_OF_ROOT_DATABASE_CATALOG: usize = 1;
+pub const PAGE_ID_OF_METADATA: usize = 0;
 
 /// `PageID` is used to fetch page from disk, it's
 /// used internally as offset for disk.
@@ -26,4 +28,8 @@ pub enum StorageError {
     IOError(#[from] std::io::Error),
     #[error("ReplacerError: {0}")]
     ReplacerError(String),
+    #[error("PageID Out of Bound: {0}")]
+    PageIDOutOfBound(PageID),
+    #[error("Free Pinned Page: {0}")]
+    FreePinnedPage(PageID),
 }

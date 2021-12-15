@@ -6,6 +6,7 @@ pub use add_index::AddIndexPlan;
 pub use create_database::CreateDatabasePlan;
 pub use create_table::CreateTablePlan;
 pub use desc::DescPlan;
+pub use drop_table::DropTablePlan;
 pub use insert::InsertPlan;
 pub use select::{FilterPlan, IndexScanPlan, ProjectPlan, SeqScanPlan};
 pub use use_database::UseDatabasePlan;
@@ -15,6 +16,7 @@ mod add_index;
 mod create_database;
 mod create_table;
 mod desc;
+mod drop_table;
 mod insert;
 mod select;
 mod use_database;
@@ -34,6 +36,7 @@ pub enum Plan {
     Filter(FilterPlan),
     AddIndex(AddIndexPlan),
     IndexScan(IndexScanPlan),
+    DropTable(DropTablePlan),
 }
 
 pub struct Planner {
@@ -55,6 +58,7 @@ impl Planner {
             Statement::Desc(stmt) => self.plan_desc(stmt),
             Statement::Select(stmt) => self.plan_select(stmt),
             Statement::AddIndex(stmt) => self.plan_add_index(stmt),
+            Statement::DropTable(stmt) => self.plan_drop_table(stmt),
         }
     }
 }

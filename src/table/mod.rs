@@ -78,7 +78,6 @@ impl Iterator for TableIter {
     }
 }
 
-#[allow(dead_code)]
 impl Table {
     /// open a table with page_id
     pub fn open(page_id: PageID, bpm: BufferPoolManagerRef) -> Self {
@@ -187,6 +186,22 @@ impl Table {
             page_id = next_page_id;
         }
         slices
+    }
+
+    pub fn erase(self) {
+        let bpm = self.bpm.clone();
+        let table_page_id = self.page.borrow().page_id.unwrap();
+        let slice_page_ids = self
+            .into_slice()
+            .into_iter()
+            .map(|s| s.get_page_id())
+            .collect_vec();
+        for page_id in slice_page_ids
+            .into_iter()
+            .chain(std::iter::once(table_page_id))
+        {
+            bpm.borrow_mut().free(page_id).unwrap();
+        }
     }
 }
 

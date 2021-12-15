@@ -1,4 +1,7 @@
-use crate::storage::{BufferPoolManagerRef, PageID, PageRef, StorageError, PAGE_SIZE};
+use crate::storage::{
+    BufferPoolManagerRef, PageID, PageRef, StorageError, PAGE_ID_OF_ROOT_DATABASE_CATALOG,
+    PAGE_SIZE,
+};
 use std::convert::TryInto;
 use thiserror::Error;
 
@@ -53,11 +56,18 @@ impl Catalog {
         self.page.borrow().page_id.unwrap()
     }
     pub fn new_database_catalog(bpm: BufferPoolManagerRef) -> Catalog {
-        let page = if bpm.borrow().num_pages().unwrap() > 0 {
-            bpm.borrow_mut().fetch(0).unwrap()
+        let page = if bpm.borrow().num_pages().unwrap() > PAGE_ID_OF_ROOT_DATABASE_CATALOG {
+            bpm.borrow_mut()
+                .fetch(PAGE_ID_OF_ROOT_DATABASE_CATALOG)
+                .unwrap()
         } else {
             let page = bpm.borrow_mut().alloc().unwrap();
+            assert_eq!(
+                page.borrow().page_id,
+                Some(PAGE_ID_OF_ROOT_DATABASE_CATALOG)
+            );
             page.borrow_mut().buffer[0..4].copy_from_slice(&0u32.to_le_bytes());
+            page.borrow_mut().is_dirty = true;
             page
         };
         page.borrow_mut().is_dirty = true;
@@ -79,6 +89,32 @@ impl Catalog {
             buf: self.page.clone(),
             bpm: self.bpm.clone(),
         }
+    }
+    pub fn remove(&mut self, name: String) -> Result<(), CatalogError> {
+        let mut start = 0;
+        let mut offset = 0;
+        for (len, _, record_name) in self.iter() {
+            if name == record_name {
+                start += len + 4 + 4;
+                break;
+            }
+            start += len + 4 + 4;
+            offset += len + 4 + 4;
+        }
+        if start == offset {
+            return Err(CatalogError::EntryNotFound);
+        }
+        let end = self
+            .iter()
+            .map(|(offset, _, _)| offset + 4 + 4)
+            .sum::<usize>()
+            + 4;
+        self.page
+            .borrow_mut()
+            .buffer
+            .copy_within(start..end, offset);
+        self.page.borrow_mut().is_dirty = true;
+        Ok(())
     }
     pub fn insert(&mut self, page_id: PageID, name: String) -> Result<(), CatalogError> {
         let mut last = 0;
@@ -120,9 +156,7 @@ mod tests {
 
     #[test]
     fn test_database_catalog() {
-        let bpm = BufferPoolManager::new_shared(5);
-        bpm.borrow_mut().clear().unwrap();
-        let _ = bpm.borrow_mut().alloc().unwrap();
+        let bpm = BufferPoolManager::new_random_shared(5);
         let mut db_catalog = Catalog::new_database_catalog(bpm.clone());
         db_catalog.insert(0, "sample_0".to_string()).unwrap();
         db_catalog.insert(1, "sample_1".to_string()).unwrap();

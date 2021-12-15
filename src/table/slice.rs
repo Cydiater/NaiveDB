@@ -272,9 +272,8 @@ mod tests {
     #[test]
     fn test_varchar() {
         let filename = {
-            let bpm = BufferPoolManager::new_shared(5);
+            let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
-            bpm.borrow_mut().clear().unwrap();
             let schema = Rc::new(Schema::from_slice(&[
                 (DataType::new_int(false), "v1".to_string()),
                 (DataType::new_varchar(false), "v2".to_string()),
@@ -302,7 +301,6 @@ mod tests {
         let filename = {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
-            bpm.borrow_mut().clear().unwrap();
             let slice = Slice::new_simple_message(bpm, "header".to_string(), "message".to_string())
                 .unwrap();
             let tuple = slice.at(0).unwrap();

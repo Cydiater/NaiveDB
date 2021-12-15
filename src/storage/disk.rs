@@ -56,7 +56,6 @@ impl DiskManager {
         self.file.write_all(&page.borrow_mut().buffer)?;
         Ok(())
     }
-    // TODO: support deallocate
     pub fn allocate(&mut self, page: PageRef) -> Result<(), StorageError> {
         let meta = self.file.metadata()?;
         let len = meta.len() as usize;
