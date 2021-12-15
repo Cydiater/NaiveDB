@@ -68,8 +68,6 @@ mod tests {
             .parse("alter table t add index (v1, v2);")
             .is_ok());
         // drop table
-        assert!(sql::StatementsParser::new()
-            .parse("drop table t;")
-            .is_ok());
+        assert!(sql::StatementsParser::new().parse("drop table t;").is_ok());
     }
 }
