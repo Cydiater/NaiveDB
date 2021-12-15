@@ -100,7 +100,10 @@ pub Statement: Statement = {
     DescStmt,
     SelectStmt,
     AddIndexStmt,
+    DropTableStmt,
 }
+
+DropTableStmt: Statement = "drop" "table" <table_name: Identifier> ";" => Statement::DropTable(DropTableStmt { table_name });
 
 WhereClauses: Vec<ExprNode> = "where" <exprs: WhereExprs> => exprs;
 

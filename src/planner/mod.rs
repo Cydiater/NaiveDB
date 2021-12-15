@@ -55,6 +55,7 @@ impl Planner {
             Statement::Desc(stmt) => self.plan_desc(stmt),
             Statement::Select(stmt) => self.plan_select(stmt),
             Statement::AddIndex(stmt) => self.plan_add_index(stmt),
+            _ => todo!(),
         }
     }
 }

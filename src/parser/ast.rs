@@ -11,6 +11,11 @@ pub enum Statement {
     Desc(DescStmt),
     Select(SelectStmt),
     AddIndex(AddIndexStmt),
+    DropTable(DropTableStmt),
+}
+#[derive(Debug)]
+pub struct DropTableStmt {
+    pub table_name: String,
 }
 
 #[derive(Debug, Clone)]
