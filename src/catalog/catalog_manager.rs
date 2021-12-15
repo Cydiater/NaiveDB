@@ -65,6 +65,14 @@ impl CatalogManager {
             Err(CatalogError::EntryNotFound)
         }
     }
+    pub fn remove_table(&mut self, table_name: String) -> Result<(), CatalogError> {
+        if let Some(table_catalog) = &mut self.table_catalog {
+            table_catalog.remove(table_name)?;
+            Ok(())
+        } else {
+            Err(CatalogError::NotUsingDatabase)
+        }
+    }
     pub fn find_table(&self, table_name: String) -> Result<Table, CatalogError> {
         if let Some(table_catalog) = &self.table_catalog {
             if let Some(page_id) = table_catalog

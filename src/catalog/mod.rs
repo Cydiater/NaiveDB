@@ -90,6 +90,32 @@ impl Catalog {
             bpm: self.bpm.clone(),
         }
     }
+    pub fn remove(&mut self, name: String) -> Result<(), CatalogError> {
+        let mut start = 0;
+        let mut offset = 0;
+        for (len, _, record_name) in self.iter() {
+            if name == record_name {
+                start += len + 4 + 4;
+                break;
+            }
+            start += len + 4 + 4;
+            offset += len + 4 + 4;
+        }
+        if start == offset {
+            return Err(CatalogError::EntryNotFound);
+        }
+        let end = self
+            .iter()
+            .map(|(offset, _, _)| offset + 4 + 4)
+            .sum::<usize>()
+            + 4;
+        self.page
+            .borrow_mut()
+            .buffer
+            .copy_within(start..end, offset);
+        self.page.borrow_mut().is_dirty = true;
+        Ok(())
+    }
     pub fn insert(&mut self, page_id: PageID, name: String) -> Result<(), CatalogError> {
         let mut last = 0;
         for (len, _, _) in self.iter() {
