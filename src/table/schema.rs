@@ -1,4 +1,4 @@
-use crate::expr::ExprImpl;
+use crate::expr::{ColumnRefExpr, ExprImpl};
 use crate::table::DataType;
 use itertools::Itertools;
 use std::convert::TryInto;
@@ -9,18 +9,51 @@ use thiserror::Error;
 ///
 /// Schema Format:
 ///
-///     | num_column | Column[0] | Column[1] | ... | num_primary | PrimaryColumn[0] | ...
+///     | num_column | Column[0] | Column[1] | ... |
 ///
 /// Column Format:
 ///
-///     | offset | len_desc | desc_content | DataType |
+///     | offset | len_desc | desc_content | DataType
+///     | Primary / Foreign / None | len_of_column_ref_expr | ColumnRefExpr
 ///
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum ColumnConstraint {
+    Normal,
+    Primary,
+    Foreign(ColumnRefExpr),
+}
+
+impl ColumnConstraint {
+    pub fn size_in_bytes(&self) -> usize {
+        match self {
+            Self::Normal => 1,
+            Self::Primary => 1,
+            _ => todo!(),
+        }
+    }
+    pub fn to_bytes(&self) -> Vec<u8> {
+        match self {
+            Self::Normal => vec![0u8],
+            Self::Primary => vec![1u8],
+            Self::Foreign(_) => todo!(),
+        }
+    }
+    pub fn from_bytes(bytes: &[u8]) -> Self {
+        match bytes[0] {
+            0u8 => Self::Normal,
+            1u8 => Self::Primary,
+            _ => todo!(),
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Column {
     pub offset: usize,
     pub data_type: DataType,
     pub desc: String,
+    pub constraint: ColumnConstraint,
 }
 
 pub type SchemaRef = Rc<Schema>;
@@ -31,6 +64,7 @@ impl Column {
             offset,
             data_type,
             desc,
+            constraint: ColumnConstraint::Normal,
         }
     }
     pub fn from_slice(type_and_names: &[(DataType, String)]) -> Vec<Self> {
@@ -43,6 +77,9 @@ impl Column {
             })
             .collect_vec()
     }
+    pub fn size_in_bytes(&self) -> usize {
+        4 + 4 + self.desc.len() + 5 + self.constraint.size_in_bytes()
+    }
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = vec![];
         let desc_len = self.desc.len();
@@ -50,6 +87,7 @@ impl Column {
         bytes.extend_from_slice(&(desc_len as u32).to_le_bytes());
         bytes.extend_from_slice(self.desc.as_bytes());
         bytes.extend_from_slice(&self.data_type.as_bytes());
+        bytes.extend_from_slice(&self.constraint.to_bytes());
         bytes
     }
     pub fn from_bytes(bytes: &[u8]) -> Self {
@@ -59,10 +97,12 @@ impl Column {
         let data_type =
             DataType::from_bytes(bytes[8 + desc_len..8 + desc_len + 5].try_into().unwrap())
                 .unwrap();
+        let constraint = ColumnConstraint::from_bytes(&bytes[8 + desc_len + 5..]);
         Self {
             offset,
             desc,
             data_type,
+            constraint,
         }
     }
 }
@@ -70,20 +110,16 @@ impl Column {
 #[derive(Debug, PartialEq)]
 pub struct Schema {
     columns: Vec<Column>,
-    primary: Vec<Column>,
 }
 
 impl Schema {
     pub fn new(columns: Vec<Column>) -> Self {
-        Self {
-            columns,
-            primary: vec![],
-        }
+        Self { columns }
     }
     pub fn set_primary(&mut self, column_name: String) -> Result<(), SchemaError> {
-        let column = self.columns.iter().find(|c| c.desc == column_name);
+        let column: Option<&mut Column> = self.columns.iter_mut().find(|c| c.desc == column_name);
         if let Some(column) = column {
-            self.primary.push(column.clone());
+            column.constraint = ColumnConstraint::Primary;
             Ok(())
         } else {
             Err(SchemaError::ColumnNotFound)
@@ -121,10 +157,6 @@ impl Schema {
         for col in self.columns.iter() {
             bytes.extend_from_slice(col.to_bytes().as_slice());
         }
-        bytes.extend_from_slice(&(self.primary.len() as u32).to_le_bytes());
-        for col in self.primary.iter() {
-            bytes.extend_from_slice(col.to_bytes().as_slice());
-        }
         bytes
     }
     pub fn from_bytes(bytes: &[u8]) -> Self {
@@ -132,27 +164,25 @@ impl Schema {
         let mut columns = vec![];
         let mut offset = 4;
         for _ in 0..num_column {
-            let len_desc =
-                u32::from_le_bytes(bytes[offset + 4..offset + 8].try_into().unwrap()) as usize;
             let start = offset;
-            let end = offset + len_desc + 4 + 4 + 5;
-            let column = Column::from_bytes(&bytes[start..end]);
+            let column = Column::from_bytes(&bytes[start..]);
+            offset += column.size_in_bytes();
             columns.push(column);
-            offset = end;
         }
-        let num_column = u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap());
-        offset += 4;
-        let mut primary = vec![];
-        for _ in 0..num_column {
-            let len_desc =
-                u32::from_le_bytes(bytes[offset + 4..offset + 8].try_into().unwrap()) as usize;
-            let start = offset;
-            let end = offset + len_desc + 4 + 4 + 5;
-            let column = Column::from_bytes(&bytes[start..end]);
-            primary.push(column);
-            offset = end;
-        }
-        Self { columns, primary }
+        Self { columns }
+    }
+    pub fn primary_as_exprs(&self) -> Vec<ExprImpl> {
+        self.iter()
+            .enumerate()
+            .filter_map(|(idx, c)| match c.constraint {
+                ColumnConstraint::Primary => Some(ExprImpl::ColumnRef(ColumnRefExpr::new(
+                    idx,
+                    c.data_type,
+                    c.desc.clone(),
+                ))),
+                _ => None,
+            })
+            .collect_vec()
     }
 }
 

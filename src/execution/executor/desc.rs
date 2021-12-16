@@ -39,6 +39,7 @@ impl Executor for DescExecutor {
                 .find_table(self.table_name.clone())?;
             let desc_schema = self.schema();
             let mut desc = Slice::new(self.bpm.clone(), desc_schema);
+            // TODO add key field
             table.schema.iter().for_each(|c| {
                 desc.add(&[
                     Datum::VarChar(Some(c.desc.clone())),
