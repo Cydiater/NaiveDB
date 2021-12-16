@@ -138,6 +138,7 @@ mod tests {
             let tuples = table.iter().collect_vec();
             assert_eq!(tuples, vec![vec![Datum::Int(Some(1))],]);
             db.run("alter table t add index (v1);").unwrap();
+            db.run("desc t;").unwrap();
             db.run("drop table t;").unwrap();
             db.run("create table t (v1 int not null);").unwrap();
             db.run("insert into t values (4), (5), (6);").unwrap();
