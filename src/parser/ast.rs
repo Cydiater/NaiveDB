@@ -91,18 +91,24 @@ pub struct InsertStmt {
 }
 
 #[derive(Debug)]
-pub enum Field {
-    Normal(NormalField),
-}
-
-#[derive(Debug)]
-pub struct AddIndexStmt {
-    pub table_name: String,
-    pub exprs: Vec<ExprNode>,
+pub struct PrimaryField {
+    pub column_names: Vec<String>,
 }
 
 #[derive(Debug)]
 pub struct NormalField {
     pub field_name: String,
     pub field_data_type: DataType,
+}
+
+#[derive(Debug)]
+pub enum Field {
+    Normal(NormalField),
+    Primary(PrimaryField),
+}
+
+#[derive(Debug)]
+pub struct AddIndexStmt {
+    pub table_name: String,
+    pub exprs: Vec<ExprNode>,
 }
