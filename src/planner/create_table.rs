@@ -15,13 +15,21 @@ impl Planner {
             .fields
             .iter()
             .map(|f| match f {
-                Field::Normal(f) => (f.field_data_type, f.field_name.clone()),
-                _ => todo!(),
+                Field::Normal(f) => Some((f.field_data_type, f.field_name.clone())),
+                _ => None,
             })
+            .flatten()
             .collect_vec();
+        let mut schema = Schema::from_slice(&slice);
+        let primary = stmt.fields.iter().find(|f| matches!(f, Field::Primary(_)));
+        if let Some(Field::Primary(primary)) = primary {
+            for column_name in primary.column_names.iter() {
+                schema.set_primary(column_name.clone()).unwrap();
+            }
+        }
         Plan::CreateTable(CreateTablePlan {
             table_name: stmt.table_name,
-            schema: Schema::from_slice(slice.as_slice()),
+            schema,
         })
     }
 }

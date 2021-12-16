@@ -205,7 +205,6 @@ impl Table {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Error, Debug)]
 pub enum TableError {
     #[error("datum not match with schema")]
