@@ -10,6 +10,7 @@ pub Fields = Comma<Field>;
 pub Exprs = Comma<Expr>;
 pub Tuples = Comma<Tuple>;
 pub WhereExprs = And<Expr>;
+pub Identifiers = Comma<Identifier>;
 
 Comma<T>: Vec<T> = {
     <mut v:(<T> ",")*> <e:T?> => match e {
@@ -85,11 +86,12 @@ DataType: DataType = {
 
 Field: Field = {
     NormalField,
+    PrimaryField,
 }
 
-NormalField: Field = {
-    <field_name:Identifier> <field_data_type:DataType> => Field::Normal(NormalField { field_name, field_data_type }),
-}
+PrimaryField: Field = "primary" "key" "(" <column_names: Identifiers> ")" => Field::Primary(PrimaryField { column_names });
+
+NormalField: Field = <field_name:Identifier> <field_data_type:DataType> => Field::Normal(NormalField { field_name, field_data_type });
 
 pub Statement: Statement = {
     CreateDatabaseStmt,
@@ -112,37 +114,21 @@ Selectors: Selectors = {
     <exprs: Exprs> => Selectors::Exprs(exprs),
 }
 
-AddIndexStmt: Statement = {
-    "alter" "table" <table_name: Identifier> "add" "index" "("<exprs: Exprs> ")" ";" => Statement::AddIndex(AddIndexStmt { table_name, exprs }),
-}
+AddIndexStmt: Statement = "alter" "table" <table_name: Identifier> "add" "index" "("<exprs: Exprs> ")" ";" => Statement::AddIndex(AddIndexStmt { table_name, exprs });
 
-SelectStmt: Statement = {
-    "select" <selectors: Selectors> "from" <table_name: Identifier> <where_exprs: WhereClauses?> ";" => Statement::Select(SelectStmt { table_name, selectors, where_exprs }),
-}
+SelectStmt: Statement = "select" <selectors: Selectors> "from" <table_name: Identifier> <where_exprs: WhereClauses?> ";" => Statement::Select(SelectStmt { table_name, selectors, where_exprs });
 
-DescStmt: Statement = {
-    "desc" <table_name: Identifier> ";" => Statement::Desc(DescStmt { table_name }),
-}
+DescStmt: Statement = "desc" <table_name: Identifier> ";" => Statement::Desc(DescStmt { table_name });
 
-CreateDatabaseStmt: Statement = {
-    "create" "database" <database_name: Identifier> ";" => Statement::CreateDatabase(CreateDatabaseStmt { database_name }),
-}
+CreateDatabaseStmt: Statement = "create" "database" <database_name: Identifier> ";" => Statement::CreateDatabase(CreateDatabaseStmt { database_name });
 
-ShowDatabasesStmt: Statement = {
-    "show" "databases" ";" => Statement::ShowDatabases,
-}
+ShowDatabasesStmt: Statement = "show" "databases" ";" => Statement::ShowDatabases;
 
-UseDatabaseStmt: Statement = {
-    "use" <database_name: Identifier> ";" => Statement::UseDatabase(UseDatabaseStmt { database_name }),
-}
+UseDatabaseStmt: Statement = "use" <database_name: Identifier> ";" => Statement::UseDatabase(UseDatabaseStmt { database_name });
 
-CreateTableStmt: Statement = {
-    "create" "table" <table_name: Identifier> "(" <fields: Fields> ")" ";" => Statement::CreateTable(CreateTableStmt { table_name, fields }),
-}
+CreateTableStmt: Statement = "create" "table" <table_name: Identifier> "(" <fields: Fields> ")" ";" => Statement::CreateTable(CreateTableStmt { table_name, fields });
 
-InsertStmt: Statement = {
-    "insert" "into" <table_name: Identifier> "values" <values: Tuples> ";" => Statement::Insert(InsertStmt { table_name, values }),
-}
+InsertStmt: Statement = "insert" "into" <table_name: Identifier> "values" <values: Tuples> ";" => Statement::Insert(InsertStmt { table_name, values });
 
 Identifier: String = {
     r"[a-zA-Z_][a-zA-Z_0-9]*" => String::from_str(<>).unwrap(),

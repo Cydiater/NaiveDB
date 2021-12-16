@@ -11,7 +11,7 @@ use thiserror::Error;
 mod schema;
 mod slice;
 
-pub use schema::{Column, Schema, SchemaRef};
+pub use schema::{Column, ColumnConstraint, Schema, SchemaRef};
 pub use slice::Slice;
 
 ///
@@ -205,7 +205,6 @@ impl Table {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Error, Debug)]
 pub enum TableError {
     #[error("datum not match with schema")]

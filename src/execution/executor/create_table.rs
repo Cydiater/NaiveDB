@@ -1,6 +1,7 @@
 use crate::catalog::CatalogManagerRef;
 use crate::datum::DataType;
 use crate::execution::{ExecutionError, Executor};
+use crate::index::BPTIndex;
 use crate::storage::BufferPoolManagerRef;
 use crate::table::{Schema, SchemaRef, Slice, Table};
 use log::info;
@@ -46,6 +47,16 @@ impl Executor for CreateTableExecutor {
             self.catalog
                 .borrow_mut()
                 .create_table(self.table_name.clone(), page_id)?;
+            let primary_as_exprs = self.schema.primary_as_exprs();
+            if !primary_as_exprs.is_empty() {
+                let index = BPTIndex::new(self.bpm.clone(), &primary_as_exprs);
+                let page_id = index.get_page_id();
+                self.catalog.borrow_mut().add_index(
+                    self.table_name.clone(),
+                    Rc::new(index.get_key_schema()),
+                    page_id,
+                )?;
+            }
             self.executed = true;
             Ok(Some(
                 Slice::new_simple_message(
