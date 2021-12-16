@@ -11,7 +11,7 @@ use thiserror::Error;
 mod schema;
 mod slice;
 
-pub use schema::{Column, Schema, SchemaRef};
+pub use schema::{Column, ColumnConstraint, Schema, SchemaRef};
 pub use slice::Slice;
 
 ///

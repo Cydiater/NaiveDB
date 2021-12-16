@@ -2,7 +2,7 @@ use crate::catalog::CatalogManagerRef;
 use crate::datum::{DataType, Datum};
 use crate::execution::{ExecutionError, Executor};
 use crate::storage::BufferPoolManagerRef;
-use crate::table::{Schema, SchemaRef, Slice};
+use crate::table::{ColumnConstraint, Schema, SchemaRef, Slice};
 use std::rc::Rc;
 
 pub struct DescExecutor {
@@ -29,6 +29,7 @@ impl Executor for DescExecutor {
             (DataType::new_varchar(false), "Field".to_string()),
             (DataType::new_varchar(false), "Type".to_string()),
             (DataType::new_varchar(false), "Nullable".to_string()),
+            (DataType::new_varchar(false), "Key".to_string()),
         ]))
     }
     fn execute(&mut self) -> Result<Option<Slice>, ExecutionError> {
@@ -39,7 +40,6 @@ impl Executor for DescExecutor {
                 .find_table(self.table_name.clone())?;
             let desc_schema = self.schema();
             let mut desc = Slice::new(self.bpm.clone(), desc_schema);
-            // TODO add key field
             table.schema.iter().for_each(|c| {
                 desc.add(&[
                     Datum::VarChar(Some(c.desc.clone())),
@@ -48,6 +48,11 @@ impl Executor for DescExecutor {
                         "Yes".to_string()
                     } else {
                         "No".to_string()
+                    })),
+                    Datum::VarChar(Some(match c.constraint {
+                        ColumnConstraint::Normal => "Normal".to_string(),
+                        ColumnConstraint::Primary => "Primary".to_string(),
+                        _ => todo!(),
                     })),
                 ])
                 .unwrap();
