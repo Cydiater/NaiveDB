@@ -140,13 +140,27 @@ impl Slice {
         self.page.borrow_mut().is_dirty = true;
     }
 
+    pub fn set_offset_at(&mut self, idx: usize, offset: usize) -> Result<(), TableError> {
+        if idx >= self.get_num_tuple() {
+            return Err(TableError::SliceIndexOutOfBound);
+        }
+        let start = Self::SIZE_OF_META + idx * std::mem::size_of::<u32>();
+        let end = start + 4;
+        self.page.borrow_mut().buffer[start..end].copy_from_slice(&(offset as u32).to_le_bytes());
+        Ok(())
+    }
+
+    pub fn get_offset_at(&self, idx: usize) -> Result<usize, TableError> {
+        if idx >= self.get_num_tuple() {
+            return Err(TableError::SliceIndexOutOfBound);
+        }
+        let start = Self::SIZE_OF_META + idx * std::mem::size_of::<u32>();
+        let end = start + 4;
+        Ok(u32::from_le_bytes(self.page.borrow().buffer[start..end].try_into().unwrap()) as usize)
+    }
+
     pub fn at(&self, idx: usize) -> Result<Option<Vec<Datum>>, TableError> {
-        let base_offset = u32::from_le_bytes(
-            self.page.borrow().buffer[Self::SIZE_OF_META + idx * std::mem::size_of::<u32>()
-                ..Self::SIZE_OF_META + (idx + 1) * std::mem::size_of::<u32>()]
-                .try_into()
-                .unwrap(),
-        ) as usize;
+        let base_offset = self.get_offset_at(idx)?;
         if base_offset == 0 {
             return Ok(None);
         }
@@ -162,6 +176,15 @@ impl Slice {
             .map(|(d, c)| d.size_of_bytes(&c.data_type))
             .sum();
         delta_size <= self.get_free_size()
+    }
+
+    pub fn remove(&mut self, idx: usize) -> Result<(), TableError> {
+        let offset = self.get_offset_at(idx)?;
+        if offset == 0 {
+            return Err(TableError::AlreadyDeleted);
+        }
+        self.set_offset_at(idx, 0)?;
+        Ok(())
     }
 
     pub fn add(&mut self, datums: &[Datum]) -> Result<RecordID, TableError> {
@@ -269,6 +292,24 @@ mod tests {
                 slice.add(&[Datum::Int(Some(i))]).unwrap();
             }
             assert!(slice.add(&[Datum::Int(Some(0))]).is_err());
+            filename
+        };
+        remove_file(filename).unwrap();
+    }
+
+    #[test]
+    fn test_remove() {
+        let filename = {
+            let bpm = BufferPoolManager::new_random_shared(100);
+            let filename = bpm.borrow().filename();
+            let schema = Schema::from_slice(&[(DataType::new_int(false), "v1".to_string())]);
+            let mut slice = Slice::new(bpm, Rc::new(schema));
+            slice.add(&[Datum::Int(Some(1))]).unwrap();
+            slice.add(&[Datum::Int(Some(2))]).unwrap();
+            slice.add(&[Datum::Int(Some(3))]).unwrap();
+            slice.remove(1).unwrap();
+            assert_eq!(slice.at(0).unwrap(), Some(vec![Datum::Int(Some(1))]));
+            assert_eq!(slice.at(1).unwrap(), None);
             filename
         };
         remove_file(filename).unwrap();

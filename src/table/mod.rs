@@ -225,6 +225,10 @@ pub enum TableError {
     Storage(#[from] StorageError),
     #[error("PageID not assigned")]
     NoPageID,
+    #[error("Slice Index Out of Bound")]
+    SliceIndexOutOfBound,
+    #[error("Delete Tuple That Already Deleted")]
+    AlreadyDeleted,
 }
 
 #[cfg(test)]
