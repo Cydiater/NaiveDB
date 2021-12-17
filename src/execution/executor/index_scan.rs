@@ -46,7 +46,7 @@ impl Executor for IndexScanExecutor {
             if datums > self.end_datums {
                 break;
             }
-            let datums = self.table.datums_from_record_id(record_id);
+            let datums = self.table.datums_from_record_id(record_id).unwrap();
             if !output.ok_to_add(&datums) {
                 self.begin_datums = datums;
                 return Ok(Some(output));

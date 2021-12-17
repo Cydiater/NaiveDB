@@ -46,11 +46,12 @@ impl Executor for InsertExecutor {
                 indexes_rows.push(rows);
             }
             for idx in 0..len {
-                let tuple = input.at(idx)?;
-                info!("insert tuple {:?}", tuple);
-                let record_id = self.table.insert(tuple)?;
-                for (rows, index) in indexes_rows.iter().zip(&mut self.indexes) {
-                    index.insert(&rows[idx], record_id).unwrap();
+                if let Some(tuple) = input.at(idx)? {
+                    info!("insert tuple {:?}", tuple);
+                    let record_id = self.table.insert(tuple)?;
+                    for (rows, index) in indexes_rows.iter().zip(&mut self.indexes) {
+                        index.insert(&rows[idx], record_id).unwrap();
+                    }
                 }
             }
             Ok(Some(input))

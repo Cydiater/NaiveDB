@@ -78,7 +78,7 @@ mod tests {
             let mut values_executor = ValuesExecutor::new(values, Rc::new(schema), bpm);
             let res = values_executor.execute().unwrap().unwrap();
             assert_eq!(
-                res.at(0).unwrap(),
+                res.at(0).unwrap().unwrap(),
                 [
                     Datum::Int(Some(1)),
                     Datum::VarChar(Some("hello world".to_string()))
