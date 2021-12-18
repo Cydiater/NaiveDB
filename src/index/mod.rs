@@ -22,6 +22,18 @@ impl IndexNode {
             IndexNode::Internal(InternalNode::open(bpm, schema, page_id).unwrap())
         }
     }
+    pub fn get_next_page_id(&self) -> Option<PageID> {
+        match self {
+            Self::Leaf(node) => node.get_next_page_id(),
+            Self::Internal(node) => node.get_next_page_id(),
+        }
+    }
+    pub fn set_next_page_id(&mut self, page_id: Option<PageID>) {
+        match self {
+            Self::Leaf(node) => node.set_next_page_id(page_id),
+            Self::Internal(node) => node.set_next_page_id(page_id),
+        }
+    }
     pub fn get_parent_page_id(&self) -> Option<PageID> {
         match self {
             Self::Leaf(node) => node.get_parent_page_id(),
@@ -81,51 +93,71 @@ impl IndexNode {
     }
     pub fn get_payload_size(&self) -> usize {
         // meta size of both internal and leaf is 17
-        self.get_free_space() - 17
+        PAGE_SIZE - self.get_free_space() - 17
     }
-    pub fn steal_from_right(&mut self, sibling: &mut Self) {
+    pub fn steal_from_right(
+        &mut self,
+        sibling: &mut Self,
+        bpm: BufferPoolManagerRef,
+        schema: SchemaRef,
+    ) {
         match (self, sibling) {
             (IndexNode::Leaf(leaf), IndexNode::Leaf(sibling)) => {
                 let key = sibling.key_at(0);
                 let record_id = sibling.record_id_at(0);
-                sibling.remove(&key);
-                leaf.append(&key, record_id);
+                sibling.remove(&key).unwrap();
+                leaf.append(&key, record_id).unwrap();
             }
             (IndexNode::Internal(internal), IndexNode::Internal(sibling)) => {
                 let key = sibling.key_at(0);
                 let page_id = sibling.page_id_at(1).unwrap();
                 sibling.remove(&key).unwrap();
-                internal.append(&key, page_id);
+                internal.append(&key, page_id).unwrap();
+                let mut child = IndexNode::open(bpm, schema, page_id);
+                child.set_parent_page_id(Some(internal.get_page_id()));
             }
             _ => unreachable!(),
         }
     }
-    pub fn steal_from_left(&mut self, sibling: &mut Self) {
+    pub fn steal_from_left(
+        &mut self,
+        sibling: &mut Self,
+        bpm: BufferPoolManagerRef,
+        schema: SchemaRef,
+    ) {
         match (self, sibling) {
             (IndexNode::Leaf(leaf), IndexNode::Leaf(sibling)) => {
                 let idx = sibling.len() - 1;
                 let key = sibling.key_at(idx);
                 let record_id = sibling.record_id_at(idx);
-                sibling.remove(&key);
-                leaf.insert(&key, record_id);
+                sibling.remove(&key).unwrap();
+                leaf.insert(&key, record_id).unwrap();
             }
             (IndexNode::Internal(internal), IndexNode::Internal(sibling)) => {
                 let idx = sibling.len() - 1;
                 let key = sibling.key_at(idx - 1);
                 let page_id = sibling.page_id_at(idx).unwrap();
                 sibling.remove(&key).unwrap();
-                internal.insert(&key, page_id);
+                internal.insert(&key, page_id).unwrap();
+                let mut child = IndexNode::open(bpm, schema, page_id);
+                child.set_parent_page_id(Some(internal.get_page_id()));
             }
             _ => unreachable!(),
         }
     }
-    pub fn merge_in_back(&mut self, sibling: &mut Self) {
+    pub fn merge_in_back(
+        &mut self,
+        sibling: &mut Self,
+        bpm: BufferPoolManagerRef,
+        schema: SchemaRef,
+    ) {
+        self.set_next_page_id(sibling.get_next_page_id());
         match (self, sibling) {
             (IndexNode::Leaf(leaf), IndexNode::Leaf(sibling)) => {
                 for idx in 0..sibling.len() {
                     let key = sibling.key_at(idx);
                     let record_id = sibling.record_id_at(idx);
-                    leaf.append(&key, record_id);
+                    leaf.append(&key, record_id).unwrap();
                 }
             }
             (IndexNode::Internal(internal), IndexNode::Internal(sibling)) => {
@@ -135,10 +167,20 @@ impl IndexNode {
                 for idx in 0..sibling.len() - 1 {
                     let key = sibling.key_at(idx);
                     let page_id = sibling.page_id_at(idx + 1).unwrap();
-                    internal.append(&key, page_id);
+                    internal.append(&key, page_id).unwrap();
+                    let mut child = IndexNode::open(bpm.clone(), schema.clone(), page_id);
+                    child.set_parent_page_id(Some(internal.get_page_id()));
                 }
             }
             _ => unreachable!(),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn sanity_check(&self) {
+        match self {
+            IndexNode::Internal(n) => n.sanity_check(),
+            IndexNode::Leaf(n) => n.sanity_check(),
         }
     }
 }
@@ -304,7 +346,7 @@ impl BPTIndex {
         } else {
             parent_node
         };
-        node.insert(&new_key, new_value);
+        node.insert(&new_key, new_value).unwrap();
         rhs_node.set_parent_page_id(Some(node.get_page_id()));
         (new_key, rhs_node)
     }
@@ -334,8 +376,8 @@ impl BPTIndex {
     pub fn iter_start_from(&self, key: &[Datum]) -> Option<IndexIter> {
         let leaf = self.find_leaf(key);
         if let Some(leaf) = leaf {
-            let idx = leaf.index_of(key).unwrap();
-            Some(IndexIter::new(leaf, self.bpm.clone(), idx))
+            leaf.lower_bound(key)
+                .map(|idx| IndexIter::new(leaf, self.bpm.clone(), idx))
         } else {
             None
         }
@@ -368,7 +410,7 @@ impl BPTIndex {
         } else {
             leaf_node
         };
-        node.insert(key, record_id);
+        node.insert(key, record_id).unwrap();
         Ok(())
     }
 
@@ -464,13 +506,18 @@ impl BPTIndex {
             // 2.1.2 ok to merge
             if left_sibling.get_free_space() >= node.get_payload_size() {
                 parent.remove(&key).unwrap();
-                left_sibling.merge_in_back(node);
+                left_sibling.merge_in_back(node, self.bpm.clone(), Rc::new(self.get_key_schema()));
+                self.balance(&mut IndexNode::Internal(parent));
                 return;
             }
             // 2.1.3 steal left
+            node.steal_from_left(
+                &mut left_sibling,
+                self.bpm.clone(),
+                Rc::new(self.get_key_schema()),
+            );
             let stolen_key = left_sibling.last_key();
             parent.update_key_with(&key, &stolen_key);
-            node.steal_from_left(&mut left_sibling);
         } else if let Some((key, page_id_of_right_sibling)) = q {
             // 2.2 have right sibling, try balance to right
             let mut right_sibling = IndexNode::open(
@@ -481,13 +528,22 @@ impl BPTIndex {
             // 2.1.2 ok to merge
             if node.get_free_space() >= right_sibling.get_payload_size() {
                 parent.remove(&key).unwrap();
-                node.merge_in_back(&mut right_sibling);
+                node.merge_in_back(
+                    &mut right_sibling,
+                    self.bpm.clone(),
+                    Rc::new(self.get_key_schema()),
+                );
+                self.balance(&mut IndexNode::Internal(parent));
                 return;
             }
             // 2.1.3 steal right
+            node.steal_from_right(
+                &mut right_sibling,
+                self.bpm.clone(),
+                Rc::new(self.get_key_schema()),
+            );
             let stolen_key = right_sibling.first_key();
             parent.update_key_with(&key, &stolen_key);
-            node.steal_from_right(&mut right_sibling);
         } else {
             unreachable!()
         }
@@ -495,7 +551,7 @@ impl BPTIndex {
 
     pub fn remove(&mut self, key: &[Datum]) -> Result<(), IndexError> {
         let mut leaf_node = self.find_leaf(key).ok_or(IndexError::KeyNotFound)?;
-        leaf_node.remove(key);
+        leaf_node.remove(key)?;
         self.balance(&mut IndexNode::Leaf(leaf_node));
         Ok(())
     }
@@ -509,6 +565,8 @@ pub enum IndexError {
     NotLeafIndexNode,
     #[error("can not find key in the index")]
     KeyNotFound,
+    #[error("node out of space")]
+    NodeOutOfSpace,
 }
 
 #[cfg(test)]
@@ -521,7 +579,7 @@ mod tests {
     use std::fs::remove_file;
 
     #[test]
-    fn test_insert_find() {
+    fn test_insert_find_remove() {
         let filename = {
             let bpm = BufferPoolManager::new_random_shared(20);
             let filename = bpm.borrow().filename();
@@ -538,13 +596,16 @@ mod tests {
             index.insert(&[Datum::Int(Some(4))], (4, 0)).unwrap();
             assert_eq!(index.find(&[Datum::Int(Some(2))]), Some((2, 0)));
             assert_eq!(index.find(&[Datum::Int(Some(4))]), Some((4, 0)));
+            index.remove(&[Datum::Int(Some(0))]).unwrap();
+            assert_eq!(index.find(&[Datum::Int(Some(0))]), None);
+            assert_eq!(index.find(&[Datum::Int(Some(2))]), Some((2, 0)));
             filename
         };
         remove_file(filename).unwrap();
     }
 
     #[test]
-    fn test_split_find_iter() {
+    fn test_split_find_iter_remove() {
         let filename = {
             let bpm = BufferPoolManager::new_random_shared(2000);
             let filename = bpm.borrow().filename();
@@ -575,6 +636,16 @@ mod tests {
             }
             assert_eq!(index.first_key(), vec![Datum::Int(Some(0))]);
             assert_eq!(index.last_key(), vec![Datum::Int(Some(39999))]);
+            for idx in (0..40000usize).step_by(2) {
+                index.remove(&[Datum::Int(Some(idx as i32))]).unwrap();
+            }
+            let res = index
+                .iter_start_from(&[Datum::Int(Some(0))])
+                .unwrap()
+                .collect_vec();
+            for (idx, res) in res.iter().enumerate() {
+                assert_eq!(res.0, vec![Datum::Int(Some((idx * 2 + 1) as i32))]);
+            }
             filename
         };
         remove_file(filename).unwrap();
