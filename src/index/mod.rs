@@ -1,7 +1,7 @@
 use crate::datum::Datum;
 use crate::expr::ExprImpl;
-use crate::storage::{BufferPoolManagerRef, PageID, PageRef};
-use crate::table::Schema;
+use crate::storage::{BufferPoolManagerRef, PageID, PageRef, PAGE_SIZE};
+use crate::table::{Schema, SchemaRef};
 use std::convert::TryInto;
 use std::ops::Range;
 use std::rc::Rc;
@@ -15,6 +15,13 @@ enum IndexNode {
 }
 
 impl IndexNode {
+    pub fn open(bpm: BufferPoolManagerRef, schema: SchemaRef, page_id: PageID) -> Self {
+        if let Ok(leaf) = LeafNode::open(bpm.clone(), schema.clone(), page_id) {
+            IndexNode::Leaf(leaf)
+        } else {
+            IndexNode::Internal(InternalNode::open(bpm, schema, page_id).unwrap())
+        }
+    }
     pub fn get_parent_page_id(&self) -> Option<PageID> {
         match self {
             Self::Leaf(node) => node.get_parent_page_id(),
@@ -43,6 +50,95 @@ impl IndexNode {
         match self {
             Self::Leaf(node) => node.set_parent_page_id(parent_page_id),
             Self::Internal(node) => node.set_parent_page_id(parent_page_id),
+        }
+    }
+    pub fn get_tail(&self) -> usize {
+        match self {
+            Self::Leaf(node) => node.get_tail(),
+            Self::Internal(node) => node.get_tail(),
+        }
+    }
+    pub fn get_head(&self) -> usize {
+        match self {
+            Self::Leaf(node) => node.get_head(),
+            Self::Internal(node) => node.get_head(),
+        }
+    }
+    pub fn first_key(&self) -> Vec<Datum> {
+        match self {
+            Self::Internal(node) => node.key_at(0),
+            Self::Leaf(node) => node.key_at(0),
+        }
+    }
+    pub fn last_key(&self) -> Vec<Datum> {
+        match self {
+            Self::Internal(node) => node.key_at(node.len() - 2),
+            Self::Leaf(node) => node.key_at(node.len() - 1),
+        }
+    }
+    pub fn get_free_space(&self) -> usize {
+        self.get_tail() - self.get_head()
+    }
+    pub fn get_payload_size(&self) -> usize {
+        // meta size of both internal and leaf is 17
+        self.get_free_space() - 17
+    }
+    pub fn steal_from_right(&mut self, sibling: &mut Self) {
+        match (self, sibling) {
+            (IndexNode::Leaf(leaf), IndexNode::Leaf(sibling)) => {
+                let key = sibling.key_at(0);
+                let record_id = sibling.record_id_at(0);
+                sibling.remove(&key);
+                leaf.append(&key, record_id);
+            }
+            (IndexNode::Internal(internal), IndexNode::Internal(sibling)) => {
+                let key = sibling.key_at(0);
+                let page_id = sibling.page_id_at(1).unwrap();
+                sibling.remove(&key).unwrap();
+                internal.append(&key, page_id);
+            }
+            _ => unreachable!(),
+        }
+    }
+    pub fn steal_from_left(&mut self, sibling: &mut Self) {
+        match (self, sibling) {
+            (IndexNode::Leaf(leaf), IndexNode::Leaf(sibling)) => {
+                let idx = sibling.len() - 1;
+                let key = sibling.key_at(idx);
+                let record_id = sibling.record_id_at(idx);
+                sibling.remove(&key);
+                leaf.insert(&key, record_id);
+            }
+            (IndexNode::Internal(internal), IndexNode::Internal(sibling)) => {
+                let idx = sibling.len() - 1;
+                let key = sibling.key_at(idx - 1);
+                let page_id = sibling.page_id_at(idx).unwrap();
+                sibling.remove(&key).unwrap();
+                internal.insert(&key, page_id);
+            }
+            _ => unreachable!(),
+        }
+    }
+    pub fn merge_in_back(&mut self, sibling: &mut Self) {
+        match (self, sibling) {
+            (IndexNode::Leaf(leaf), IndexNode::Leaf(sibling)) => {
+                for idx in 0..sibling.len() {
+                    let key = sibling.key_at(idx);
+                    let record_id = sibling.record_id_at(idx);
+                    leaf.append(&key, record_id);
+                }
+            }
+            (IndexNode::Internal(internal), IndexNode::Internal(sibling)) => {
+                // if we split and merge correctly, the right sibling shouldn't have the first
+                // child
+                assert!(sibling.page_id_at(0).is_none());
+                for idx in 0..sibling.len() - 1 {
+                    let key = sibling.key_at(idx);
+                    let page_id = sibling.page_id_at(idx + 1).unwrap();
+                    internal.append(&key, page_id);
+                }
+            }
+            _ => unreachable!(),
         }
     }
 }
@@ -110,10 +206,8 @@ impl Iterator for IndexIter {
     }
 }
 
-#[allow(dead_code)]
 impl BPTIndex {
     const PAGE_ID_OF_ROOT: Range<usize> = 0..4;
-    const SIZE_OF_META: usize = 4;
 
     pub fn get_page_id(&self) -> PageID {
         self.page.borrow().page_id.unwrap()
@@ -320,6 +414,90 @@ impl BPTIndex {
         } else {
             None
         }
+    }
+
+    fn balance(&mut self, node: &mut IndexNode) {
+        // 0. no need to balance
+        if node.get_free_space() < PAGE_SIZE / 2 {
+            return;
+        }
+        let parent_page_id = node.get_parent_page_id();
+        if parent_page_id.is_none() {
+            // 1. root node
+            if let IndexNode::Leaf(_) = node {
+                // 1.1 root node is leaf, ignore
+                return;
+            } else if let IndexNode::Internal(node) = node {
+                // 1.2 root node is internal
+                if let Some(page_id_of_only_child) = node.get_only_child() {
+                    // 1.2.1 only have one child, we can remove it
+                    self.set_page_id_of_root(page_id_of_only_child);
+                    let mut node = IndexNode::open(
+                        self.bpm.clone(),
+                        Rc::new(self.get_key_schema()),
+                        page_id_of_only_child,
+                    );
+                    node.set_parent_page_id(None);
+                    return;
+                }
+                return;
+            } else {
+                unreachable!();
+            }
+        }
+        // 2. have parent
+        let parent_page_id = parent_page_id.unwrap();
+        let mut parent = InternalNode::open(
+            self.bpm.clone(),
+            Rc::new(self.get_key_schema()),
+            parent_page_id,
+        )
+        .unwrap();
+        let (p, q) = parent.find_siblings(node.get_page_id());
+        if let Some((page_id_of_left_sibling, key)) = p {
+            // 2.1 have left sibling, try balance to left
+            let mut left_sibling = IndexNode::open(
+                self.bpm.clone(),
+                Rc::new(self.get_key_schema()),
+                page_id_of_left_sibling,
+            );
+            // 2.1.2 ok to merge
+            if left_sibling.get_free_space() >= node.get_payload_size() {
+                parent.remove(&key).unwrap();
+                left_sibling.merge_in_back(node);
+                return;
+            }
+            // 2.1.3 steal left
+            let stolen_key = left_sibling.last_key();
+            parent.update_key_with(&key, &stolen_key);
+            node.steal_from_left(&mut left_sibling);
+        } else if let Some((key, page_id_of_right_sibling)) = q {
+            // 2.2 have right sibling, try balance to right
+            let mut right_sibling = IndexNode::open(
+                self.bpm.clone(),
+                Rc::new(self.get_key_schema()),
+                page_id_of_right_sibling,
+            );
+            // 2.1.2 ok to merge
+            if node.get_free_space() >= right_sibling.get_payload_size() {
+                parent.remove(&key).unwrap();
+                node.merge_in_back(&mut right_sibling);
+                return;
+            }
+            // 2.1.3 steal right
+            let stolen_key = right_sibling.first_key();
+            parent.update_key_with(&key, &stolen_key);
+            node.steal_from_right(&mut right_sibling);
+        } else {
+            unreachable!()
+        }
+    }
+
+    pub fn remove(&mut self, key: &[Datum]) -> Result<(), IndexError> {
+        let mut leaf_node = self.find_leaf(key).ok_or(IndexError::KeyNotFound)?;
+        leaf_node.remove(key);
+        self.balance(&mut IndexNode::Leaf(leaf_node));
+        Ok(())
     }
 }
 

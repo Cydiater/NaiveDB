@@ -30,6 +30,8 @@ pub struct InternalNode {
     schema: SchemaRef,
 }
 
+pub type Siblings = (Option<(PageID, Vec<Datum>)>, Option<(Vec<Datum>, PageID)>);
+
 impl InternalNode {
     const IS_LEAF: Range<usize> = 0..1;
     const PARENT_PAGE_ID: Range<usize> = 1..5;
@@ -95,6 +97,20 @@ impl InternalNode {
         self.page.borrow_mut().is_dirty = true;
     }
 
+    pub fn get_only_child(&self) -> Option<PageID> {
+        let mut page_id = None;
+        for idx in 0..self.len() {
+            if let Some(child) = self.page_id_at(idx) {
+                if page_id.is_some() {
+                    return None;
+                } else {
+                    page_id = Some(child);
+                }
+            }
+        }
+        page_id
+    }
+
     pub fn new_single_child(
         bpm: BufferPoolManagerRef,
         schema: SchemaRef,
@@ -150,11 +166,11 @@ impl InternalNode {
         self.page.borrow().page_id.unwrap()
     }
 
-    fn get_head(&self) -> usize {
+    pub fn get_head(&self) -> usize {
         u32::from_le_bytes(self.page.borrow().buffer[Self::HEAD].try_into().unwrap()) as usize
     }
 
-    fn get_tail(&self) -> usize {
+    pub fn get_tail(&self) -> usize {
         u32::from_le_bytes(self.page.borrow().buffer[Self::TAIL].try_into().unwrap()) as usize
     }
 
@@ -283,6 +299,23 @@ impl InternalNode {
         self.page.borrow_mut().is_dirty = true;
     }
 
+    pub fn find_siblings(&self, page_id: PageID) -> Siblings {
+        let idx = (0..self.len())
+            .find(|idx| self.page_id_at(*idx).unwrap() == page_id)
+            .unwrap();
+        let p_page_id = if idx == 0 {
+            None
+        } else {
+            Some((self.page_id_at(idx - 1).unwrap(), self.key_at(idx - 1)))
+        };
+        let q_page_id = if idx == self.len() - 1 {
+            None
+        } else {
+            Some((self.key_at(idx), self.page_id_at(idx + 1).unwrap()))
+        };
+        (p_page_id, q_page_id)
+    }
+
     #[allow(dead_code)]
     pub fn remove(&mut self, key: &[Datum]) -> Result<(), IndexError> {
         let idx = self.index_of(key) - 1;
@@ -330,6 +363,13 @@ impl InternalNode {
     pub fn insert(&mut self, key: &[Datum], page_id: PageID) {
         let idx = self.index_of(key);
         self.insert_at(idx, key, page_id);
+    }
+
+    pub fn update_key_with(&mut self, key: &[Datum], new_key: &[Datum]) {
+        let idx = self.index_of(key);
+        let page_id = self.page_id_at(idx);
+        self.remove(key).unwrap();
+        self.insert(new_key, page_id.unwrap());
     }
 
     pub fn insert_at(&mut self, idx: usize, key: &[Datum], page_id: PageID) {

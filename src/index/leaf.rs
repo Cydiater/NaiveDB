@@ -40,11 +40,11 @@ impl LeafNode {
     const TAIL: Range<usize> = 13..17;
     const SIZE_OF_META: usize = 17;
 
-    fn get_head(&self) -> usize {
+    pub fn get_head(&self) -> usize {
         u32::from_le_bytes(self.page.borrow().buffer[Self::HEAD].try_into().unwrap()) as usize
     }
 
-    fn get_tail(&self) -> usize {
+    pub fn get_tail(&self) -> usize {
         u32::from_le_bytes(self.page.borrow().buffer[Self::TAIL].try_into().unwrap()) as usize
     }
 
