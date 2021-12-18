@@ -1,4 +1,4 @@
-use crate::datum::{DataType, Datum};
+use crate::datum::Datum;
 use crate::index::IndexError;
 use crate::storage::{BufferPoolManagerRef, PageID, PageRef, PAGE_SIZE};
 use crate::table::SchemaRef;
@@ -283,6 +283,44 @@ impl InternalNode {
         self.page.borrow_mut().is_dirty = true;
     }
 
+    #[allow(dead_code)]
+    pub fn remove(&mut self, key: &[Datum]) -> Result<(), IndexError> {
+        let idx = self.index_of(key) - 1;
+        if self.key_at(idx) != key {
+            return Err(IndexError::KeyNotFound);
+        }
+        let offset1 = self.offset_at(idx);
+        let offset2 = if idx + 1 < self.len() - 1 {
+            self.offset_at(idx + 1)
+        } else {
+            self.get_tail()
+        };
+        let tail = self.get_tail();
+        let offset_delta = offset1 - offset2;
+        self.page
+            .borrow_mut()
+            .buffer
+            .copy_within(tail..offset2, tail + offset_delta);
+        for i in idx..self.len() - 2 {
+            let next_offset = self.offset_at(i + 1);
+            let next_page_id = self.page_id_at(i + 2).unwrap();
+            let start = Self::SIZE_OF_META + i * 8 + 4;
+            let end = start + 4;
+            self.page.borrow_mut().buffer[start..end]
+                .copy_from_slice(&((next_offset + offset_delta) as u32).to_le_bytes());
+            let start = end;
+            let end = start + 4;
+            self.page.borrow_mut().buffer[start..end]
+                .copy_from_slice(&(next_page_id as u32).to_le_bytes());
+        }
+        self.page.borrow_mut().is_dirty = true;
+        let head = self.get_head();
+        self.set_head(head - 8);
+        let tail = self.get_tail();
+        self.set_tail(tail + offset_delta);
+        Ok(())
+    }
+
     /// append to the end, the order should be preserved
     pub fn append(&mut self, key: &[Datum], page_id: PageID) {
         self.insert_at(self.len() - 1, key, page_id);
@@ -327,15 +365,6 @@ impl InternalNode {
     }
 }
 
-#[allow(dead_code)]
-pub struct LeafNode {
-    page_id: PageID,
-    bpm: BufferPoolManagerRef,
-    key_data_types: Vec<DataType>,
-}
-
-impl LeafNode {}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -362,11 +391,13 @@ mod tests {
                 dummy_page_id,
                 dummy_page_id,
             );
-            node.insert(&[Datum::Int(Some(2))], dummy_page_id);
-            node.insert(&[Datum::Int(Some(4))], dummy_page_id);
-            node.insert(&[Datum::Int(Some(8))], dummy_page_id);
+            node.insert(&[Datum::Int(Some(2))], dummy_page_id + 1);
+            node.insert(&[Datum::Int(Some(4))], dummy_page_id + 2);
+            node.insert(&[Datum::Int(Some(8))], dummy_page_id + 3);
             assert_eq!(node.index_of(&[Datum::Int(Some(5))]), 3);
             assert_eq!(node.index_of(&[Datum::Int(Some(-5))]), 0);
+            node.remove(&[Datum::Int(Some(4))]).unwrap();
+            assert_eq!(node.key_at(2), [Datum::Int(Some(8))]);
             filename
         };
         remove_file(filename).unwrap()

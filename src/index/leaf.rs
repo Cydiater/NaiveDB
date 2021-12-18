@@ -322,14 +322,16 @@ impl LeafNode {
                 );
                 let start = end;
                 let end = start + 4;
-                self.page.borrow_mut().buffer[start..end].copy_from_slice(&(next_record_id.0 as u32).to_le_bytes());
+                self.page.borrow_mut().buffer[start..end]
+                    .copy_from_slice(&(next_record_id.0 as u32).to_le_bytes());
                 let start = start + 4;
                 let end = end + 4;
-                self.page.borrow_mut().buffer[start..end].copy_from_slice(&(next_record_id.1 as u32).to_le_bytes());
+                self.page.borrow_mut().buffer[start..end]
+                    .copy_from_slice(&(next_record_id.1 as u32).to_le_bytes());
             }
             // set head
             let head = self.get_head();
-            self.set_head(head - 4);
+            self.set_head(head - 12);
             // set tail
             let tail = self.get_tail();
             self.set_tail(tail + (idx_offset - idx_prev_offset));
