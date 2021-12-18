@@ -82,12 +82,6 @@ impl IndexNode {
             Self::Leaf(node) => node.key_at(0),
         }
     }
-    pub fn last_key(&self) -> Vec<Datum> {
-        match self {
-            Self::Internal(node) => node.key_at(node.len() - 2),
-            Self::Leaf(node) => node.key_at(node.len() - 1),
-        }
-    }
     pub fn get_free_space(&self) -> usize {
         self.get_tail() - self.get_head()
     }
@@ -516,7 +510,7 @@ impl BPTIndex {
                 self.bpm.clone(),
                 Rc::new(self.get_key_schema()),
             );
-            let stolen_key = left_sibling.last_key();
+            let stolen_key = node.first_key();
             parent.update_key_with(&key, &stolen_key);
         } else if let Some((key, page_id_of_right_sibling)) = q {
             // 2.2 have right sibling, try balance to right
@@ -576,6 +570,8 @@ mod tests {
     use crate::expr::ColumnRefExpr;
     use crate::storage::BufferPoolManager;
     use itertools::Itertools;
+    use rand::Rng;
+    use std::collections::HashSet;
     use std::fs::remove_file;
 
     #[test]
@@ -599,6 +595,45 @@ mod tests {
             index.remove(&[Datum::Int(Some(0))]).unwrap();
             assert_eq!(index.find(&[Datum::Int(Some(0))]), None);
             assert_eq!(index.find(&[Datum::Int(Some(2))]), Some((2, 0)));
+            filename
+        };
+        remove_file(filename).unwrap();
+    }
+
+    #[test]
+    fn chaos_test() {
+        let filename = {
+            let bpm = BufferPoolManager::new_random_shared(2000);
+            let filename = bpm.borrow().filename();
+            let exprs = vec![ExprImpl::ColumnRef(ColumnRefExpr::new(
+                0,
+                DataType::new_int(false),
+                "v1".to_string(),
+            ))];
+            let mut index = BPTIndex::new(bpm, &exprs);
+            let mut set: HashSet<u16> = HashSet::new();
+            let mut rng = rand::thread_rng();
+            for _ in 0..10000 {
+                let num: u16 = rng.gen();
+                if set.contains(&num) {
+                    set.remove(&num);
+                    index.remove(&[Datum::Int(Some(num as i32))]).unwrap();
+                } else {
+                    set.insert(num);
+                    index
+                        .insert(
+                            &[Datum::Int(Some(num as i32))],
+                            (num as usize, num as usize),
+                        )
+                        .unwrap();
+                }
+            }
+            for num in set.iter().sorted() {
+                assert_eq!(
+                    (*num as usize, *num as usize),
+                    index.find(&[Datum::Int(Some(*num as i32))]).unwrap()
+                );
+            }
             filename
         };
         remove_file(filename).unwrap();
