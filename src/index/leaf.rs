@@ -295,6 +295,48 @@ impl LeafNode {
         // mark dirty
         self.page.borrow_mut().is_dirty = true;
     }
+
+    pub fn remove(&mut self, key: &[Datum]) {
+        let idx = self.index_of(key);
+        if let Some(idx) = idx {
+            let idx_offset = self.offset_at(idx);
+            let idx_prev_offset = if idx + 1 == self.len() {
+                self.get_tail()
+            } else {
+                self.offset_at(idx + 1)
+            };
+            let tail = self.get_tail();
+            // move data
+            self.page
+                .borrow_mut()
+                .buffer
+                .copy_within(tail..idx_prev_offset, tail + (idx_offset - idx_prev_offset));
+            // modify offset
+            for i in idx..self.len() - 1 {
+                let next_offset = self.offset_at(i + 1);
+                let next_record_id = self.record_id_at(i + 1);
+                let start = Self::SIZE_OF_META + i * 12;
+                let end = start + 4;
+                self.page.borrow_mut().buffer[start..end].copy_from_slice(
+                    &((next_offset + (idx_offset - idx_prev_offset)) as u32).to_le_bytes(),
+                );
+                let start = end;
+                let end = start + 4;
+                self.page.borrow_mut().buffer[start..end].copy_from_slice(&(next_record_id.0 as u32).to_le_bytes());
+                let start = start + 4;
+                let end = end + 4;
+                self.page.borrow_mut().buffer[start..end].copy_from_slice(&(next_record_id.1 as u32).to_le_bytes());
+            }
+            // set head
+            let head = self.get_head();
+            self.set_head(head - 4);
+            // set tail
+            let tail = self.get_tail();
+            self.set_tail(tail + (idx_offset - idx_prev_offset));
+            // dirty
+            self.page.borrow_mut().is_dirty = true;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -307,7 +349,7 @@ mod tests {
     use std::rc::Rc;
 
     #[test]
-    fn test_append() {
+    fn test_append_remove() {
         let filename = {
             let bpm = BufferPoolManager::new_random_shared(10);
             let filename = bpm.borrow().filename();
@@ -321,6 +363,9 @@ mod tests {
             node.append(&[Datum::Int(Some(1))], dummy_record_id);
             node.append(&[Datum::Int(Some(2))], dummy_record_id);
             assert_eq!(node.len(), 3);
+            node.remove(&[Datum::Int(Some(0))]);
+            assert_eq!(node.key_at(0), [Datum::Int(Some(1))]);
+            assert_eq!(node.key_at(1), [Datum::Int(Some(2))]);
             filename
         };
         remove_file(filename).unwrap()
