@@ -112,6 +112,7 @@ impl Engine {
                     begin_datums,
                     end_datums,
                     self.bpm.clone(),
+                    false,
                 )))
             }
             Plan::DropTable(plan) => Ok(ExecutorImpl::DropTable(DropTableExecutor::new(
