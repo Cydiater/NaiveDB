@@ -1,8 +1,9 @@
 use crate::catalog::{CatalogError, CatalogManagerRef};
-use crate::index::BPTIndex;
+use crate::index::{BPTIndex, IndexError};
 use crate::planner::Plan;
 use crate::storage::BufferPoolManagerRef;
 use crate::table::{Table, TableError};
+use itertools::Itertools;
 use log::info;
 use thiserror::Error;
 
@@ -77,7 +78,7 @@ impl Engine {
                     self.bpm.clone(),
                     page_id,
                     schema,
-                    false,
+                    plan.with_record_id,
                 )))
             }
             Plan::Project(plan) => {
@@ -112,7 +113,7 @@ impl Engine {
                     begin_datums,
                     end_datums,
                     self.bpm.clone(),
-                    false,
+                    plan.with_record_id,
                 )))
             }
             Plan::DropTable(plan) => Ok(ExecutorImpl::DropTable(DropTableExecutor::new(
@@ -120,6 +121,21 @@ impl Engine {
                 self.catalog.clone(),
                 self.bpm.clone(),
             ))),
+            Plan::Delete(plan) => {
+                let child = self.build(*plan.child)?;
+                let table = Table::open(plan.table_page_id, self.bpm.clone());
+                let indexes = plan
+                    .index_page_ids
+                    .iter()
+                    .map(|page_id| BPTIndex::open(self.bpm.clone(), *page_id))
+                    .collect_vec();
+                Ok(ExecutorImpl::Delete(DeleteExecutor::new(
+                    Box::new(child),
+                    indexes,
+                    table,
+                    self.bpm.clone(),
+                )))
+            }
         }
     }
     pub fn new(catalog: CatalogManagerRef, bpm: BufferPoolManagerRef) -> Self {
@@ -142,4 +158,6 @@ pub enum ExecutionError {
     Catalog(#[from] CatalogError),
     #[error("TableError: {0}")]
     Table(#[from] TableError),
+    #[error("IndexError: {0}")]
+    Index(#[from] IndexError),
 }

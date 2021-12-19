@@ -2,6 +2,7 @@ use crate::catalog::{CatalogError, CatalogManagerRef};
 use crate::datum::{DataType, Datum};
 use crate::parser::ast::{ConstantValue, ExprNode};
 use crate::table::Slice;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -27,6 +28,20 @@ pub enum ExprImpl {
 }
 
 impl ExprImpl {
+    pub fn batch_eval(exprs: &mut [ExprImpl], slice: Option<&Slice>) -> Vec<Vec<Datum>> {
+        exprs.iter_mut().map(|e| e.eval(slice)).fold(
+            vec![vec![]; slice.unwrap().get_num_tuple()],
+            |rows, column| {
+                rows.into_iter()
+                    .zip(column.into_iter())
+                    .map(|(mut row, d)| {
+                        row.push(d);
+                        row
+                    })
+                    .collect_vec()
+            },
+        )
+    }
     pub fn eval(&self, slice: Option<&Slice>) -> Vec<Datum> {
         match self {
             ExprImpl::Constant(expr) => expr.eval(slice),

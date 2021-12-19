@@ -1,8 +1,8 @@
+use crate::datum::{DataType, Datum};
 use crate::execution::{ExecutionError, Executor};
 use crate::index::BPTIndex;
 use crate::storage::BufferPoolManagerRef;
-use crate::table::{SchemaRef, Slice, Table, Schema};
-use crate::datum::{Datum, DataType};
+use crate::table::{Schema, SchemaRef, Slice, Table};
 use std::rc::Rc;
 
 pub struct IndexScanExecutor {

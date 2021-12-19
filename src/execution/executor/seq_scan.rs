@@ -1,7 +1,7 @@
+use crate::datum::{DataType, Datum};
 use crate::execution::{ExecutionError, Executor};
 use crate::storage::{BufferPoolManagerRef, PageID};
-use crate::datum::{DataType, Datum};
-use crate::table::{SchemaRef, Slice, Schema};
+use crate::table::{Schema, SchemaRef, Slice};
 use std::rc::Rc;
 
 pub struct SeqScanExecutor {
@@ -13,7 +13,12 @@ pub struct SeqScanExecutor {
 }
 
 impl SeqScanExecutor {
-    pub fn new(bpm: BufferPoolManagerRef, page_id: Option<PageID>, schema: SchemaRef, with_record_id: bool) -> Self {
+    pub fn new(
+        bpm: BufferPoolManagerRef,
+        page_id: Option<PageID>,
+        schema: SchemaRef,
+        with_record_id: bool,
+    ) -> Self {
         Self {
             bpm,
             page_id,

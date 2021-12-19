@@ -1,7 +1,7 @@
 use crate::execution::{ExecutionError, Executor, ExecutorImpl};
+use crate::expr::ExprImpl;
 use crate::index::BPTIndex;
 use crate::table::{SchemaRef, Slice, Table};
-use itertools::Itertools;
 use log::info;
 
 pub struct InsertExecutor {
@@ -30,27 +30,16 @@ impl Executor for InsertExecutor {
             let len = input.get_num_tuple();
             let mut indexes_rows = vec![];
             for index in &mut self.indexes {
-                let exprs = index.get_exprs();
-                let rows = exprs.into_iter().map(|e| e.eval(Some(&input))).fold(
-                    vec![vec![]; input.get_num_tuple()],
-                    |rows, column| {
-                        rows.into_iter()
-                            .zip(column.into_iter())
-                            .map(|(mut row, d)| {
-                                row.push(d);
-                                row
-                            })
-                            .collect_vec()
-                    },
-                );
+                let mut exprs = index.get_exprs();
+                let rows = ExprImpl::batch_eval(&mut exprs, Some(&input));
                 indexes_rows.push(rows);
             }
             for idx in 0..len {
                 if let Some(tuple) = input.at(idx)? {
                     info!("insert tuple {:?}", tuple);
                     let record_id = self.table.insert(tuple)?;
-                    for (rows, index) in indexes_rows.iter().zip(&mut self.indexes) {
-                        index.insert(&rows[idx], record_id).unwrap();
+                    for (rows, index) in indexes_rows.iter_mut().zip(&mut self.indexes) {
+                        index.insert(&rows.remove(0), record_id)?;
                     }
                 }
             }

@@ -152,6 +152,13 @@ mod tests {
                     vec![Datum::Int(Some(6))],
                 ]
             );
+            db.run("delete from t where v1 = 5;").unwrap();
+            let table = db.run("select * from t;").unwrap();
+            let tuples = table.iter().collect_vec();
+            assert_eq!(
+                tuples,
+                vec![vec![Datum::Int(Some(4))], vec![Datum::Int(Some(6))],]
+            );
             filename
         };
         remove_file(filename).unwrap();

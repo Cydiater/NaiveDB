@@ -197,7 +197,10 @@ impl Table {
         }
         slices
     }
-
+    pub fn remove(&mut self, record_id: RecordID) -> Result<(), TableError> {
+        let mut slice = Slice::open(self.bpm.clone(), self.schema.clone(), record_id.0);
+        slice.remove(record_id.1)
+    }
     pub fn erase(self) {
         let bpm = self.bpm.clone();
         let table_page_id = self.page.borrow().page_id.unwrap();
