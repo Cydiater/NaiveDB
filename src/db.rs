@@ -101,7 +101,7 @@ mod tests {
             }
             for num in set.iter().sorted() {
                 assert_eq!(
-                    db.run(format!("select * from t where v1 = {};", num).as_str())
+                    db.run(format!("select v1 from t where v1 = {};", num).as_str())
                         .unwrap()
                         .iter()
                         .collect_vec(),
