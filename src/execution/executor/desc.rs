@@ -50,7 +50,6 @@ impl Executor for DescExecutor {
                         ColumnConstraint::Normal => "Normal".into(),
                         ColumnConstraint::Primary => "Primary".into(),
                         ColumnConstraint::Foreign(_) => "Foreign".into(),
-                        ColumnConstraint::Unique => "Unique".into(),
                     })),
                 ])
                 .unwrap();

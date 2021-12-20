@@ -1,5 +1,6 @@
 use crate::catalog::{CatalogError, CatalogManagerRef};
 use crate::index::{BPTIndex, IndexError};
+use crate::datum::Datum;
 use crate::planner::Plan;
 use crate::storage::BufferPoolManagerRef;
 use crate::table::{Table, TableError};
@@ -156,4 +157,6 @@ pub enum ExecutionError {
     Table(#[from] TableError),
     #[error("IndexError: {0}")]
     Index(#[from] IndexError),
+    #[error("Insert Duplicated Key: {0:?}")]
+    InsertDuplicatedKey(Vec<Datum>),
 }

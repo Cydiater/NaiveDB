@@ -9,7 +9,6 @@ use std::rc::Rc;
 use thiserror::Error;
 
 pub struct NaiveDB {
-    #[allow(dead_code)]
     bpm: BufferPoolManagerRef,
     engine: Engine,
     planner: Planner,

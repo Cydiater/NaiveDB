@@ -37,6 +37,11 @@ impl Executor for InsertExecutor {
             for idx in 0..len {
                 if let Some(tuple) = input.at(idx)? {
                     info!("insert tuple {:?}", tuple);
+                    for (rows, index) in indexes_rows.iter_mut().zip(&mut self.indexes) {
+                        if index.find(&rows[0]).is_some() {
+                            return Err(ExecutionError::InsertDuplicatedKey(rows[0].clone()));
+                        }
+                    }
                     let record_id = self.table.insert(tuple)?;
                     for (rows, index) in indexes_rows.iter_mut().zip(&mut self.indexes) {
                         index.insert(&rows.remove(0), record_id)?;

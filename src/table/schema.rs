@@ -11,6 +11,7 @@ use thiserror::Error;
 /// Schema Format:
 ///
 ///     | num_column | Column[0] | Column[1] | ... |
+///     | len_unique | unique_payload |
 ///
 /// Column Format:
 ///
@@ -23,7 +24,6 @@ pub enum ColumnConstraint {
     Normal,
     Primary,
     Foreign((PageID, usize)),
-    Unique,
 }
 
 impl ColumnConstraint {
@@ -32,7 +32,6 @@ impl ColumnConstraint {
             Self::Normal => 1,
             Self::Primary => 1,
             Self::Foreign(_) => 9,
-            Self::Unique => 1,
         }
     }
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -45,7 +44,6 @@ impl ColumnConstraint {
                 bytes.extend_from_slice(&(*idx_of_ref_column as u32).to_le_bytes());
                 bytes
             }
-            Self::Unique => vec![3u8],
         }
     }
     pub fn from_bytes(bytes: &[u8]) -> Self {
@@ -126,20 +124,12 @@ impl Column {
 #[derive(Debug, PartialEq)]
 pub struct Schema {
     columns: Vec<Column>,
+    unique: Vec<Vec<usize>>,
 }
 
 impl Schema {
     pub fn new(columns: Vec<Column>) -> Self {
-        Self { columns }
-    }
-    pub fn set_unique(&mut self, column_name: &str) -> Result<(), SchemaError> {
-        let column: Option<&mut Column> = self.columns.iter_mut().find(|c| c.desc == column_name);
-        if let Some(column) = column {
-            column.constraint = ColumnConstraint::Unique;
-            Ok(())
-        } else {
-            Err(SchemaError::ColumnNotFound)
-        }
+        Self { columns, unique: vec![] }
     }
     pub fn set_foreign(
         &mut self,
@@ -215,7 +205,7 @@ impl Schema {
             offset += column.size_in_bytes();
             columns.push(column);
         }
-        Self { columns }
+        Self { columns, unique: vec![] }
     }
     pub fn primary_as_exprs(&self) -> Vec<ExprImpl> {
         self.iter()

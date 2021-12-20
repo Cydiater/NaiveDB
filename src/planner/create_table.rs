@@ -55,10 +55,8 @@ impl Planner {
         }
         // unique field
         for field in &stmt.fields {
-            if let Field::Unique(unique) = field {
-                for column_name in &unique.column_names {
-                    schema.set_unique(column_name).unwrap();
-                }
+            if let Field::Unique(_) = field {
+                todo!()
             }
         }
         Plan::CreateTable(CreateTablePlan {
