@@ -613,7 +613,7 @@ mod tests {
             let mut index = BPTIndex::new(bpm, &exprs);
             let mut set: HashSet<u16> = HashSet::new();
             let mut rng = rand::thread_rng();
-            for _ in 0..10000 {
+            for _ in 0..100000 {
                 let num: u16 = rng.gen();
                 if set.contains(&num) {
                     set.remove(&num);
