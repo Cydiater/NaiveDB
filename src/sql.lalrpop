@@ -87,9 +87,14 @@ DataType: DataType = {
 Field: Field = {
     NormalField,
     PrimaryField,
+    ForeignField,
 }
 
-PrimaryField: Field = "primary" "key" "(" <column_names: Identifiers> ")" => Field::Primary(PrimaryField { column_names });
+PrimaryField: Field = "primary" "key" "(" <column_names: Identifiers> ")" 
+    => Field::Primary(PrimaryField { column_names });
+
+ForeignField: Field = "foreign" "key" "(" <column_names: Identifiers> ")" "references" <ref_table_name: Identifier> "(" <ref_column_names: Identifiers> ")"
+    => Field::Foreign(ForeignField { column_names, ref_column_names, ref_table_name });
 
 NormalField: Field = <field_name:Identifier> <field_data_type:DataType> => Field::Normal(NormalField { field_name, field_data_type });
 

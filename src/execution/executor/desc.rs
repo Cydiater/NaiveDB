@@ -52,7 +52,7 @@ impl Executor for DescExecutor {
                     Datum::VarChar(Some(match c.constraint {
                         ColumnConstraint::Normal => "Normal".to_string(),
                         ColumnConstraint::Primary => "Primary".to_string(),
-                        _ => todo!(),
+                        ColumnConstraint::Foreign(_) => "Foreign".to_string(),
                     })),
                 ])
                 .unwrap();

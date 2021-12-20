@@ -103,6 +103,13 @@ pub struct PrimaryField {
 }
 
 #[derive(Debug)]
+pub struct ForeignField {
+    pub column_names: Vec<String>,
+    pub ref_column_names: Vec<String>,
+    pub ref_table_name: String,
+}
+
+#[derive(Debug)]
 pub struct NormalField {
     pub field_name: String,
     pub field_data_type: DataType,
@@ -112,6 +119,7 @@ pub struct NormalField {
 pub enum Field {
     Normal(NormalField),
     Primary(PrimaryField),
+    Foreign(ForeignField),
 }
 
 #[derive(Debug)]

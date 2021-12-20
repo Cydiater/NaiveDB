@@ -27,6 +27,28 @@ impl Planner {
                 schema.set_primary(column_name.clone()).unwrap();
             }
         }
+        for field in stmt.fields {
+            if let Field::Foreign(foreign) = field {
+                let table = self
+                    .catalog
+                    .borrow()
+                    .find_table(foreign.ref_table_name.clone())
+                    .unwrap();
+                for (column_name, ref_column_name) in
+                    foreign.column_names.iter().zip(foreign.ref_column_names)
+                {
+                    let (idx_of_ref_column, _) = table
+                        .schema
+                        .iter()
+                        .enumerate()
+                        .find(|(_, column)| column.desc == ref_column_name)
+                        .unwrap();
+                    schema
+                        .set_foreign(column_name.clone(), table.get_page_id(), idx_of_ref_column)
+                        .unwrap();
+                }
+            }
+        }
         Plan::CreateTable(CreateTablePlan {
             table_name: stmt.table_name,
             schema,

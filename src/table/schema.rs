@@ -1,4 +1,5 @@
 use crate::expr::{ColumnRefExpr, ExprImpl};
+use crate::storage::PageID;
 use crate::table::DataType;
 use itertools::Itertools;
 use std::convert::TryInto;
@@ -14,14 +15,14 @@ use thiserror::Error;
 /// Column Format:
 ///
 ///     | offset | len_desc | desc_content | DataType
-///     | Primary / Foreign / None | len_of_column_ref_expr | ColumnRefExpr
+///     | Primary / Foreign / None | page_id_of_ref_table | idx_of_ref_column
 ///
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ColumnConstraint {
     Normal,
     Primary,
-    Foreign(ColumnRefExpr),
+    Foreign((PageID, usize)),
 }
 
 impl ColumnConstraint {
@@ -29,21 +30,33 @@ impl ColumnConstraint {
         match self {
             Self::Normal => 1,
             Self::Primary => 1,
-            _ => todo!(),
+            Self::Foreign(_) => 9,
         }
     }
     pub fn to_bytes(&self) -> Vec<u8> {
         match self {
             Self::Normal => vec![0u8],
             Self::Primary => vec![1u8],
-            Self::Foreign(_) => todo!(),
+            Self::Foreign((page_id_of_ref_table, idx_of_ref_column)) => {
+                let mut bytes = vec![2u8];
+                bytes.extend_from_slice(&(*page_id_of_ref_table as u32).to_le_bytes());
+                bytes.extend_from_slice(&(*idx_of_ref_column as u32).to_le_bytes());
+                bytes
+            }
         }
     }
     pub fn from_bytes(bytes: &[u8]) -> Self {
         match bytes[0] {
             0u8 => Self::Normal,
             1u8 => Self::Primary,
-            _ => todo!(),
+            2u8 => {
+                let page_id_of_ref_table =
+                    u32::from_le_bytes(bytes[1..5].try_into().unwrap()) as PageID;
+                let idx_of_ref_column =
+                    u32::from_le_bytes(bytes[5..9].try_into().unwrap()) as usize;
+                Self::Foreign((page_id_of_ref_table, idx_of_ref_column))
+            }
+            _ => unreachable!(),
         }
     }
 }
@@ -115,6 +128,21 @@ pub struct Schema {
 impl Schema {
     pub fn new(columns: Vec<Column>) -> Self {
         Self { columns }
+    }
+    pub fn set_foreign(
+        &mut self,
+        column_name: String,
+        page_id_of_ref_table: PageID,
+        idx_of_ref_column: usize,
+    ) -> Result<(), SchemaError> {
+        let column: Option<&mut Column> = self.columns.iter_mut().find(|c| c.desc == column_name);
+        if let Some(column) = column {
+            column.constraint =
+                ColumnConstraint::Foreign((page_id_of_ref_table, idx_of_ref_column));
+            Ok(())
+        } else {
+            Err(SchemaError::ColumnNotFound)
+        }
     }
     pub fn set_primary(&mut self, column_name: String) -> Result<(), SchemaError> {
         let column: Option<&mut Column> = self.columns.iter_mut().find(|c| c.desc == column_name);
