@@ -23,7 +23,7 @@ impl Executor for UseDatabaseExecutor {
         if !self.executed {
             self.catalog
                 .borrow_mut()
-                .use_database(self.database_name.clone())?;
+                .use_database(&self.database_name)?;
             self.executed = true;
             Ok(Some(
                 Slice::new_simple_message(

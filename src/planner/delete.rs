@@ -12,16 +12,16 @@ pub struct DeletePlan {
 
 impl Planner {
     pub fn plan_delete(&self, stmt: DeleteStmt) -> Plan {
-        let plan = self.plan_scan(stmt.table_name.clone(), &stmt.where_exprs, true);
+        let plan = self.plan_scan(&stmt.table_name, &stmt.where_exprs, true);
         let plan = if let Some(where_exprs) = stmt.where_exprs {
-            self.plan_filter(stmt.table_name.clone(), &where_exprs, plan)
+            self.plan_filter(&stmt.table_name, &where_exprs, plan)
         } else {
             plan
         };
         let indexes = self
             .catalog
             .borrow()
-            .find_indexes_by_table(stmt.table_name.clone())
+            .find_indexes_by_table(&stmt.table_name)
             .unwrap();
         let index_page_ids = indexes
             .into_iter()
@@ -33,7 +33,7 @@ impl Planner {
             table_page_id: self
                 .catalog
                 .borrow()
-                .find_table(stmt.table_name)
+                .find_table(&stmt.table_name)
                 .unwrap()
                 .get_page_id(),
         })

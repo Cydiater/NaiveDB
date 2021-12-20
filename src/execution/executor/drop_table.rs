@@ -35,11 +35,9 @@ impl Executor for DropTableExecutor {
             return Ok(None);
         }
         self.executed = true;
-        let table = self.catalog.borrow().find_table(self.table_name.clone())?;
+        let table = self.catalog.borrow().find_table(&self.table_name)?;
         table.erase();
-        self.catalog
-            .borrow_mut()
-            .remove_table(self.table_name.clone())?;
+        self.catalog.borrow_mut().remove_table(&self.table_name)?;
         Ok(Some(Slice::new_simple_message(
             self.bpm.clone(),
             "table".to_string(),

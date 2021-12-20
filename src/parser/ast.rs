@@ -116,10 +116,16 @@ pub struct NormalField {
 }
 
 #[derive(Debug)]
+pub struct UniqueField {
+    pub column_names: Vec<String>,
+}
+
+#[derive(Debug)]
 pub enum Field {
     Normal(NormalField),
     Primary(PrimaryField),
     Foreign(ForeignField),
+    Unique(UniqueField),
 }
 
 #[derive(Debug)]

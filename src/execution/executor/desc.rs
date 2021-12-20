@@ -26,18 +26,15 @@ impl DescExecutor {
 impl Executor for DescExecutor {
     fn schema(&self) -> SchemaRef {
         Rc::new(Schema::from_slice(&[
-            (DataType::new_varchar(false), "Field".to_string()),
-            (DataType::new_varchar(false), "Type".to_string()),
-            (DataType::new_varchar(false), "Nullable".to_string()),
-            (DataType::new_varchar(false), "Key".to_string()),
+            (DataType::new_varchar(false), "Field".into()),
+            (DataType::new_varchar(false), "Type".into()),
+            (DataType::new_varchar(false), "Nullable".into()),
+            (DataType::new_varchar(false), "Key".into()),
         ]))
     }
     fn execute(&mut self) -> Result<Option<Slice>, ExecutionError> {
         if !self.executed {
-            let table = self
-                .catalog
-                .borrow_mut()
-                .find_table(self.table_name.clone())?;
+            let table = self.catalog.borrow_mut().find_table(&self.table_name)?;
             let desc_schema = self.schema();
             let mut desc = Slice::new(self.bpm.clone(), desc_schema);
             table.schema.iter().for_each(|c| {
@@ -50,9 +47,10 @@ impl Executor for DescExecutor {
                         "No".to_string()
                     })),
                     Datum::VarChar(Some(match c.constraint {
-                        ColumnConstraint::Normal => "Normal".to_string(),
-                        ColumnConstraint::Primary => "Primary".to_string(),
-                        ColumnConstraint::Foreign(_) => "Foreign".to_string(),
+                        ColumnConstraint::Normal => "Normal".into(),
+                        ColumnConstraint::Primary => "Primary".into(),
+                        ColumnConstraint::Foreign(_) => "Foreign".into(),
+                        ColumnConstraint::Unique => "Unique".into(),
                     })),
                 ])
                 .unwrap();

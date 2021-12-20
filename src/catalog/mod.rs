@@ -90,7 +90,7 @@ impl Catalog {
             bpm: self.bpm.clone(),
         }
     }
-    pub fn remove(&mut self, name: String) -> Result<(), CatalogError> {
+    pub fn remove(&mut self, name: &str) -> Result<(), CatalogError> {
         let mut start = 0;
         let mut offset = 0;
         for (len, _, record_name) in self.iter() {
@@ -116,7 +116,7 @@ impl Catalog {
         self.page.borrow_mut().is_dirty = true;
         Ok(())
     }
-    pub fn insert(&mut self, page_id: PageID, name: String) -> Result<(), CatalogError> {
+    pub fn insert(&mut self, page_id: PageID, name: &str) -> Result<(), CatalogError> {
         let mut last = 0;
         for (len, _, _) in self.iter() {
             last += len + 4 + 4;
@@ -158,27 +158,27 @@ mod tests {
     fn test_database_catalog() {
         let bpm = BufferPoolManager::new_random_shared(5);
         let mut db_catalog = Catalog::new_database_catalog(bpm.clone());
-        db_catalog.insert(0, "sample_0".to_string()).unwrap();
-        db_catalog.insert(1, "sample_1".to_string()).unwrap();
-        db_catalog.insert(2, "sample_2".to_string()).unwrap();
+        db_catalog.insert(0, "sample_0").unwrap();
+        db_catalog.insert(1, "sample_1").unwrap();
+        db_catalog.insert(2, "sample_2").unwrap();
         let res = db_catalog.iter().collect_vec();
         assert_eq!(
             res,
             vec![
-                (8, 0, "sample_0".to_string()),
-                (8, 1, "sample_1".to_string()),
-                (8, 2, "sample_2".to_string()),
+                (8, 0, "sample_0".into()),
+                (8, 1, "sample_1".into()),
+                (8, 2, "sample_2".into()),
             ]
         );
-        db_catalog.insert(3, "sample_3".to_string()).unwrap();
+        db_catalog.insert(3, "sample_3").unwrap();
         let res = db_catalog.iter().collect_vec();
         assert_eq!(
             res,
             vec![
-                (8, 0, "sample_0".to_string()),
-                (8, 1, "sample_1".to_string()),
-                (8, 2, "sample_2".to_string()),
-                (8, 3, "sample_3".to_string()),
+                (8, 0, "sample_0".into()),
+                (8, 1, "sample_1".into()),
+                (8, 2, "sample_2".into()),
+                (8, 3, "sample_3".into()),
             ]
         );
         let _ = bpm.borrow_mut().clear();

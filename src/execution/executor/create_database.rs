@@ -34,7 +34,7 @@ impl Executor for CreateDatabaseExecutor {
         if !self.executed {
             self.catalog
                 .borrow_mut()
-                .create_database(self.db_name.clone())
+                .create_database(&self.db_name)
                 .unwrap();
             let res = Slice::new_simple_message(
                 self.bpm.clone(),

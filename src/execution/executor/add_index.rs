@@ -45,7 +45,7 @@ impl Executor for AddIndexExecutor {
             return Ok(None);
         }
         self.executed = true;
-        let table = self.catalog.borrow().find_table(self.table_name.clone())?;
+        let table = self.catalog.borrow().find_table(&self.table_name)?;
         let mut index = BPTIndex::new(self.bpm.clone(), &self.exprs);
         let slices = table.into_slice();
         let mut indexed_cnt = 0;
@@ -70,7 +70,7 @@ impl Executor for AddIndexExecutor {
         }
         let page_id = index.get_page_id();
         self.catalog.borrow_mut().add_index(
-            self.table_name.clone(),
+            &self.table_name,
             Rc::new(Schema::from_exprs(&self.exprs)),
             page_id,
         )?;

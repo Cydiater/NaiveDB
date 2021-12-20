@@ -21,31 +21,43 @@ impl Planner {
             .flatten()
             .collect_vec();
         let mut schema = Schema::from_slice(&slice);
+        // primary field
         let primary = stmt.fields.iter().find(|f| matches!(f, Field::Primary(_)));
         if let Some(Field::Primary(primary)) = primary {
             for column_name in primary.column_names.iter() {
-                schema.set_primary(column_name.clone()).unwrap();
+                schema.set_primary(column_name).unwrap();
             }
         }
-        for field in stmt.fields {
+        // foreign field
+        for field in &stmt.fields {
             if let Field::Foreign(foreign) = field {
                 let table = self
                     .catalog
                     .borrow()
-                    .find_table(foreign.ref_table_name.clone())
+                    .find_table(&foreign.ref_table_name)
                     .unwrap();
-                for (column_name, ref_column_name) in
-                    foreign.column_names.iter().zip(foreign.ref_column_names)
+                for (column_name, ref_column_name) in foreign
+                    .column_names
+                    .iter()
+                    .zip(foreign.ref_column_names.iter())
                 {
                     let (idx_of_ref_column, _) = table
                         .schema
                         .iter()
                         .enumerate()
-                        .find(|(_, column)| column.desc == ref_column_name)
+                        .find(|(_, column)| &column.desc == ref_column_name)
                         .unwrap();
                     schema
-                        .set_foreign(column_name.clone(), table.get_page_id(), idx_of_ref_column)
+                        .set_foreign(column_name, table.get_page_id(), idx_of_ref_column)
                         .unwrap();
+                }
+            }
+        }
+        // unique field
+        for field in &stmt.fields {
+            if let Field::Unique(unique) = field {
+                for column_name in &unique.column_names {
+                    schema.set_unique(column_name).unwrap();
                 }
             }
         }

@@ -12,10 +12,10 @@ pub struct ProjectPlan {
 impl Planner {
     pub fn plan_select(&self, stmt: SelectStmt) -> Plan {
         // SeqScan || IndexScan
-        let plan = self.plan_scan(stmt.table_name.clone(), &stmt.where_exprs, false);
+        let plan = self.plan_scan(&stmt.table_name, &stmt.where_exprs, false);
         // Filter
         let plan = if let Some(where_exprs) = stmt.where_exprs {
-            self.plan_filter(stmt.table_name.clone(), &where_exprs, plan)
+            self.plan_filter(&stmt.table_name, &where_exprs, plan)
         } else {
             plan
         };

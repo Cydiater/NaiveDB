@@ -23,7 +23,7 @@ pub struct SeqScanPlan {
 impl Planner {
     pub fn plan_scan(
         &self,
-        table_name: String,
+        table_name: &str,
         where_exprs: &Option<Vec<ExprNode>>,
         with_record_id: bool,
     ) -> Plan {
@@ -31,13 +31,18 @@ impl Planner {
             let indexes = self
                 .catalog
                 .borrow()
-                .find_indexes_by_table(table_name.clone())
+                .find_indexes_by_table(table_name)
                 .unwrap();
             let where_exprs = where_exprs
                 .iter()
                 .map(|node| {
-                    ExprImpl::from_ast(node, self.catalog.clone(), Some(table_name.clone()), None)
-                        .unwrap()
+                    ExprImpl::from_ast(
+                        node,
+                        self.catalog.clone(),
+                        Some(table_name.to_owned()),
+                        None,
+                    )
+                    .unwrap()
                 })
                 .collect_vec();
             let mut index_scan = None;
@@ -75,7 +80,7 @@ impl Planner {
                         table_page_id: self
                             .catalog
                             .borrow()
-                            .find_table(table_name.clone())
+                            .find_table(table_name)
                             .unwrap()
                             .get_page_id(),
                         index_page_id: index.get_page_id(),
@@ -88,13 +93,13 @@ impl Planner {
                 index_scan
             } else {
                 Plan::SeqScan(SeqScanPlan {
-                    table_name,
+                    table_name: table_name.to_owned(),
                     with_record_id,
                 })
             }
         } else {
             Plan::SeqScan(SeqScanPlan {
-                table_name,
+                table_name: table_name.to_owned(),
                 with_record_id,
             })
         }

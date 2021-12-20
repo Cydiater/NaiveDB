@@ -26,7 +26,7 @@ impl CatalogManager {
     pub fn new_shared(bpm: BufferPoolManagerRef) -> CatalogManagerRef {
         Rc::new(RefCell::new(Self::new(bpm)))
     }
-    pub fn create_database(&mut self, database_name: String) -> Result<(), CatalogError> {
+    pub fn create_database(&mut self, database_name: &str) -> Result<(), CatalogError> {
         // create table catalog
         let table_catalog = Catalog::new_empty(self.bpm.clone()).unwrap();
         let page_id = table_catalog.get_page_id();
@@ -36,11 +36,7 @@ impl CatalogManager {
             .unwrap();
         Ok(())
     }
-    pub fn create_table(
-        &mut self,
-        table_name: String,
-        page_id: PageID,
-    ) -> Result<(), CatalogError> {
+    pub fn create_table(&mut self, table_name: &str, page_id: PageID) -> Result<(), CatalogError> {
         if let Some(table_catalog) = self.table_catalog.as_mut() {
             info!("create table {}", table_name);
             table_catalog.insert(page_id, table_name).unwrap();
@@ -49,11 +45,11 @@ impl CatalogManager {
             Err(CatalogError::NotUsingDatabase)
         }
     }
-    pub fn use_database(&mut self, database_name: String) -> Result<(), CatalogError> {
+    pub fn use_database(&mut self, database_name: &str) -> Result<(), CatalogError> {
         if let Some(page_id) = self
             .database_catalog
             .iter()
-            .filter(|(_, _, name)| name == &database_name)
+            .filter(|(_, _, name)| name == database_name)
             .map(|(_, page_id, _)| page_id)
             .next()
         {
@@ -65,7 +61,7 @@ impl CatalogManager {
             Err(CatalogError::EntryNotFound)
         }
     }
-    pub fn remove_table(&mut self, table_name: String) -> Result<(), CatalogError> {
+    pub fn remove_table(&mut self, table_name: &str) -> Result<(), CatalogError> {
         if let Some(table_catalog) = &mut self.table_catalog {
             table_catalog.remove(table_name)?;
             Ok(())
@@ -73,11 +69,11 @@ impl CatalogManager {
             Err(CatalogError::NotUsingDatabase)
         }
     }
-    pub fn find_table(&self, table_name: String) -> Result<Table, CatalogError> {
+    pub fn find_table(&self, table_name: &str) -> Result<Table, CatalogError> {
         if let Some(table_catalog) = &self.table_catalog {
             if let Some(page_id) = table_catalog
                 .iter()
-                .filter(|(_, _, name)| name == &table_name)
+                .filter(|(_, _, name)| name == table_name)
                 .map(|(_, page_id, _)| page_id)
                 .next()
             {
@@ -89,7 +85,7 @@ impl CatalogManager {
             Err(CatalogError::NotUsingDatabase)
         }
     }
-    pub fn find_indexes_by_table(&self, table_name: String) -> Result<Vec<BPTIndex>, CatalogError> {
+    pub fn find_indexes_by_table(&self, table_name: &str) -> Result<Vec<BPTIndex>, CatalogError> {
         if let Some(table_catalog) = &self.table_catalog {
             let mut indexes = vec![];
             for (_, page_id, name) in table_catalog.iter() {
@@ -109,14 +105,14 @@ impl CatalogManager {
     }
     pub fn add_index(
         &mut self,
-        table_name: String,
+        table_name: &str,
         schema: SchemaRef,
         page_id: PageID,
     ) -> Result<(), CatalogError> {
         if let Some(table_catalog) = self.table_catalog.as_mut() {
             let columns = schema.iter().map(|c| c.desc.clone()).collect_vec();
-            let key = table_name + ":" + &columns.join(":");
-            table_catalog.insert(page_id, key)?;
+            let key = table_name.to_owned() + ":" + &columns.join(":");
+            table_catalog.insert(page_id, &key)?;
             Ok(())
         } else {
             Err(CatalogError::NotUsingDatabase)
@@ -142,13 +138,9 @@ mod tests {
             let filename = bpm.borrow().filename();
             let mut catalog_manager = CatalogManager::new(bpm.clone());
             // create database
-            catalog_manager
-                .create_database("sample_db".to_string())
-                .unwrap();
+            catalog_manager.create_database("sample_db").unwrap();
             // use this database
-            catalog_manager
-                .use_database("sample_db".to_string())
-                .unwrap();
+            catalog_manager.use_database("sample_db").unwrap();
             // create a table
             let table = Table::new(
                 Rc::new(Schema::from_slice(&[(
@@ -159,12 +151,10 @@ mod tests {
             );
             // attach in catalog
             catalog_manager
-                .create_table("sample_table".to_string(), table.get_page_id())
+                .create_table("sample_table", table.get_page_id())
                 .unwrap();
             // find this table
-            assert!(catalog_manager
-                .find_table("sample_table".to_string())
-                .is_ok());
+            assert!(catalog_manager.find_table("sample_table").is_ok());
             filename
         };
         remove_file(filename).unwrap();

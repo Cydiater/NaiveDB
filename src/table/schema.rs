@@ -23,6 +23,7 @@ pub enum ColumnConstraint {
     Normal,
     Primary,
     Foreign((PageID, usize)),
+    Unique,
 }
 
 impl ColumnConstraint {
@@ -31,6 +32,7 @@ impl ColumnConstraint {
             Self::Normal => 1,
             Self::Primary => 1,
             Self::Foreign(_) => 9,
+            Self::Unique => 1,
         }
     }
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -43,6 +45,7 @@ impl ColumnConstraint {
                 bytes.extend_from_slice(&(*idx_of_ref_column as u32).to_le_bytes());
                 bytes
             }
+            Self::Unique => vec![3u8],
         }
     }
     pub fn from_bytes(bytes: &[u8]) -> Self {
@@ -129,9 +132,18 @@ impl Schema {
     pub fn new(columns: Vec<Column>) -> Self {
         Self { columns }
     }
+    pub fn set_unique(&mut self, column_name: &str) -> Result<(), SchemaError> {
+        let column: Option<&mut Column> = self.columns.iter_mut().find(|c| c.desc == column_name);
+        if let Some(column) = column {
+            column.constraint = ColumnConstraint::Unique;
+            Ok(())
+        } else {
+            Err(SchemaError::ColumnNotFound)
+        }
+    }
     pub fn set_foreign(
         &mut self,
-        column_name: String,
+        column_name: &str,
         page_id_of_ref_table: PageID,
         idx_of_ref_column: usize,
     ) -> Result<(), SchemaError> {
@@ -144,7 +156,7 @@ impl Schema {
             Err(SchemaError::ColumnNotFound)
         }
     }
-    pub fn set_primary(&mut self, column_name: String) -> Result<(), SchemaError> {
+    pub fn set_primary(&mut self, column_name: &str) -> Result<(), SchemaError> {
         let column: Option<&mut Column> = self.columns.iter_mut().find(|c| c.desc == column_name);
         if let Some(column) = column {
             column.constraint = ColumnConstraint::Primary;
@@ -156,7 +168,7 @@ impl Schema {
     pub fn len(&self) -> usize {
         self.columns.len()
     }
-    pub fn index_of(&self, field_name: String) -> Option<usize> {
+    pub fn index_of(&self, field_name: &str) -> Option<usize> {
         self.columns.iter().position(|c| c.desc == field_name)
     }
     pub fn from_slice(type_and_names: &[(DataType, String)]) -> Self {
@@ -257,8 +269,8 @@ mod tests {
             (DataType::new_varchar(false), "v3".to_string()),
         ];
         let mut schema = Schema::from_slice(type_and_names.as_slice());
-        schema.set_primary("v1".to_string()).unwrap();
-        schema.set_primary("v3".to_string()).unwrap();
+        schema.set_primary("v1").unwrap();
+        schema.set_primary("v3").unwrap();
         let bytes = schema.to_bytes();
         assert_eq!(Schema::from_bytes(&bytes), schema);
     }
