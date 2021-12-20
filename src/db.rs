@@ -72,7 +72,46 @@ mod tests {
     use crate::datum::Datum;
     use crate::db::NaiveDB;
     use itertools::Itertools;
+    use rand::Rng;
+    use std::collections::HashSet;
     use std::fs::remove_file;
+
+    #[test]
+    fn chaos_test() {
+        let filename = {
+            let mut db = NaiveDB::new_random();
+            let filename = db.filename();
+            db.run("create database d;").unwrap();
+            db.run("use d;").unwrap();
+            db.run("create table t (v1 int not null, primary key (v1));")
+                .unwrap();
+            let mut set: HashSet<u16> = HashSet::new();
+            let mut rng = rand::thread_rng();
+            for _ in 0..500 {
+                let num: u16 = rng.gen();
+                if set.contains(&num) {
+                    set.remove(&num);
+                    db.run(format!("delete from t where v1 = {};", num).as_str())
+                        .unwrap();
+                } else {
+                    set.insert(num);
+                    db.run(format!("insert into t values ({});", num).as_str())
+                        .unwrap();
+                }
+            }
+            for num in set.iter().sorted() {
+                assert_eq!(
+                    db.run(format!("select * from t where v1 = {};", num).as_str())
+                        .unwrap()
+                        .iter()
+                        .collect_vec(),
+                    [[Datum::Int(Some(*num as i32))]],
+                );
+            }
+            filename
+        };
+        remove_file(filename).unwrap()
+    }
 
     #[test]
     fn index_test() {
