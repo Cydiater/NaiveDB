@@ -52,12 +52,18 @@ impl Executor for FilterExecutor {
             if self.buffer.is_empty() {
                 let input = self.child.execute()?;
                 if let Some(slice) = input {
+                    let mut tuples = vec![];
+                    for idx in 0..slice.get_num_tuple() {
+                        if let Some(tuple) = slice.at(idx)? {
+                            tuples.push(tuple)
+                        }
+                    }
                     let filter_map = self.filter_map(&slice);
-                    for (idx, check) in filter_map.iter().enumerate() {
+                    for (tuple, check) in tuples.into_iter().zip(filter_map) {
                         if !check {
                             continue;
                         }
-                        self.buffer.push_back(slice.at(idx).unwrap());
+                        self.buffer.push_back(tuple);
                     }
                 } else if output.get_num_tuple() > 0 {
                     return Ok(Some(output));

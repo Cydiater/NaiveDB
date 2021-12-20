@@ -29,7 +29,9 @@ impl Expr for ColumnRefExpr {
             let len = slice.get_num_tuple();
             let mut res = vec![];
             for idx in 0..len {
-                res.push(slice.at(idx).unwrap().remove(self.idx));
+                if let Some(mut tuple) = slice.at(idx).unwrap() {
+                    res.push(tuple.remove(self.idx));
+                }
             }
             res
         } else {

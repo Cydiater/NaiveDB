@@ -4,6 +4,7 @@ use crate::table::{SchemaRef, Slice};
 pub use add_index::AddIndexExecutor;
 pub use create_database::CreateDatabaseExecutor;
 pub use create_table::CreateTableExecutor;
+pub use delete::DeleteExecutor;
 pub use desc::DescExecutor;
 pub use drop_table::DropTableExecutor;
 pub use filter::FilterExecutor;
@@ -18,6 +19,7 @@ pub use values::ValuesExecutor;
 mod add_index;
 mod create_database;
 mod create_table;
+mod delete;
 mod desc;
 mod drop_table;
 mod filter;
@@ -49,6 +51,7 @@ pub enum ExecutorImpl {
     Filter(FilterExecutor),
     AddIndex(AddIndexExecutor),
     DropTable(DropTableExecutor),
+    Delete(DeleteExecutor),
 }
 
 impl ExecutorImpl {
@@ -67,6 +70,7 @@ impl ExecutorImpl {
             Self::AddIndex(executor) => executor.execute(),
             Self::IndexScan(executor) => executor.execute(),
             Self::DropTable(executor) => executor.execute(),
+            Self::Delete(executor) => executor.execute(),
         }
     }
     pub fn schema(&self) -> SchemaRef {
@@ -84,6 +88,7 @@ impl ExecutorImpl {
             Self::AddIndex(executor) => executor.schema(),
             Self::IndexScan(executor) => executor.schema(),
             Self::DropTable(executor) => executor.schema(),
+            Self::Delete(executor) => executor.schema(),
         }
     }
 }

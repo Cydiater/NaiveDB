@@ -65,13 +65,21 @@ impl Iterator for TableIter {
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.idx < self.slice.get_num_tuple() {
-            let ret = Some(self.slice.at(self.idx).unwrap());
+            let tuple = self.slice.at(self.idx).unwrap();
             self.idx += 1;
-            ret
+            if let Some(tuple) = tuple {
+                Some(tuple)
+            } else {
+                self.next()
+            }
         } else if let Some(page_id_of_next_slice) = self.slice.get_next_page_id() {
             self.slice = Slice::open(self.bpm.clone(), self.schema.clone(), page_id_of_next_slice);
             self.idx = 1;
-            Some(self.slice.at(0).unwrap())
+            if let Some(tuple) = self.slice.at(0).unwrap() {
+                Some(tuple)
+            } else {
+                self.next()
+            }
         } else {
             None
         }
@@ -161,7 +169,7 @@ impl Table {
             schema: self.schema.clone(),
         }
     }
-    pub fn datums_from_record_id(&self, record_id: RecordID) -> Vec<Datum> {
+    pub fn datums_from_record_id(&self, record_id: RecordID) -> Option<Vec<Datum>> {
         let slice = Slice::open(self.bpm.clone(), self.schema.clone(), record_id.0);
         slice.at(record_id.1).unwrap()
     }
@@ -171,7 +179,9 @@ impl Table {
             let num_tuple = s.get_num_tuple();
             for idx in 0..num_tuple {
                 let tuple = s.at(idx).unwrap();
-                table.insert(tuple).unwrap();
+                if let Some(tuple) = tuple {
+                    table.insert(tuple).unwrap();
+                }
             }
         });
         table
@@ -187,7 +197,10 @@ impl Table {
         }
         slices
     }
-
+    pub fn remove(&mut self, record_id: RecordID) -> Result<(), TableError> {
+        let mut slice = Slice::open(self.bpm.clone(), self.schema.clone(), record_id.0);
+        slice.remove(record_id.1)
+    }
     pub fn erase(self) {
         let bpm = self.bpm.clone();
         let table_page_id = self.page.borrow().page_id.unwrap();
@@ -215,6 +228,10 @@ pub enum TableError {
     Storage(#[from] StorageError),
     #[error("PageID not assigned")]
     NoPageID,
+    #[error("Slice Index Out of Bound")]
+    SliceIndexOutOfBound,
+    #[error("Delete Tuple That Already Deleted")]
+    AlreadyDeleted,
 }
 
 #[cfg(test)]

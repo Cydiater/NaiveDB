@@ -40,11 +40,11 @@ impl LeafNode {
     const TAIL: Range<usize> = 13..17;
     const SIZE_OF_META: usize = 17;
 
-    fn get_head(&self) -> usize {
+    pub fn get_head(&self) -> usize {
         u32::from_le_bytes(self.page.borrow().buffer[Self::HEAD].try_into().unwrap()) as usize
     }
 
-    fn get_tail(&self) -> usize {
+    pub fn get_tail(&self) -> usize {
         u32::from_le_bytes(self.page.borrow().buffer[Self::TAIL].try_into().unwrap()) as usize
     }
 
@@ -146,6 +146,13 @@ impl LeafNode {
         u32::from_le_bytes(bytes) as usize
     }
 
+    fn set_offset_at(&mut self, idx: usize, offset: usize) {
+        let start = Self::SIZE_OF_META + idx * 12;
+        let end = start + 4;
+        self.page.borrow_mut().buffer[start..end].copy_from_slice(&(offset as u32).to_le_bytes());
+        self.page.borrow_mut().is_dirty = true;
+    }
+
     pub fn key_at(&self, idx: usize) -> Vec<Datum> {
         assert!(idx < self.len());
         let base_offset = self.offset_at(idx);
@@ -173,7 +180,6 @@ impl LeafNode {
         (head - Self::SIZE_OF_META) / 12
     }
 
-    /// find the first record with key greater than input
     pub fn lower_bound(&self, key: &[Datum]) -> Option<usize> {
         if self.len() == 0 {
             return None;
@@ -237,12 +243,12 @@ impl LeafNode {
         let len_lhs = len / 2;
         // setup lhs node
         for idx in 0..len_lhs {
-            self.append(keys[idx].as_slice(), record_ids[idx]);
+            self.append(keys[idx].as_slice(), record_ids[idx]).unwrap();
         }
         // new rhs
         let mut rhs = LeafNode::new(self.bpm.clone(), self.schema.clone());
         for idx in len_lhs..len {
-            rhs.append(keys[idx].as_slice(), record_ids[idx]);
+            rhs.append(keys[idx].as_slice(), record_ids[idx]).unwrap();
         }
         // set parent_page_id
         rhs.set_parent_page_id(self.get_parent_page_id());
@@ -255,25 +261,33 @@ impl LeafNode {
     }
 
     /// append to the end, the order should be preserved
-    pub fn append(&mut self, key: &[Datum], record_id: RecordID) {
-        self.insert_at(self.len(), key, record_id);
+    pub fn append(&mut self, key: &[Datum], record_id: RecordID) -> Result<(), IndexError> {
+        self.insert_at(self.len(), key, record_id)
     }
 
     /// random insert
-    pub fn insert(&mut self, key: &[Datum], record_id: RecordID) {
+    pub fn insert(&mut self, key: &[Datum], record_id: RecordID) -> Result<(), IndexError> {
         let idx = self.lower_bound(key).unwrap_or_else(|| self.len());
-        self.insert_at(idx, key, record_id);
+        self.insert_at(idx, key, record_id)
     }
 
     /// insert at specific position
-    pub fn insert_at(&mut self, idx: usize, key: &[Datum], record_id: RecordID) {
+    pub fn insert_at(
+        &mut self,
+        idx: usize,
+        key: &[Datum],
+        record_id: RecordID,
+    ) -> Result<(), IndexError> {
+        let bytes = Datum::to_bytes_with_schema(key, self.schema.clone());
+        if self.get_head() + 12 > self.get_tail() - bytes.len() {
+            return Err(IndexError::NodeOutOfSpace);
+        }
         let start = Self::SIZE_OF_META + idx * 12;
         let end = Self::SIZE_OF_META + self.len() * 12;
         self.page
             .borrow_mut()
             .buffer
             .copy_within(start..end, start + 12);
-        let bytes = Datum::to_bytes_with_schema(key, self.schema.clone());
         let end = self.get_tail();
         let start = end - bytes.len();
         self.page.borrow_mut().buffer[start..end].copy_from_slice(&bytes);
@@ -294,6 +308,76 @@ impl LeafNode {
             .copy_from_slice(&(record_id.1 as u32).to_le_bytes());
         // mark dirty
         self.page.borrow_mut().is_dirty = true;
+        Ok(())
+    }
+
+    pub fn remove(&mut self, key: &[Datum]) -> Result<(), IndexError> {
+        let idx = self.index_of(key);
+        if let Some(idx) = idx {
+            let offset1 = self.offset_at(idx);
+            let mut offset2 = self.get_tail();
+            // TODO hack here, do better later
+            for idx in 0..self.len() {
+                let offset = self.offset_at(idx);
+                if offset < offset1 && offset > offset2 {
+                    offset2 = offset;
+                }
+            }
+            let offset_delta = offset1 - offset2;
+            let tail = self.get_tail();
+            // move data
+            self.page
+                .borrow_mut()
+                .buffer
+                .copy_within(tail..offset2, tail + offset_delta);
+            // modify offset
+            for i in idx..self.len() - 1 {
+                let next_offset = self.offset_at(i + 1);
+                let next_record_id = self.record_id_at(i + 1);
+                let start = Self::SIZE_OF_META + i * 12;
+                let end = start + 4;
+                self.page.borrow_mut().buffer[start..end]
+                    .copy_from_slice(&(next_offset as u32).to_le_bytes());
+                let start = end;
+                let end = start + 4;
+                self.page.borrow_mut().buffer[start..end]
+                    .copy_from_slice(&(next_record_id.0 as u32).to_le_bytes());
+                let start = start + 4;
+                let end = end + 4;
+                self.page.borrow_mut().buffer[start..end]
+                    .copy_from_slice(&(next_record_id.1 as u32).to_le_bytes());
+            }
+            for i in 0..self.len() - 1 {
+                let offset = self.offset_at(i);
+                if offset < offset1 {
+                    self.set_offset_at(i, offset + offset_delta);
+                }
+            }
+            // set head
+            let head = self.get_head();
+            self.set_head(head - 12);
+            // set tail
+            let tail = self.get_tail();
+            self.set_tail(tail + offset_delta);
+            // dirty
+            self.page.borrow_mut().is_dirty = true;
+            Ok(())
+        } else {
+            Err(IndexError::KeyNotFound)
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn sanity_check(&self) {
+        let len = self.len();
+        let mut last_key = None;
+        for idx in 0..len {
+            let key = self.key_at(idx);
+            if let Some(last_key) = last_key {
+                assert!(last_key < key);
+            }
+            last_key = Some(key);
+        }
     }
 }
 
@@ -307,7 +391,7 @@ mod tests {
     use std::rc::Rc;
 
     #[test]
-    fn test_append() {
+    fn test_append_remove() {
         let filename = {
             let bpm = BufferPoolManager::new_random_shared(10);
             let filename = bpm.borrow().filename();
@@ -317,10 +401,16 @@ mod tests {
             )]));
             let dummy_record_id = (0, 0);
             let mut node = LeafNode::new(bpm, schema);
-            node.append(&[Datum::Int(Some(0))], dummy_record_id);
-            node.append(&[Datum::Int(Some(1))], dummy_record_id);
-            node.append(&[Datum::Int(Some(2))], dummy_record_id);
+            node.append(&[Datum::Int(Some(0))], dummy_record_id)
+                .unwrap();
+            node.append(&[Datum::Int(Some(1))], dummy_record_id)
+                .unwrap();
+            node.append(&[Datum::Int(Some(2))], dummy_record_id)
+                .unwrap();
             assert_eq!(node.len(), 3);
+            node.remove(&[Datum::Int(Some(0))]).unwrap();
+            assert_eq!(node.key_at(0), [Datum::Int(Some(1))]);
+            assert_eq!(node.key_at(1), [Datum::Int(Some(2))]);
             filename
         };
         remove_file(filename).unwrap()

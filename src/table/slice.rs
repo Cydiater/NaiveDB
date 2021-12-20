@@ -140,16 +140,33 @@ impl Slice {
         self.page.borrow_mut().is_dirty = true;
     }
 
-    pub fn at(&self, idx: usize) -> Result<Vec<Datum>, TableError> {
-        let base_offset = u32::from_le_bytes(
-            self.page.borrow().buffer[Self::SIZE_OF_META + idx * std::mem::size_of::<u32>()
-                ..Self::SIZE_OF_META + (idx + 1) * std::mem::size_of::<u32>()]
-                .try_into()
-                .unwrap(),
-        ) as usize;
+    pub fn set_offset_at(&mut self, idx: usize, offset: usize) -> Result<(), TableError> {
+        if idx >= self.get_num_tuple() {
+            return Err(TableError::SliceIndexOutOfBound);
+        }
+        let start = Self::SIZE_OF_META + idx * std::mem::size_of::<u32>();
+        let end = start + 4;
+        self.page.borrow_mut().buffer[start..end].copy_from_slice(&(offset as u32).to_le_bytes());
+        Ok(())
+    }
+
+    pub fn get_offset_at(&self, idx: usize) -> Result<usize, TableError> {
+        if idx >= self.get_num_tuple() {
+            return Err(TableError::SliceIndexOutOfBound);
+        }
+        let start = Self::SIZE_OF_META + idx * std::mem::size_of::<u32>();
+        let end = start + 4;
+        Ok(u32::from_le_bytes(self.page.borrow().buffer[start..end].try_into().unwrap()) as usize)
+    }
+
+    pub fn at(&self, idx: usize) -> Result<Option<Vec<Datum>>, TableError> {
+        let base_offset = self.get_offset_at(idx)?;
+        if base_offset == 0 {
+            return Ok(None);
+        }
         let bytes = &self.page.borrow().buffer[..base_offset];
         let datums = Datum::from_bytes_and_schema(self.schema.clone(), bytes);
-        Ok(datums)
+        Ok(Some(datums))
     }
 
     pub fn ok_to_add(&self, datums: &[Datum]) -> bool {
@@ -159,6 +176,15 @@ impl Slice {
             .map(|(d, c)| d.size_of_bytes(&c.data_type))
             .sum();
         delta_size <= self.get_free_size()
+    }
+
+    pub fn remove(&mut self, idx: usize) -> Result<(), TableError> {
+        let offset = self.get_offset_at(idx)?;
+        if offset == 0 {
+            return Err(TableError::AlreadyDeleted);
+        }
+        self.set_offset_at(idx, 0)?;
+        Ok(())
     }
 
     pub fn add(&mut self, datums: &[Datum]) -> Result<RecordID, TableError> {
@@ -200,11 +226,13 @@ impl fmt::Display for Slice {
         table.add_row(Row::new(header));
         for idx in 0..self.get_num_tuple() {
             let tuple = self.at(idx).unwrap();
-            let tuple = tuple
-                .iter()
-                .map(|d| Cell::new(d.to_string().as_str()))
-                .collect_vec();
-            table.add_row(Row::new(tuple));
+            if let Some(tuple) = tuple {
+                let tuple = tuple
+                    .iter()
+                    .map(|d| Cell::new(d.to_string().as_str()))
+                    .collect_vec();
+                table.add_row(Row::new(tuple));
+            }
         }
         write!(f, "{}", table)
     }
@@ -234,8 +262,8 @@ mod tests {
                 let mut slice = Slice::new(bpm.clone(), Rc::new(schema));
                 slice.add(tuple1.as_slice()).unwrap();
                 slice.add(tuple2.as_slice()).unwrap();
-                assert_eq!(slice.at(0).unwrap(), tuple1);
-                assert_eq!(slice.at(1).unwrap(), tuple2);
+                assert_eq!(slice.at(0).unwrap().unwrap(), tuple1);
+                assert_eq!(slice.at(1).unwrap().unwrap(), tuple2);
                 slice.get_page_id()
             };
             // refetch
@@ -245,9 +273,9 @@ mod tests {
             ]);
             let mut slice = Slice::open(bpm, Rc::new(schema), page_id);
             slice.add(tuple3.as_slice()).unwrap();
-            assert_eq!(slice.at(0).unwrap(), tuple1);
-            assert_eq!(slice.at(1).unwrap(), tuple2);
-            assert_eq!(slice.at(2).unwrap(), tuple3);
+            assert_eq!(slice.at(0).unwrap().unwrap(), tuple1);
+            assert_eq!(slice.at(1).unwrap().unwrap(), tuple2);
+            assert_eq!(slice.at(2).unwrap().unwrap(), tuple3);
             filename
         };
         remove_file(filename).unwrap();
@@ -264,6 +292,24 @@ mod tests {
                 slice.add(&[Datum::Int(Some(i))]).unwrap();
             }
             assert!(slice.add(&[Datum::Int(Some(0))]).is_err());
+            filename
+        };
+        remove_file(filename).unwrap();
+    }
+
+    #[test]
+    fn test_remove() {
+        let filename = {
+            let bpm = BufferPoolManager::new_random_shared(100);
+            let filename = bpm.borrow().filename();
+            let schema = Schema::from_slice(&[(DataType::new_int(false), "v1".to_string())]);
+            let mut slice = Slice::new(bpm, Rc::new(schema));
+            slice.add(&[Datum::Int(Some(1))]).unwrap();
+            slice.add(&[Datum::Int(Some(2))]).unwrap();
+            slice.add(&[Datum::Int(Some(3))]).unwrap();
+            slice.remove(1).unwrap();
+            assert_eq!(slice.at(0).unwrap(), Some(vec![Datum::Int(Some(1))]));
+            assert_eq!(slice.at(1).unwrap(), None);
             filename
         };
         remove_file(filename).unwrap();
@@ -289,8 +335,8 @@ mod tests {
             ];
             slice.add(tuple1.as_slice()).unwrap();
             slice.add(tuple2.as_slice()).unwrap();
-            assert_eq!(slice.at(0).unwrap(), tuple1);
-            assert_eq!(slice.at(1).unwrap(), tuple2);
+            assert_eq!(slice.at(0).unwrap().unwrap(), tuple1);
+            assert_eq!(slice.at(1).unwrap().unwrap(), tuple2);
             filename
         };
         remove_file(filename).unwrap();
@@ -303,7 +349,7 @@ mod tests {
             let filename = bpm.borrow().filename();
             let slice = Slice::new_simple_message(bpm, "header".to_string(), "message".to_string())
                 .unwrap();
-            let tuple = slice.at(0).unwrap();
+            let tuple = slice.at(0).unwrap().unwrap();
             assert_eq!(tuple[0], Datum::VarChar(Some("message".to_string())));
             filename
         };

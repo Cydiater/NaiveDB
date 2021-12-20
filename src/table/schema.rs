@@ -134,6 +134,12 @@ impl Schema {
     pub fn from_slice(type_and_names: &[(DataType, String)]) -> Self {
         Schema::new(Column::from_slice(type_and_names))
     }
+    pub fn to_vec(&self) -> Vec<(DataType, String)> {
+        self.columns
+            .iter()
+            .map(|c| (c.data_type, c.desc.clone()))
+            .collect_vec()
+    }
     pub fn from_exprs(exprs: &[ExprImpl]) -> Self {
         let type_and_names = exprs
             .iter()

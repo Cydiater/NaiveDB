@@ -12,6 +12,7 @@ pub enum Statement {
     Select(SelectStmt),
     AddIndex(AddIndexStmt),
     DropTable(DropTableStmt),
+    Delete(DeleteStmt),
 }
 #[derive(Debug)]
 pub struct DropTableStmt {
@@ -54,6 +55,12 @@ pub enum ExprNode {
 pub enum Selectors {
     All,
     Exprs(Vec<ExprNode>),
+}
+
+#[derive(Debug)]
+pub struct DeleteStmt {
+    pub table_name: String,
+    pub where_exprs: Option<Vec<ExprNode>>,
 }
 
 #[derive(Debug)]

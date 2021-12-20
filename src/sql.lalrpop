@@ -103,6 +103,7 @@ pub Statement: Statement = {
     SelectStmt,
     AddIndexStmt,
     DropTableStmt,
+    DeleteStmt,
 }
 
 DropTableStmt: Statement = "drop" "table" <table_name: Identifier> ";" => Statement::DropTable(DropTableStmt { table_name });
@@ -114,9 +115,14 @@ Selectors: Selectors = {
     <exprs: Exprs> => Selectors::Exprs(exprs),
 }
 
-AddIndexStmt: Statement = "alter" "table" <table_name: Identifier> "add" "index" "("<exprs: Exprs> ")" ";" => Statement::AddIndex(AddIndexStmt { table_name, exprs });
+AddIndexStmt: Statement = "alter" "table" <table_name: Identifier> "add" "index" "("<exprs: Exprs> ")" ";" 
+    => Statement::AddIndex(AddIndexStmt { table_name, exprs });
 
-SelectStmt: Statement = "select" <selectors: Selectors> "from" <table_name: Identifier> <where_exprs: WhereClauses?> ";" => Statement::Select(SelectStmt { table_name, selectors, where_exprs });
+SelectStmt: Statement = "select" <selectors: Selectors> "from" <table_name: Identifier> <where_exprs: WhereClauses?> ";" 
+    => Statement::Select(SelectStmt { table_name, selectors, where_exprs });
+
+DeleteStmt: Statement = "delete" "from" <table_name: Identifier> <where_exprs: WhereClauses?> ";" 
+    => Statement::Delete(DeleteStmt { table_name, where_exprs, });
 
 DescStmt: Statement = "desc" <table_name: Identifier> ";" => Statement::Desc(DescStmt { table_name });
 
