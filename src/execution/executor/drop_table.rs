@@ -38,6 +38,9 @@ impl Executor for DropTableExecutor {
         let table = self.catalog.borrow().find_table(&self.table_name)?;
         table.erase();
         self.catalog.borrow_mut().remove_table(&self.table_name)?;
+        self.catalog
+            .borrow_mut()
+            .remove_indexes_by_table(&self.table_name)?;
         Ok(Some(Slice::new_simple_message(
             self.bpm.clone(),
             "table".to_string(),

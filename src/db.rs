@@ -199,6 +199,11 @@ mod tests {
                 tuples,
                 vec![vec![Datum::Int(Some(4))], vec![Datum::Int(Some(6))],]
             );
+            db.run("drop table t;").unwrap();
+            db.run("create table t (v1 int not null, unique (v1));")
+                .unwrap();
+            db.run("insert into t values (1), (2), (3);").unwrap();
+            assert!(db.run("insert into t values (1);").is_err());
             filename
         };
         remove_file(filename).unwrap();

@@ -85,6 +85,27 @@ impl CatalogManager {
             Err(CatalogError::NotUsingDatabase)
         }
     }
+    pub fn remove_indexes_by_table(&mut self, table_name: &str) -> Result<(), CatalogError> {
+        if let Some(table_catalog) = &mut self.table_catalog {
+            let mut index_names = vec![];
+            for (_, _, name) in table_catalog.iter() {
+                let index_name = name.clone();
+                let parts = name.split(':').collect_vec();
+                if parts.len() == 1 {
+                    continue;
+                }
+                if parts[0] == table_name {
+                    index_names.push(index_name);
+                }
+            }
+            for index_name in index_names {
+                table_catalog.remove(&index_name)?;
+            }
+            Ok(())
+        } else {
+            Err(CatalogError::NotUsingDatabase)
+        }
+    }
     pub fn find_indexes_by_table(&self, table_name: &str) -> Result<Vec<BPTIndex>, CatalogError> {
         if let Some(table_catalog) = &self.table_catalog {
             let mut indexes = vec![];

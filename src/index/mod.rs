@@ -249,6 +249,10 @@ impl BPTIndex {
         self.page.borrow().page_id.unwrap()
     }
 
+    pub fn erase(self) {
+        todo!()
+    }
+
     pub fn new(bpm: BufferPoolManagerRef, exprs: &[ExprImpl]) -> Self {
         let page = bpm.borrow_mut().alloc().unwrap();
         let schema = Rc::new(Schema::from_exprs(exprs));
