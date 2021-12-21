@@ -1,4 +1,5 @@
 use crate::expr::{ColumnRefExpr, ExprImpl};
+use crate::storage::PageID;
 use crate::table::DataType;
 use itertools::Itertools;
 use std::convert::TryInto;
@@ -10,18 +11,19 @@ use thiserror::Error;
 /// Schema Format:
 ///
 ///     | num_column | Column[0] | Column[1] | ... |
+///     | len_unique | unique_payload |
 ///
 /// Column Format:
 ///
 ///     | offset | len_desc | desc_content | DataType
-///     | Primary / Foreign / None | len_of_column_ref_expr | ColumnRefExpr
+///     | Primary / Foreign / None | page_id_of_ref_table | idx_of_ref_column
 ///
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ColumnConstraint {
     Normal,
     Primary,
-    Foreign(ColumnRefExpr),
+    Foreign((PageID, usize)),
 }
 
 impl ColumnConstraint {
@@ -29,21 +31,33 @@ impl ColumnConstraint {
         match self {
             Self::Normal => 1,
             Self::Primary => 1,
-            _ => todo!(),
+            Self::Foreign(_) => 9,
         }
     }
     pub fn to_bytes(&self) -> Vec<u8> {
         match self {
             Self::Normal => vec![0u8],
             Self::Primary => vec![1u8],
-            Self::Foreign(_) => todo!(),
+            Self::Foreign((page_id_of_ref_table, idx_of_ref_column)) => {
+                let mut bytes = vec![2u8];
+                bytes.extend_from_slice(&(*page_id_of_ref_table as u32).to_le_bytes());
+                bytes.extend_from_slice(&(*idx_of_ref_column as u32).to_le_bytes());
+                bytes
+            }
         }
     }
     pub fn from_bytes(bytes: &[u8]) -> Self {
         match bytes[0] {
             0u8 => Self::Normal,
             1u8 => Self::Primary,
-            _ => todo!(),
+            2u8 => {
+                let page_id_of_ref_table =
+                    u32::from_le_bytes(bytes[1..5].try_into().unwrap()) as PageID;
+                let idx_of_ref_column =
+                    u32::from_le_bytes(bytes[5..9].try_into().unwrap()) as usize;
+                Self::Foreign((page_id_of_ref_table, idx_of_ref_column))
+            }
+            _ => unreachable!(),
         }
     }
 }
@@ -110,13 +124,32 @@ impl Column {
 #[derive(Debug, PartialEq)]
 pub struct Schema {
     columns: Vec<Column>,
+    pub unique: Vec<Vec<usize>>,
 }
 
 impl Schema {
     pub fn new(columns: Vec<Column>) -> Self {
-        Self { columns }
+        Self {
+            columns,
+            unique: vec![],
+        }
     }
-    pub fn set_primary(&mut self, column_name: String) -> Result<(), SchemaError> {
+    pub fn set_foreign(
+        &mut self,
+        column_name: &str,
+        page_id_of_ref_table: PageID,
+        idx_of_ref_column: usize,
+    ) -> Result<(), SchemaError> {
+        let column: Option<&mut Column> = self.columns.iter_mut().find(|c| c.desc == column_name);
+        if let Some(column) = column {
+            column.constraint =
+                ColumnConstraint::Foreign((page_id_of_ref_table, idx_of_ref_column));
+            Ok(())
+        } else {
+            Err(SchemaError::ColumnNotFound)
+        }
+    }
+    pub fn set_primary(&mut self, column_name: &str) -> Result<(), SchemaError> {
         let column: Option<&mut Column> = self.columns.iter_mut().find(|c| c.desc == column_name);
         if let Some(column) = column {
             column.constraint = ColumnConstraint::Primary;
@@ -125,10 +158,13 @@ impl Schema {
             Err(SchemaError::ColumnNotFound)
         }
     }
+    pub fn set_unique(&mut self, unique_set: Vec<usize>) {
+        self.unique.push(unique_set);
+    }
     pub fn len(&self) -> usize {
         self.columns.len()
     }
-    pub fn index_of(&self, field_name: String) -> Option<usize> {
+    pub fn index_of(&self, field_name: &str) -> Option<usize> {
         self.columns.iter().position(|c| c.desc == field_name)
     }
     pub fn from_slice(type_and_names: &[(DataType, String)]) -> Self {
@@ -163,6 +199,15 @@ impl Schema {
         for col in self.columns.iter() {
             bytes.extend_from_slice(col.to_bytes().as_slice());
         }
+        let len = self.unique.len();
+        bytes.extend_from_slice(&(len as u32).to_le_bytes());
+        for unique_set in &self.unique {
+            let len = unique_set.len();
+            bytes.extend_from_slice(&(len as u32).to_le_bytes());
+            for idx in unique_set {
+                bytes.extend_from_slice(&(*idx as u32).to_le_bytes());
+            }
+        }
         bytes
     }
     pub fn from_bytes(bytes: &[u8]) -> Self {
@@ -175,7 +220,39 @@ impl Schema {
             offset += column.size_in_bytes();
             columns.push(column);
         }
-        Self { columns }
+        let mut unique = vec![];
+        let len = u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
+        offset += 4;
+        for _ in 0..len {
+            let unique_len =
+                u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
+            offset += 4;
+            let mut unique_set = vec![];
+            for _ in 0..unique_len {
+                let idx =
+                    u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
+                unique_set.push(idx);
+                offset += 4;
+            }
+            unique.push(unique_set);
+        }
+        Self { columns, unique }
+    }
+    pub fn unique_as_exprs(&self) -> Vec<Vec<ExprImpl>> {
+        let mut unique_exprs = vec![];
+        for unique_set in &self.unique {
+            let mut unique_expr = vec![];
+            for idx in unique_set {
+                let expr = ExprImpl::ColumnRef(ColumnRefExpr::new(
+                    *idx,
+                    self.columns[*idx].data_type,
+                    self.columns[*idx].desc.clone(),
+                ));
+                unique_expr.push(expr);
+            }
+            unique_exprs.push(unique_expr);
+        }
+        unique_exprs
     }
     pub fn primary_as_exprs(&self) -> Vec<ExprImpl> {
         self.iter()
@@ -229,8 +306,10 @@ mod tests {
             (DataType::new_varchar(false), "v3".to_string()),
         ];
         let mut schema = Schema::from_slice(type_and_names.as_slice());
-        schema.set_primary("v1".to_string()).unwrap();
-        schema.set_primary("v3".to_string()).unwrap();
+        schema.set_primary("v1").unwrap();
+        schema.set_primary("v3").unwrap();
+        schema.set_unique(vec![1, 2, 3]);
+        schema.set_unique(vec![4, 5, 6]);
         let bytes = schema.to_bytes();
         assert_eq!(Schema::from_bytes(&bytes), schema);
     }

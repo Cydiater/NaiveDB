@@ -104,9 +104,9 @@ impl ExprImpl {
             }),
             ExprNode::ColumnRef(node) => {
                 let table_name = table_name.unwrap();
-                let table = catalog.borrow().find_table(table_name)?;
+                let table = catalog.borrow().find_table(&table_name)?;
                 let schema = table.schema.clone();
-                let idx = schema.index_of(node.column_name.clone()).unwrap();
+                let idx = schema.index_of(&node.column_name).unwrap();
                 let return_type = schema.type_at(idx);
                 Ok(ExprImpl::ColumnRef(ColumnRefExpr::new(
                     idx,

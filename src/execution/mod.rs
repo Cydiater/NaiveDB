@@ -1,4 +1,5 @@
 use crate::catalog::{CatalogError, CatalogManagerRef};
+use crate::datum::Datum;
 use crate::index::{BPTIndex, IndexError};
 use crate::planner::Plan;
 use crate::storage::BufferPoolManagerRef;
@@ -49,15 +50,11 @@ impl Engine {
             ))),
             Plan::Insert(plan) => {
                 let child = self.build(*plan.child)?;
-                let table = self
-                    .catalog
-                    .borrow()
-                    .find_table(plan.table_name.clone())
-                    .unwrap();
+                let table = self.catalog.borrow().find_table(&plan.table_name).unwrap();
                 let indexes = self
                     .catalog
                     .borrow()
-                    .find_indexes_by_table(plan.table_name)
+                    .find_indexes_by_table(&plan.table_name)
                     .unwrap();
                 Ok(ExecutorImpl::Insert(InsertExecutor::new(
                     table,
@@ -71,7 +68,7 @@ impl Engine {
                 self.catalog.clone(),
             ))),
             Plan::SeqScan(plan) => {
-                let table = self.catalog.borrow_mut().find_table(plan.table_name)?;
+                let table = self.catalog.borrow_mut().find_table(&plan.table_name)?;
                 let schema = table.schema.clone();
                 let page_id = table.get_page_id_of_first_slice();
                 Ok(ExecutorImpl::SeqScan(SeqScanExecutor::new(
@@ -160,4 +157,6 @@ pub enum ExecutionError {
     Table(#[from] TableError),
     #[error("IndexError: {0}")]
     Index(#[from] IndexError),
+    #[error("Insert Duplicated Key: {0:?}")]
+    InsertDuplicatedKey(Vec<Datum>),
 }

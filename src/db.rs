@@ -9,7 +9,6 @@ use std::rc::Rc;
 use thiserror::Error;
 
 pub struct NaiveDB {
-    #[allow(dead_code)]
     bpm: BufferPoolManagerRef,
     engine: Engine,
     planner: Planner,
@@ -179,7 +178,9 @@ mod tests {
             db.run("alter table t add index (v1);").unwrap();
             db.run("desc t;").unwrap();
             db.run("drop table t;").unwrap();
-            db.run("create table t (v1 int not null);").unwrap();
+            db.run("create table t (v1 int not null, primary key (v1));")
+                .unwrap();
+            db.run("create table t1 (v1 int not null, v2 int not null, primary key (v1), foreign key (v2) references t (v1));").unwrap();
             db.run("insert into t values (4), (5), (6);").unwrap();
             let table = db.run("select * from t;").unwrap();
             let tuples = table.iter().collect_vec();
@@ -198,6 +199,11 @@ mod tests {
                 tuples,
                 vec![vec![Datum::Int(Some(4))], vec![Datum::Int(Some(6))],]
             );
+            db.run("drop table t;").unwrap();
+            db.run("create table t (v1 int not null, unique (v1));")
+                .unwrap();
+            db.run("insert into t values (1), (2), (3);").unwrap();
+            assert!(db.run("insert into t values (1);").is_err());
             filename
         };
         remove_file(filename).unwrap();

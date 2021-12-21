@@ -249,6 +249,10 @@ impl BPTIndex {
         self.page.borrow().page_id.unwrap()
     }
 
+    pub fn erase(self) {
+        todo!()
+    }
+
     pub fn new(bpm: BufferPoolManagerRef, exprs: &[ExprImpl]) -> Self {
         let page = bpm.borrow_mut().alloc().unwrap();
         let schema = Rc::new(Schema::from_exprs(exprs));
@@ -404,7 +408,10 @@ impl BPTIndex {
         } else {
             leaf_node
         };
-        node.insert(key, record_id).unwrap();
+        if node.index_of(key).is_some() {
+            return Err(IndexError::Duplicated);
+        }
+        node.insert(key, record_id)?;
         Ok(())
     }
 
@@ -561,6 +568,8 @@ pub enum IndexError {
     KeyNotFound,
     #[error("node out of space")]
     NodeOutOfSpace,
+    #[error("duplicated key")]
+    Duplicated,
 }
 
 #[cfg(test)]
