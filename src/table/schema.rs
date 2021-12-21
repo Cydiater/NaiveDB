@@ -124,12 +124,15 @@ impl Column {
 #[derive(Debug, PartialEq)]
 pub struct Schema {
     columns: Vec<Column>,
-    unique: Vec<Vec<usize>>,
+    pub unique: Vec<Vec<usize>>,
 }
 
 impl Schema {
     pub fn new(columns: Vec<Column>) -> Self {
-        Self { columns, unique: vec![] }
+        Self {
+            columns,
+            unique: vec![],
+        }
     }
     pub fn set_foreign(
         &mut self,
@@ -154,6 +157,9 @@ impl Schema {
         } else {
             Err(SchemaError::ColumnNotFound)
         }
+    }
+    pub fn set_unique(&mut self, unique_set: Vec<usize>) {
+        self.unique.push(unique_set);
     }
     pub fn len(&self) -> usize {
         self.columns.len()
@@ -193,6 +199,15 @@ impl Schema {
         for col in self.columns.iter() {
             bytes.extend_from_slice(col.to_bytes().as_slice());
         }
+        let len = self.unique.len();
+        bytes.extend_from_slice(&(len as u32).to_le_bytes());
+        for unique_set in &self.unique {
+            let len = unique_set.len();
+            bytes.extend_from_slice(&(len as u32).to_le_bytes());
+            for idx in unique_set {
+                bytes.extend_from_slice(&(*idx as u32).to_le_bytes());
+            }
+        }
         bytes
     }
     pub fn from_bytes(bytes: &[u8]) -> Self {
@@ -205,7 +220,39 @@ impl Schema {
             offset += column.size_in_bytes();
             columns.push(column);
         }
-        Self { columns, unique: vec![] }
+        let mut unique = vec![];
+        let len = u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
+        offset += 4;
+        for _ in 0..len {
+            let unique_len =
+                u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
+            offset += 4;
+            let mut unique_set = vec![];
+            for _ in 0..unique_len {
+                let idx =
+                    u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
+                unique_set.push(idx);
+                offset += 4;
+            }
+            unique.push(unique_set);
+        }
+        Self { columns, unique }
+    }
+    pub fn unique_as_exprs(&self) -> Vec<Vec<ExprImpl>> {
+        let mut unique_exprs = vec![];
+        for unique_set in &self.unique {
+            let mut unique_expr = vec![];
+            for idx in unique_set {
+                let expr = ExprImpl::ColumnRef(ColumnRefExpr::new(
+                    *idx,
+                    self.columns[*idx].data_type,
+                    self.columns[*idx].desc.clone(),
+                ));
+                unique_expr.push(expr);
+            }
+            unique_exprs.push(unique_expr);
+        }
+        unique_exprs
     }
     pub fn primary_as_exprs(&self) -> Vec<ExprImpl> {
         self.iter()
@@ -261,6 +308,8 @@ mod tests {
         let mut schema = Schema::from_slice(type_and_names.as_slice());
         schema.set_primary("v1").unwrap();
         schema.set_primary("v3").unwrap();
+        schema.set_unique(vec![1, 2, 3]);
+        schema.set_unique(vec![4, 5, 6]);
         let bytes = schema.to_bytes();
         assert_eq!(Schema::from_bytes(&bytes), schema);
     }

@@ -404,7 +404,7 @@ impl BPTIndex {
         } else {
             leaf_node
         };
-        if node.index_of(&key).is_some() {
+        if node.index_of(key).is_some() {
             return Err(IndexError::Duplicated);
         }
         node.insert(key, record_id)?;

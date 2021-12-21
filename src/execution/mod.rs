@@ -1,6 +1,6 @@
 use crate::catalog::{CatalogError, CatalogManagerRef};
-use crate::index::{BPTIndex, IndexError};
 use crate::datum::Datum;
+use crate::index::{BPTIndex, IndexError};
 use crate::planner::Plan;
 use crate::storage::BufferPoolManagerRef;
 use crate::table::{Table, TableError};

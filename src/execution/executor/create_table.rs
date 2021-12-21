@@ -57,6 +57,16 @@ impl Executor for CreateTableExecutor {
                     page_id,
                 )?;
             }
+            let unique_exprs = self.schema.unique_as_exprs();
+            for unique_expr in &unique_exprs {
+                let index = BPTIndex::new(self.bpm.clone(), unique_expr);
+                let page_id = index.get_page_id();
+                self.catalog.borrow_mut().add_index(
+                    &self.table_name,
+                    Rc::new(index.get_key_schema()),
+                    page_id,
+                )?;
+            }
             self.executed = true;
             Ok(Some(
                 Slice::new_simple_message(

@@ -14,8 +14,13 @@ impl Planner {
         let exprs = where_exprs
             .iter()
             .map(|node| {
-                ExprImpl::from_ast(node, self.catalog.clone(), Some(table_name.to_string()), None)
-                    .unwrap()
+                ExprImpl::from_ast(
+                    node,
+                    self.catalog.clone(),
+                    Some(table_name.to_string()),
+                    None,
+                )
+                .unwrap()
             })
             .collect_vec();
         Plan::Filter(FilterPlan {
