@@ -60,7 +60,7 @@ impl<'page, Key: 'page + Sized> Iterator for KeyDataIter<'page, Key> {
             let end = usize::from_le_bytes(self.bytes[offset + 8..offset + 16].try_into().unwrap());
             unsafe {
                 Some((
-                    transmute::<*const u8, &Key>(self.bytes.as_ptr().add(offset + 16)),
+                    &*(self.bytes.as_ptr().add(offset + 16) as *const Key),
                     &self.bytes[start..end],
                 ))
             }
@@ -336,16 +336,16 @@ mod tests {
                 .take(len)
                 .map(char::from)
                 .collect();
-            if set.contains_key(&key) {
-                slotted.remove(&Key { page_id: key }).unwrap();
-                set.remove(&key);
-            } else {
+            if let std::collections::hash_map::Entry::Vacant(e) = set.entry(key) {
                 if slotted
                     .insert(&Key { page_id: key }, value.as_bytes())
                     .is_ok()
                 {
-                    set.insert(key, value);
+                    e.insert(value);
                 }
+            } else {
+                slotted.remove(&Key { page_id: key }).unwrap();
+                set.remove(&key);
             }
         }
         let key_data_from_set = set.into_iter().sorted().collect_vec();
