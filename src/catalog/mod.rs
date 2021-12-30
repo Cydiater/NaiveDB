@@ -1,8 +1,9 @@
 use crate::storage::{
-    BufferPoolManagerRef, PageID, PageRef, StorageError, PAGE_ID_OF_ROOT_DATABASE_CATALOG,
-    PAGE_SIZE,
+    BufferPoolManagerRef, KeyDataIter, PageID, PageRef, SlottedPage, SlottedPageError,
+    StorageError, PAGE_ID_OF_ROOT_DATABASE_CATALOG,
 };
-use std::convert::TryInto;
+use itertools::Itertools;
+use log::info;
 use thiserror::Error;
 
 mod catalog_manager;
@@ -11,7 +12,7 @@ pub use catalog_manager::{CatalogManager, CatalogManagerRef};
 
 impl Drop for Catalog {
     fn drop(&mut self) {
-        let page_id = self.get_page_id();
+        let page_id = self.page_id();
         self.bpm.borrow_mut().unpin(page_id).unwrap();
     }
 }
@@ -21,143 +22,132 @@ pub struct Catalog {
     page: PageRef,
 }
 
-pub struct CatalogIter {
-    pub offset: usize,
-    pub buf: PageRef,
-    pub bpm: BufferPoolManagerRef,
+type CatalogPage = SlottedPage<(), PageID>;
+
+pub struct CatalogIter<'page> {
+    key_data_iter: KeyDataIter<'page, PageID>,
 }
 
-fn len_page_id_name_at(buf: &[u8; PAGE_SIZE], offset: usize) -> (usize, PageID, String) {
-    let len = u32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap()) as usize;
-    assert!(len < PAGE_SIZE);
-    let page_id = u32::from_le_bytes(buf[offset + 4..offset + 8].try_into().unwrap()) as PageID;
-    let name =
-        String::from_utf8_lossy(buf[offset + 8..offset + 8 + len].try_into().unwrap()).to_string();
-    (len, page_id, name)
+impl<'page> CatalogIter<'page> {
+    pub fn new(key_data_iter: KeyDataIter<'page, PageID>) -> Self {
+        Self { key_data_iter }
+    }
 }
 
-impl Iterator for CatalogIter {
-    type Item = (usize, PageID, String);
+impl<'page> Iterator for CatalogIter<'page> {
+    type Item = (&'page str, PageID);
 
-    fn next(&mut self) -> Option<Self::Item> {
-        let (len, page_id, name) = len_page_id_name_at(&self.buf.borrow().buffer, self.offset);
-        match len {
-            0 => None,
-            len => {
-                self.offset += 4 + 4 + len as usize;
-                Some((len, page_id, name))
-            }
+    fn next(&mut self) -> Option<(&'page str, PageID)> {
+        if let Some((k, v)) = self.key_data_iter.next() {
+            Some((std::str::from_utf8(v).unwrap(), *k))
+        } else {
+            None
         }
     }
 }
 
 impl Catalog {
-    pub fn get_page_id(&self) -> PageID {
-        self.page.borrow().page_id.unwrap()
-    }
-    pub fn new_database_catalog(bpm: BufferPoolManagerRef) -> Catalog {
+    pub fn new_for_database(bpm: BufferPoolManagerRef) -> Catalog {
         let page = if bpm.borrow().num_pages().unwrap() > PAGE_ID_OF_ROOT_DATABASE_CATALOG {
             bpm.borrow_mut()
                 .fetch(PAGE_ID_OF_ROOT_DATABASE_CATALOG)
                 .unwrap()
         } else {
             let page = bpm.borrow_mut().alloc().unwrap();
-            assert_eq!(
-                page.borrow().page_id,
-                Some(PAGE_ID_OF_ROOT_DATABASE_CATALOG)
-            );
-            page.borrow_mut().buffer[0..4].copy_from_slice(&0u32.to_le_bytes());
-            page.borrow_mut().is_dirty = true;
+            {
+                let mut page_mut = page.borrow_mut();
+                let bytes = &mut page_mut.buffer;
+                unsafe {
+                    let slotted = &mut *(bytes.as_mut_ptr() as *mut CatalogPage);
+                    slotted.reset(&());
+                }
+                page_mut.is_dirty = true;
+            }
             page
         };
-        page.borrow_mut().is_dirty = true;
         Self { bpm, page }
     }
-    pub fn new_with_page_id(bpm: BufferPoolManagerRef, page_id: PageID) -> Catalog {
-        let page = bpm.borrow_mut().fetch(page_id).unwrap();
-        Self { bpm, page }
-    }
-    pub fn new_empty(bpm: BufferPoolManagerRef) -> Result<Catalog, CatalogError> {
-        let page = bpm.borrow_mut().alloc().unwrap();
-        page.borrow_mut().buffer[0..4].copy_from_slice(&(0u32.to_le_bytes()));
-        page.borrow_mut().is_dirty = true;
+    pub fn open(bpm: BufferPoolManagerRef, page_id: PageID) -> Result<Catalog, CatalogError> {
+        let page = bpm.borrow_mut().fetch(page_id)?;
         Ok(Self { bpm, page })
     }
-    pub fn iter(&self) -> CatalogIter {
-        CatalogIter {
-            offset: 0,
-            buf: self.page.clone(),
-            bpm: self.bpm.clone(),
+    pub fn new(bpm: BufferPoolManagerRef) -> Result<Catalog, CatalogError> {
+        let page = bpm.borrow_mut().alloc().unwrap();
+        {
+            let mut page_mut = page.borrow_mut();
+            let bytes = &mut page_mut.buffer;
+            unsafe {
+                let slotted = &mut *(bytes.as_mut_ptr() as *mut CatalogPage);
+                slotted.reset(&());
+            }
+            page_mut.is_dirty = true;
         }
+        Ok(Self { bpm, page })
+    }
+    fn catalog_page(&self) -> &CatalogPage {
+        unsafe { &*(self.page.borrow().buffer.as_ptr() as *const CatalogPage) }
+    }
+    fn catalog_page_mut(&mut self) -> &mut CatalogPage {
+        self.page.borrow_mut().is_dirty = true;
+        unsafe { &mut *(self.page.borrow_mut().buffer.as_ptr() as *mut CatalogPage) }
+    }
+    pub fn page_id(&self) -> PageID {
+        self.page.borrow().page_id.unwrap()
     }
     pub fn remove(&mut self, name: &str) -> Result<(), CatalogError> {
-        println!("remove {}", name);
-        let mut start = 0;
-        let mut offset = 0;
-        for (len, _, record_name) in self.iter() {
-            if name == record_name {
-                start += len + 4 + 4;
-                break;
-            }
-            start += len + 4 + 4;
-            offset += len + 4 + 4;
-        }
-        if start == offset {
-            return Err(CatalogError::EntryNotFound);
-        }
-        let end = self
-            .iter()
-            .map(|(offset, _, _)| offset + 4 + 4)
-            .sum::<usize>()
-            + 4;
-        self.page
-            .borrow_mut()
-            .buffer
-            .copy_within(start..end, offset);
-        let end = end - (start - offset);
-        self.page.borrow_mut().buffer[end..end + 4].copy_from_slice(&(0u32.to_le_bytes()));
-        self.page.borrow_mut().is_dirty = true;
+        info!("catalog: remove {}", name);
+        let catalog_page = self.catalog_page_mut();
+        let page_id = catalog_page
+            .key_data_iter()
+            .find(|(_, v)| String::from_utf8((*v).to_vec()).unwrap() == name)
+            .map(|(k, _)| *k)
+            .ok_or(SlottedPageError::KeyNotFound)?;
+        catalog_page.remove(&page_id)?;
         Ok(())
     }
     pub fn insert(&mut self, page_id: PageID, name: &str) -> Result<(), CatalogError> {
-        println!("insert {}", name);
-        let mut last = 0;
-        for (len, _, _) in self.iter() {
-            last += len + 4 + 4;
-            if last >= PAGE_SIZE {
-                return Err(CatalogError::OutOfRange);
-            }
-        }
-        let len = name.len();
-        {
-            let buffer = &mut self.page.borrow_mut().buffer;
-            buffer[last..last + 4].copy_from_slice(&(len as u32).to_le_bytes());
-            buffer[last + 4..last + 8].copy_from_slice(&(page_id as u32).to_le_bytes());
-            buffer[last + 8..last + 8 + len].copy_from_slice(name.as_bytes());
-            buffer[last + 8 + len..last + 8 + len + 4].copy_from_slice(&(0u32.to_le_bytes()));
-        }
-        self.page.borrow_mut().is_dirty = true;
+        info!("catalog: insert {}", name);
+        let catalog_page = self.catalog_page_mut();
+        catalog_page.insert(&page_id, name.as_bytes())?;
         Ok(())
+    }
+    pub fn page_id_of(&self, name: &str) -> Option<PageID> {
+        let catalog_page = self.catalog_page();
+        catalog_page
+            .key_data_iter()
+            .find(|(_, v)| String::from_utf8((*v).to_vec()).unwrap() == name)
+            .map(|(k, _)| *k)
+    }
+    pub fn prefix_with(&self, prefix: &str) -> Vec<&str> {
+        let catalog_page = self.catalog_page();
+        catalog_page
+            .key_data_iter()
+            .map(|(_, v)| std::str::from_utf8(&*v).unwrap())
+            .filter(|v| v.starts_with(prefix))
+            .collect_vec()
+    }
+    pub fn iter(&self) -> CatalogIter {
+        let catalog_page = self.catalog_page();
+        CatalogIter::new(catalog_page.key_data_iter())
     }
 }
 
 #[derive(Error, Debug)]
 pub enum CatalogError {
-    #[error("Out of Range")]
-    OutOfRange,
-    #[error("BPM")]
+    #[error("Storage: {0}")]
     Storage(#[from] StorageError),
-    #[error("Entry Not Found")]
-    EntryNotFound,
+    #[error("CatalogPage: {0}")]
+    CatalogPage(#[from] SlottedPageError),
     #[error("Not Using Database")]
     NotUsingDatabase,
+    #[error("Entry Not Found")]
+    EntryNotFound,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::storage::BufferPoolManager;
-    use itertools::Itertools;
     use std::fs::remove_file;
 
     #[test]
@@ -165,40 +155,17 @@ mod tests {
         let filename = {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
-            let mut db_catalog = Catalog::new_database_catalog(bpm);
+            let mut db_catalog = Catalog::new_for_database(bpm);
             db_catalog.insert(0, "sample_0").unwrap();
             db_catalog.insert(1, "sample_1").unwrap();
             db_catalog.insert(2, "sample_2").unwrap();
-            let res = db_catalog.iter().collect_vec();
-            assert_eq!(
-                res,
-                vec![
-                    (8, 0, "sample_0".into()),
-                    (8, 1, "sample_1".into()),
-                    (8, 2, "sample_2".into()),
-                ]
-            );
+            assert_eq!(db_catalog.page_id_of("sample_0").unwrap(), 0);
+            assert_eq!(db_catalog.page_id_of("sample_1").unwrap(), 1);
+            assert_eq!(db_catalog.page_id_of("sample_2").unwrap(), 2);
             db_catalog.insert(3, "sample_3").unwrap();
-            let res = db_catalog.iter().collect_vec();
-            assert_eq!(
-                res,
-                vec![
-                    (8, 0, "sample_0".into()),
-                    (8, 1, "sample_1".into()),
-                    (8, 2, "sample_2".into()),
-                    (8, 3, "sample_3".into()),
-                ]
-            );
+            assert_eq!(db_catalog.page_id_of("sample_3").unwrap(), 3);
             db_catalog.remove("sample_2").unwrap();
-            let res = db_catalog.iter().collect_vec();
-            assert_eq!(
-                res,
-                vec![
-                    (8, 0, "sample_0".into()),
-                    (8, 1, "sample_1".into()),
-                    (8, 3, "sample_3".into()),
-                ]
-            );
+            assert_eq!(db_catalog.page_id_of("sample_2"), None);
             filename
         };
         remove_file(filename).unwrap();
