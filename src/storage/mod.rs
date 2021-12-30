@@ -4,6 +4,7 @@ mod buffer;
 mod clock;
 mod disk;
 mod page;
+mod slotted;
 
 pub use buffer::{BufferPoolManager, BufferPoolManagerRef};
 

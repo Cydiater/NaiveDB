@@ -14,11 +14,10 @@ impl Planner {
         let slice = stmt
             .fields
             .iter()
-            .map(|f| match f {
+            .filter_map(|f| match f {
                 Field::Normal(f) => Some((f.field_data_type, f.field_name.clone())),
                 _ => None,
             })
-            .flatten()
             .collect_vec();
         let mut schema = Schema::from_slice(&slice);
         // primary field

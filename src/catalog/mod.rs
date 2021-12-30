@@ -165,7 +165,7 @@ mod tests {
         let filename = {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
-            let mut db_catalog = Catalog::new_database_catalog(bpm.clone());
+            let mut db_catalog = Catalog::new_database_catalog(bpm);
             db_catalog.insert(0, "sample_0").unwrap();
             db_catalog.insert(1, "sample_1").unwrap();
             db_catalog.insert(2, "sample_2").unwrap();
