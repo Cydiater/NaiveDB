@@ -1,5 +1,6 @@
 #![feature(vec_into_raw_parts)]
 #![feature(generic_const_exprs)]
+#![feature(inherent_associated_types)]
 #![allow(incomplete_features)]
 
 mod catalog;

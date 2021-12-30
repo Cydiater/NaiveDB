@@ -1,6 +1,8 @@
 use crate::storage::PAGE_SIZE;
 use itertools::Itertools;
+use std::convert::TryInto;
 use std::iter::Iterator;
+use std::marker::PhantomData;
 use std::mem::{size_of, transmute};
 use thiserror::Error;
 
@@ -30,6 +32,42 @@ where
     tail: usize,
     bitmap: [u8; 32],
     bytes: [u8; PAGE_SIZE - size_of::<Meta>() - 48],
+}
+
+pub struct KeyDataIter<'page, Key> {
+    idx_iter: SlotIndexIter<'page>,
+    bytes: &'page [u8],
+    _phantom: PhantomData<Key>,
+}
+
+impl<'page, Key> KeyDataIter<'page, Key> {
+    pub fn new(idx_iter: SlotIndexIter<'page>, bytes: &'page [u8]) -> Self {
+        Self {
+            idx_iter,
+            bytes,
+            _phantom: PhantomData::<Key>,
+        }
+    }
+}
+
+impl<'page, Key: 'page + Sized> Iterator for KeyDataIter<'page, Key> {
+    type Item = (&'page Key, &'page [u8]);
+
+    fn next(&mut self) -> Option<(&'page Key, &'page [u8])> {
+        if let Some(idx) = self.idx_iter.next() {
+            let offset = idx * (size_of::<Key>() + 16);
+            let start = usize::from_le_bytes(self.bytes[offset..offset + 8].try_into().unwrap());
+            let end = usize::from_le_bytes(self.bytes[offset + 8..offset + 16].try_into().unwrap());
+            unsafe {
+                Some((
+                    transmute::<*const u8, &Key>(self.bytes.as_ptr().add(offset + 16)),
+                    &self.bytes[start..end],
+                ))
+            }
+        } else {
+            None
+        }
+    }
 }
 
 pub struct SlotIndexIter<'page> {
@@ -150,6 +188,9 @@ where
     fn idx_iter(&self) -> SlotIndexIter {
         SlotIndexIter::new(&self.bitmap, self.capacity())
     }
+    pub fn key_data_iter(&self) -> KeyDataIter<Key> {
+        KeyDataIter::new(self.idx_iter(), &self.bytes)
+    }
     pub fn key_at(&self, idx: usize) -> &Key {
         unsafe { &*self.key_ptr_at(idx) }
     }
@@ -243,18 +284,22 @@ pub enum SlottedPageError {
 mod tests {
     use super::*;
     use crate::storage::PageID;
+    use rand::distributions::Alphanumeric;
+    use rand::Rng;
+    use std::collections::HashMap;
+
+    #[allow(dead_code)]
+    #[derive(Clone, Copy)]
+    struct Meta {
+        next_page_id: Option<PageID>,
+    }
+    #[derive(Clone, Copy, PartialEq, Eq, Debug, PartialOrd, Ord)]
+    struct Key {
+        pub page_id: PageID,
+    }
 
     #[test]
     fn basic() {
-        #[allow(dead_code)]
-        #[derive(Clone, Copy)]
-        struct Meta {
-            next_page_id: Option<PageID>,
-        }
-        #[derive(Clone, Copy, PartialEq, Debug)]
-        struct Key {
-            pub page_id: PageID,
-        }
         let mut bytes = [0u8; PAGE_SIZE];
         let slotted = unsafe { &mut *(bytes.as_mut_ptr() as *mut SlottedPage<Meta, Key>) };
         slotted.reset(&Meta { next_page_id: None });
@@ -274,5 +319,41 @@ mod tests {
             .insert(&Key { page_id: 3 }, &[1u8, 2u8, 3u8])
             .unwrap();
         assert_eq!(slotted.key_at(1), &Key { page_id: 3 });
+    }
+
+    #[test]
+    fn chaos() {
+        let mut bytes = [0u8; PAGE_SIZE];
+        let slotted = unsafe { &mut *(bytes.as_mut_ptr() as *mut SlottedPage<Meta, Key>) };
+        slotted.reset(&Meta { next_page_id: None });
+        let mut set: HashMap<PageID, String> = HashMap::new();
+        let mut rng = rand::thread_rng();
+        for _ in 0..100000 {
+            let key = rng.gen::<usize>() % 300;
+            let len = rng.gen::<usize>() % 8 + 1;
+            let value: String = rand::thread_rng()
+                .sample_iter(&Alphanumeric)
+                .take(len)
+                .map(char::from)
+                .collect();
+            if set.contains_key(&key) {
+                slotted.remove(&Key { page_id: key }).unwrap();
+                set.remove(&key);
+            } else {
+                if slotted
+                    .insert(&Key { page_id: key }, value.as_bytes())
+                    .is_ok()
+                {
+                    set.insert(key, value);
+                }
+            }
+        }
+        let key_data_from_set = set.into_iter().sorted().collect_vec();
+        let key_data_from_slotted_page = slotted
+            .key_data_iter()
+            .map(|(key, data)| (key.page_id, String::from_utf8(data.to_vec()).unwrap()))
+            .sorted()
+            .collect_vec();
+        assert_eq!(key_data_from_set, key_data_from_slotted_page)
     }
 }
