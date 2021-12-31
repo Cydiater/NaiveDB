@@ -26,12 +26,7 @@ impl Executor for UseDatabaseExecutor {
                 .use_database(&self.database_name)?;
             self.executed = true;
             Ok(Some(
-                Slice::new_simple_message(
-                    self.bpm.clone(),
-                    "database".to_string(),
-                    self.database_name.clone(),
-                )
-                .unwrap(),
+                Slice::new_as_message(self.bpm.clone(), "database", &self.database_name).unwrap(),
             ))
         } else {
             Ok(None)

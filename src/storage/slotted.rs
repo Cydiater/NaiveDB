@@ -185,7 +185,13 @@ where
         let offset = idx * (size_of::<Key>() + 16);
         unsafe { transmute::<*mut u8, *mut Key>(self.bytes.as_mut_ptr().add(offset + 16)) }
     }
-    fn idx_iter(&self) -> SlotIndexIter {
+    pub fn meta(&self) -> &Meta {
+        &self.meta
+    }
+    pub fn meta_mut(&mut self) -> &mut Meta {
+        &mut self.meta
+    }
+    pub fn idx_iter(&self) -> SlotIndexIter {
         SlotIndexIter::new(&self.bitmap, self.capacity())
     }
     pub fn key_data_iter(&self) -> KeyDataIter<Key> {
@@ -256,15 +262,23 @@ where
         let idx = self.index_of(key).ok_or(SlottedPageError::KeyNotFound)?;
         self.remove_at(idx)
     }
-    pub fn insert(&mut self, key: &Key, data: &[u8]) -> Result<(), SlottedPageError> {
+    pub fn insert(&mut self, key: &Key, data: &[u8]) -> Result<usize, SlottedPageError> {
         let idx = self.find_first_empty_slot();
         if idx * (size_of::<Key>() + 16) >= self.head {
             self.head += size_of::<Key>() + 16;
-            if self.head > self.tail {
+            if self.head > self.tail - data.len() {
                 return Err(SlottedPageError::OutOfSpace);
             }
         }
-        self.insert_at(idx, key, data)
+        self.insert_at(idx, key, data)?;
+        Ok(idx)
+    }
+    pub fn count(&self) -> usize {
+        let mut cnt = 0;
+        for byte in self.bitmap {
+            cnt += byte.count_ones() as usize;
+        }
+        cnt
     }
 }
 

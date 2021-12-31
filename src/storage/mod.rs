@@ -9,7 +9,7 @@ mod slotted;
 pub use buffer::{BufferPoolManager, BufferPoolManagerRef};
 
 pub use page::{Page, PageRef};
-pub use slotted::{KeyDataIter, SlottedPage, SlottedPageError};
+pub use slotted::{KeyDataIter, SlotIndexIter, SlottedPage, SlottedPageError};
 
 pub const PAGE_SIZE: usize = 4096;
 pub const DEFAULT_DB_FILE: &str = "naive.db";

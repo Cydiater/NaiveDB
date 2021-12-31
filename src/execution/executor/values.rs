@@ -36,7 +36,7 @@ impl Executor for ValuesExecutor {
                     .map(|e| e.eval(None).remove(0))
                     .collect_vec();
                 info!("generate tuple {:?}", datums);
-                slice.add(&datums)?;
+                slice.insert(&datums)?;
             }
             self.executed = true;
             Ok(Some(slice))
@@ -78,7 +78,7 @@ mod tests {
             let mut values_executor = ValuesExecutor::new(values, Rc::new(schema), bpm);
             let res = values_executor.execute().unwrap().unwrap();
             assert_eq!(
-                res.at(0).unwrap().unwrap(),
+                res.tuple_at(0).unwrap(),
                 [
                     Datum::Int(Some(1)),
                     Datum::VarChar(Some("hello world".to_string()))

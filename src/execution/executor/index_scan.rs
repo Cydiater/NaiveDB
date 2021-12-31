@@ -57,16 +57,15 @@ impl Executor for IndexScanExecutor {
             if datums > self.end_datums {
                 break;
             }
-            let mut datums = self.table.datums_from_record_id(record_id).unwrap();
+            let mut datums = self.table.tuple_at(record_id).unwrap();
             if self.with_record_id {
                 datums.push(Datum::Int(Some(record_id.0 as i32)));
                 datums.push(Datum::Int(Some(record_id.1 as i32)));
             }
-            if !output.ok_to_add(&datums) {
+            if output.insert(&datums).is_err() {
                 self.begin_datums = datums;
                 return Ok(Some(output));
             }
-            output.add(&datums)?;
         }
         self.done = true;
         Ok(Some(output))

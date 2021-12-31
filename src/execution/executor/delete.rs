@@ -43,37 +43,35 @@ impl Executor for DeleteExecutor {
         } else {
             return Ok(None);
         };
-        let len = input.get_num_tuple();
         let mut indexes_rows = self
             .indexes
             .iter_mut()
             .map(|index| ExprImpl::batch_eval(&mut index.get_exprs(), Some(&input)))
             .collect_vec();
         let mut remove_cnt = 0;
-        for idx in 0..len {
-            if let Some(mut tuple) = input.at(idx)? {
-                let idx = tuple.pop().unwrap();
-                let idx = if let Datum::Int(Some(idx)) = idx {
-                    idx as usize
-                } else {
-                    unreachable!()
-                };
-                let page_id = tuple.pop().unwrap();
-                let page_id = if let Datum::Int(Some(page_id)) = page_id {
-                    page_id as usize
-                } else {
-                    unreachable!()
-                };
-                let record_id = (page_id, idx);
-                self.table.remove(record_id)?;
-                remove_cnt += 1;
-                for (rows, index) in indexes_rows.iter_mut().zip(&mut self.indexes) {
-                    index.remove(&rows.remove(0))?;
-                }
+        for idx in input.slot_iter() {
+            let mut tuple = input.tuple_at(idx)?;
+            let idx = tuple.pop().unwrap();
+            let idx = if let Datum::Int(Some(idx)) = idx {
+                idx as usize
+            } else {
+                unreachable!()
+            };
+            let page_id = tuple.pop().unwrap();
+            let page_id = if let Datum::Int(Some(page_id)) = page_id {
+                page_id as usize
+            } else {
+                unreachable!()
+            };
+            let record_id = (page_id, idx);
+            self.table.remove(record_id)?;
+            remove_cnt += 1;
+            for (rows, index) in indexes_rows.iter_mut().zip(&mut self.indexes) {
+                index.remove(&rows.remove(0))?;
             }
         }
         let mut msg = Slice::new(self.bpm.clone(), self.schema());
-        msg.add(&[Datum::Int(Some(remove_cnt as i32))])?;
+        msg.insert(&[Datum::Int(Some(remove_cnt as i32))])?;
         Ok(Some(msg))
     }
 }

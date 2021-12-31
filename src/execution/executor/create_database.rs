@@ -36,11 +36,7 @@ impl Executor for CreateDatabaseExecutor {
                 .borrow_mut()
                 .create_database(&self.db_name)
                 .unwrap();
-            let res = Slice::new_simple_message(
-                self.bpm.clone(),
-                "database".to_string(),
-                self.db_name.clone(),
-            )?;
+            let res = Slice::new_as_message(self.bpm.clone(), "database", &self.db_name)?;
             self.executed = true;
             Ok(Some(res))
         } else {

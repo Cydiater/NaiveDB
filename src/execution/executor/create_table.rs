@@ -69,12 +69,7 @@ impl Executor for CreateTableExecutor {
             }
             self.executed = true;
             Ok(Some(
-                Slice::new_simple_message(
-                    self.bpm.clone(),
-                    "table".to_string(),
-                    self.table_name.clone(),
-                )
-                .unwrap(),
+                Slice::new_as_message(self.bpm.clone(), "table", &self.table_name).unwrap(),
             ))
         } else {
             Ok(None)
