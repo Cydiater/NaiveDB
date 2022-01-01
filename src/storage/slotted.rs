@@ -265,6 +265,20 @@ where
         let idx = self.index_of(key).ok_or(SlottedPageError::KeyNotFound)?;
         self.remove_at(idx)
     }
+    pub fn append(&mut self, key: &Key, data: &[u8]) -> Result<(), SlottedPageError> {
+        let idx = self.capacity();
+        if self.head + size_of::<Key>() + 16 > self.tail - data.len() {
+            return Err(SlottedPageError::OutOfSpace);
+        }
+        self.head += size_of::<Key>() + 16;
+        let rng = self.data_range_mut_ptr_at(idx);
+        unsafe {
+            *rng.0 = 0;
+            *rng.1 = 0;
+        }
+        self.insert_at(idx, key, data)?;
+        Ok(())
+    }
     pub fn insert(&mut self, key: &Key, data: &[u8]) -> Result<usize, SlottedPageError> {
         let idx = self.find_first_empty_slot();
         if idx * (size_of::<Key>() + 16) >= self.head {
@@ -277,6 +291,9 @@ where
         Ok(idx)
     }
     pub fn move_backward(&mut self, start: usize) -> Result<(), SlottedPageError> {
+        if self.head + size_of::<Key>() + 16 > self.tail {
+            return Err(SlottedPageError::OutOfSpace);
+        }
         let cap = self.capacity();
         for idx in (start + 1..cap + 1).rev() {
             {
@@ -303,6 +320,9 @@ where
             *range_mut_ptr.1 = 0;
         }
         self.head += size_of::<Key>() + 16;
+        self.bitmap[start / 8] ^= 1 << (start % 8);
+        let end = self.capacity() - 1;
+        self.bitmap[end / 8] ^= 1 << (end % 8);
         Ok(())
     }
     pub fn move_forward(&mut self, start: usize) -> Result<(), SlottedPageError> {
@@ -330,6 +350,10 @@ where
             }
         }
         self.head -= size_of::<Key>() + 16;
+        let pos = start - 1;
+        self.bitmap[pos / 8] ^= 1 << (pos % 8);
+        let pos = self.capacity();
+        self.bitmap[pos / 8] ^= 1 << (pos % 8);
         Ok(())
     }
     pub fn count(&self) -> usize {

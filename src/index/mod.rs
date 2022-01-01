@@ -132,6 +132,7 @@ impl IndexNode {
         bpm: BufferPoolManagerRef,
         schema: SchemaRef,
     ) {
+        println!("merge #{} #{} -> #{}", self.get_page_id(), sibling.get_page_id(), self.get_page_id());
         self.set_next_page_id(sibling.get_next_page_id());
         match (self, sibling) {
             (IndexNode::Leaf(leaf), IndexNode::Leaf(sibling)) => {
@@ -308,6 +309,12 @@ impl BPTIndex {
             let page_id_of_root = self.get_page_id_of_root();
             node.set_parent_page_id(Some(page_id_of_root));
             rhs_node.set_parent_page_id(Some(page_id_of_root));
+            println!(
+                "split #{} -> #{} #{}",
+                node.get_page_id(),
+                node.get_page_id(),
+                rhs_node.get_page_id()
+            );
             return (new_key, rhs_node);
         }
         let parent_page_id = parent_page_id.unwrap();
@@ -317,7 +324,7 @@ impl BPTIndex {
             parent_page_id,
         )
         .unwrap();
-        let mut node = if !parent_node.ok_to_insert(new_key.as_slice()) {
+        let mut parent_node = if !parent_node.ok_to_insert(new_key.as_slice()) {
             let (middle_key, rhs_node) = self.split(&mut IndexNode::Internal(parent_node.clone()));
             if new_key >= middle_key {
                 if let IndexNode::Internal(rhs_node) = rhs_node {
@@ -331,15 +338,23 @@ impl BPTIndex {
         } else {
             parent_node
         };
-        node.insert(&new_key, new_value).unwrap();
-        rhs_node.set_parent_page_id(Some(node.get_page_id()));
+        parent_node.insert(&new_key, new_value).unwrap();
+        rhs_node.set_parent_page_id(Some(parent_node.get_page_id()));
+        println!(
+            "split #{} -> #{} #{}",
+            node.get_page_id(),
+            node.get_page_id(),
+            rhs_node.get_page_id()
+        );
         (new_key, rhs_node)
     }
 
     fn find_leaf(&self, key: &[Datum]) -> Option<LeafNode> {
         let mut page_id_of_current_node = self.get_page_id_of_root();
         let schema = Rc::new(self.get_key_schema());
+        println!("find leaf for {:?}", key);
         loop {
+            println!("-> #{}", page_id_of_current_node);
             if let Ok(leaf_node) =
                 LeafNode::open(self.bpm.clone(), schema.clone(), page_id_of_current_node)
             {
@@ -373,6 +388,7 @@ impl BPTIndex {
     /// 3. have enough space ? insert => done : split => 4
     /// 4. split, insert into parent => 3
     pub fn insert(&mut self, key: &[Datum], record_id: RecordID) -> Result<(), IndexError> {
+        println!("\ninsert {:?}", key);
         let mut leaf_node = if let Some(leaf_node) = self.find_leaf(key) {
             leaf_node
         } else {
@@ -531,6 +547,7 @@ impl BPTIndex {
     }
 
     pub fn remove(&mut self, key: &[Datum]) -> Result<(), IndexError> {
+        println!("\nremove ${:?}", key);
         let mut leaf_node = self.find_leaf(key).ok_or(IndexError::KeyNotFound)?;
         leaf_node.remove(key)?;
         self.balance(&mut IndexNode::Leaf(leaf_node));
@@ -647,6 +664,7 @@ mod tests {
                     .unwrap();
             }
             for idx in 0..40000usize {
+                println!("find {}", idx);
                 assert_eq!(
                     index.find(&[Datum::Int(Some(idx as i32))]).unwrap(),
                     (idx, idx)

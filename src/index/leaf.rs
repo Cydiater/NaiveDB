@@ -150,8 +150,6 @@ impl LeafNode {
         }
     }
 
-    /// split current node into two node, the lhs node have the front half while the rhs node have
-    /// the back half, and they have the same parent_id
     pub fn split(&mut self) -> Self {
         let schema = self.schema.clone();
         let mut rhs = LeafNode::new(self.bpm.clone(), self.schema.clone());
@@ -192,22 +190,18 @@ impl LeafNode {
 
     /// append to the end, the order should be preserved
     pub fn append(&mut self, key: &[Datum], record_id: RecordID) -> Result<(), IndexError> {
-        self.insert_at(self.len(), key, record_id)
+        let schema = self.schema.clone();
+        let leaf_page = self.leaf_page_mut();
+        leaf_page.append(
+            &record_id,
+            &Datum::to_bytes_with_schema(key, schema.as_ref()),
+        )?;
+        Ok(())
     }
 
     /// random insert
     pub fn insert(&mut self, key: &[Datum], record_id: RecordID) -> Result<(), IndexError> {
         let idx = self.lower_bound(key).unwrap_or_else(|| self.len());
-        self.insert_at(idx, key, record_id)
-    }
-
-    /// insert at specific position
-    pub fn insert_at(
-        &mut self,
-        idx: usize,
-        key: &[Datum],
-        record_id: RecordID,
-    ) -> Result<(), IndexError> {
         let schema = self.schema.clone();
         let leaf_page = self.leaf_page_mut();
         leaf_page.move_backward(idx)?;
@@ -223,7 +217,8 @@ impl LeafNode {
         let idx = self.index_of(key).ok_or(IndexError::KeyNotFound)?;
         let leaf_page_mut = self.leaf_page_mut();
         leaf_page_mut.remove_at(idx)?;
-        leaf_page_mut.move_forward(idx)?;
+        leaf_page_mut.move_forward(idx + 1)?;
+        println!("remove slot {} at #{}", idx, self.page_id());
         Ok(())
     }
 

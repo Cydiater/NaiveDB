@@ -1,5 +1,5 @@
 use crate::datum::Datum;
-use crate::index::IndexError;
+use crate::index::{IndexError, IndexNode};
 use crate::storage::{BufferPoolManagerRef, PageID, PageRef, PAGE_SIZE};
 use crate::table::SchemaRef;
 use std::convert::TryInto;
@@ -284,6 +284,10 @@ impl InternalNode {
         for idx in len_lhs..len - 1 {
             rhs.append(keys[idx].as_slice(), page_ids[idx].unwrap_or(0))
                 .unwrap();
+            if let Some(page_id) = page_ids[idx] {
+                let mut child = IndexNode::open(self.bpm.clone(), self.schema.clone(), page_id);
+                child.set_parent_page_id(Some(rhs.get_page_id()));
+            }
         }
         // set parent_page_id
         rhs.set_parent_page_id(self.get_parent_page_id());
@@ -312,7 +316,7 @@ impl InternalNode {
         let idx = (0..self.len())
             .find(|idx| self.page_id_at(*idx) == Some(page_id))
             .unwrap();
-        let p_page_id = if idx == 0 {
+        let p_page_id = if idx == 0 || self.page_id_at(idx - 1).is_none() {
             None
         } else {
             Some((self.page_id_at(idx - 1).unwrap(), self.key_at(idx - 1)))
