@@ -62,7 +62,7 @@ impl InternalNode {
             buffer[Self::SIZE_OF_META + 8..Self::SIZE_OF_META + 12]
                 .copy_from_slice(&(page_id_rhs as u32).to_le_bytes());
             // key
-            let bytes = Datum::to_bytes_with_schema(key, schema.clone());
+            let bytes = Datum::to_bytes_with_schema(key, schema.as_ref());
             let end = PAGE_SIZE;
             let start = end - bytes.len();
             buffer[start..end].copy_from_slice(&bytes);
@@ -225,7 +225,7 @@ impl InternalNode {
         assert!(idx < self.len() - 1);
         let base_offset = self.offset_at(idx);
         let bytes = &self.page.borrow().buffer[..base_offset];
-        Datum::from_bytes_and_schema(self.schema.clone(), bytes)
+        Datum::from_bytes_and_schema(self.schema.as_ref(), bytes)
     }
 
     /// return the index of child where this key belong
@@ -295,7 +295,7 @@ impl InternalNode {
     }
 
     pub fn ok_to_insert(&self, datums: &[Datum]) -> bool {
-        let bytes = Datum::to_bytes_with_schema(datums, self.schema.clone());
+        let bytes = Datum::to_bytes_with_schema(datums, self.schema.as_ref());
         let head = self.get_head();
         let tail = self.get_tail();
         head + 8 + bytes.len() <= tail
@@ -400,7 +400,7 @@ impl InternalNode {
         //                                start                                 end
         //                      =>
         // | offset[idx - 1] | page_id[idx] | new_offset | new_page_id | offset[idx]
-        let bytes = Datum::to_bytes_with_schema(key, self.schema.clone());
+        let bytes = Datum::to_bytes_with_schema(key, self.schema.as_ref());
         if self.get_head() + 8 > self.get_tail() - bytes.len() {
             return Err(IndexError::NodeOutOfSpace);
         }

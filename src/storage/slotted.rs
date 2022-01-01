@@ -115,8 +115,11 @@ impl<Meta: Sized + Copy, Key: Sized + Copy + PartialEq> SlottedPage<Meta, Key>
 where
     [(); PAGE_SIZE - size_of::<Meta>() - 48]:,
 {
-    fn capacity(&self) -> usize {
+    pub fn capacity(&self) -> usize {
         self.head / (size_of::<Key>() + 16)
+    }
+    pub fn get_free_space(&self) -> usize {
+        self.tail - self.head
     }
     fn data_range_at(&self, idx: usize) -> Option<(usize, usize)> {
         let data_range_ptr = self.data_range_ptr_at(idx);

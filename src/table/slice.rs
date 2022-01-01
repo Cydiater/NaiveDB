@@ -76,7 +76,7 @@ impl<'page> Iterator for TupleIter<'page> {
     type Item = Vec<Datum>;
     fn next(&mut self) -> Option<Self::Item> {
         if let Some((_, data)) = self.key_data_iter.next() {
-            Some(Datum::from_bytes_and_schema(self.schema.clone(), data))
+            Some(Datum::from_bytes_and_schema(self.schema.as_ref(), data))
         } else {
             None
         }
@@ -156,7 +156,8 @@ impl Slice {
         let page_id = self.page_id();
         let schema = self.schema.clone();
         let slice_page = self.slice_page_mut();
-        let slot_id = slice_page.insert(&(), &Datum::to_bytes_with_schema(tuple, schema))?;
+        let slot_id =
+            slice_page.insert(&(), &Datum::to_bytes_with_schema(tuple, schema.as_ref()))?;
         Ok((page_id, slot_id))
     }
 
@@ -169,7 +170,7 @@ impl Slice {
     pub fn tuple_at(&self, idx: usize) -> Result<Vec<Datum>, TableError> {
         let slice_page = self.slice_page();
         Ok(Datum::from_bytes_and_schema(
-            self.schema.clone(),
+            self.schema.as_ref(),
             slice_page.data_at(idx),
         ))
     }

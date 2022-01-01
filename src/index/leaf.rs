@@ -1,9 +1,8 @@
 use crate::datum::Datum;
 use crate::index::{IndexError, RecordID};
-use crate::storage::{BufferPoolManagerRef, PageID, PageRef, PAGE_SIZE};
+use crate::storage::{BufferPoolManagerRef, PageID, PageRef, SlottedPage};
 use crate::table::SchemaRef;
-use std::convert::TryInto;
-use std::ops::Range;
+use itertools::Itertools;
 
 ///
 /// LeafNode Format:
@@ -23,7 +22,15 @@ impl Drop for LeafNode {
     }
 }
 
-#[allow(dead_code)]
+#[derive(Clone, Copy)]
+pub struct LeafMeta {
+    pub is_leaf: bool,
+    pub parent_page_id: Option<PageID>,
+    pub next_page_id: Option<PageID>,
+}
+
+type LeafPage = SlottedPage<LeafMeta, RecordID>;
+
 #[derive(Clone)]
 pub struct LeafNode {
     page: PageRef,
@@ -33,97 +40,47 @@ pub struct LeafNode {
 
 #[allow(dead_code)]
 impl LeafNode {
-    const IS_LEAF: Range<usize> = 0..1;
-    const PARENT_PAGE_ID: Range<usize> = 1..5;
-    const NEXT_PAGE_ID: Range<usize> = 5..9;
-    const HEAD: Range<usize> = 9..13;
-    const TAIL: Range<usize> = 13..17;
-    const SIZE_OF_META: usize = 17;
-
-    pub fn get_head(&self) -> usize {
-        u32::from_le_bytes(self.page.borrow().buffer[Self::HEAD].try_into().unwrap()) as usize
+    fn leaf_page(&self) -> &LeafPage {
+        unsafe { &*(self.page.borrow().buffer.as_ptr() as *const LeafPage) }
     }
 
-    pub fn get_tail(&self) -> usize {
-        u32::from_le_bytes(self.page.borrow().buffer[Self::TAIL].try_into().unwrap()) as usize
-    }
-
-    pub fn get_next_page_id(&self) -> Option<usize> {
-        let next_page_id = u32::from_le_bytes(
-            self.page.borrow().buffer[Self::NEXT_PAGE_ID]
-                .try_into()
-                .unwrap(),
-        ) as usize;
-        if next_page_id == 0 {
-            None
-        } else {
-            Some(next_page_id)
-        }
-    }
-
-    pub fn set_next_page_id(&mut self, page_id: Option<PageID>) {
-        let page_id = page_id.unwrap_or(0);
-        self.page.borrow_mut().buffer[Self::NEXT_PAGE_ID]
-            .copy_from_slice(&((page_id as u32).to_le_bytes()));
+    fn leaf_page_mut(&mut self) -> &mut LeafPage {
         self.page.borrow_mut().is_dirty = true;
+        unsafe { &mut *(self.page.borrow_mut().buffer.as_mut_ptr() as *mut LeafPage) }
     }
 
-    fn set_head(&self, head: usize) {
-        self.page.borrow_mut().buffer[Self::HEAD].copy_from_slice(&(head as u32).to_le_bytes());
-        self.page.borrow_mut().is_dirty = true;
+    pub fn page_id(&self) -> PageID {
+        self.page.borrow().page_id.unwrap()
     }
 
-    fn set_tail(&self, tail: usize) {
-        self.page.borrow_mut().buffer[Self::TAIL].copy_from_slice(&(tail as u32).to_le_bytes());
-        self.page.borrow_mut().is_dirty = true;
+    pub fn get_free_space(&self) -> usize {
+        let leaf_page = self.leaf_page();
+        leaf_page.get_free_space()
+    }
+
+    pub fn meta(&self) -> &LeafMeta {
+        let leaf_page = self.leaf_page();
+        leaf_page.meta()
+    }
+
+    pub fn meta_mut(&mut self) -> &mut LeafMeta {
+        let leaf_page = self.leaf_page_mut();
+        leaf_page.meta_mut()
     }
 
     pub fn new(bpm: BufferPoolManagerRef, schema: SchemaRef) -> Self {
         let page = bpm.borrow_mut().alloc().unwrap();
-        {
-            let buffer = &mut page.borrow_mut().buffer;
-            // set leaf
-            buffer[Self::IS_LEAF].copy_from_slice(&[1u8]);
-            // set parent_page_id as none
-            buffer[Self::PARENT_PAGE_ID].copy_from_slice(&0u32.to_le_bytes());
-            // set head = SIZE_OF_META
-            buffer[Self::HEAD].copy_from_slice(&(Self::SIZE_OF_META as u32).to_le_bytes());
-            // set tail = PAGE_SIZE
-            buffer[Self::TAIL].copy_from_slice(&(PAGE_SIZE as u32).to_le_bytes());
-            // set next_page_id
-            buffer[Self::NEXT_PAGE_ID].copy_from_slice(&0u32.to_le_bytes());
+        unsafe {
+            let slotted = &mut *(page.borrow_mut().buffer.as_mut_ptr() as *mut LeafPage);
+            slotted.reset(&LeafMeta {
+                is_leaf: true,
+                parent_page_id: None,
+                next_page_id: None,
+            });
         }
         // mark dirty
         page.borrow_mut().is_dirty = true;
         Self { page, bpm, schema }
-    }
-
-    pub fn get_page_id(&self) -> PageID {
-        self.page.borrow().page_id.unwrap()
-    }
-
-    pub fn get_parent_page_id(&self) -> Option<PageID> {
-        let parent_page_id = u32::from_le_bytes(
-            self.page.borrow().buffer[Self::PARENT_PAGE_ID]
-                .try_into()
-                .unwrap(),
-        ) as usize;
-        if parent_page_id == 0 {
-            None
-        } else {
-            Some(parent_page_id)
-        }
-    }
-
-    pub fn set_parent_page_id(&self, page_id: Option<PageID>) {
-        let page_id = if let Some(page_id) = page_id {
-            page_id
-        } else {
-            0
-        };
-        self.page.borrow_mut().buffer[Self::PARENT_PAGE_ID]
-            .copy_from_slice(&((page_id as u32).to_le_bytes()));
-        self.page.borrow_mut().is_dirty = true;
     }
 
     pub fn open(
@@ -132,52 +89,28 @@ impl LeafNode {
         page_id: PageID,
     ) -> Result<Self, IndexError> {
         let page = bpm.borrow_mut().fetch(page_id).unwrap();
-        if page.borrow().buffer[Self::IS_LEAF] != [1u8] {
-            return Err(IndexError::NotLeafIndexNode);
+        unsafe {
+            let slotted = &*(page.borrow().buffer.as_ptr() as *const LeafPage);
+            if !slotted.meta().is_leaf {
+                return Err(IndexError::NotLeafIndexNode);
+            }
         }
         Ok(Self { page, bpm, schema })
     }
 
-    fn offset_at(&self, idx: usize) -> usize {
-        assert!(idx < self.len());
-        let start = Self::SIZE_OF_META + idx * 12;
-        let end = start + 4;
-        let bytes: [u8; 4] = self.page.borrow().buffer[start..end].try_into().unwrap();
-        u32::from_le_bytes(bytes) as usize
-    }
-
-    fn set_offset_at(&mut self, idx: usize, offset: usize) {
-        let start = Self::SIZE_OF_META + idx * 12;
-        let end = start + 4;
-        self.page.borrow_mut().buffer[start..end].copy_from_slice(&(offset as u32).to_le_bytes());
-        self.page.borrow_mut().is_dirty = true;
-    }
-
     pub fn key_at(&self, idx: usize) -> Vec<Datum> {
-        assert!(idx < self.len());
-        let base_offset = self.offset_at(idx);
-        let bytes = &self.page.borrow().buffer[..base_offset];
-        Datum::from_bytes_and_schema(self.schema.clone(), bytes)
+        let leaf_page = self.leaf_page();
+        Datum::from_bytes_and_schema(self.schema.as_ref(), leaf_page.data_at(idx))
     }
 
     pub fn record_id_at(&self, idx: usize) -> RecordID {
-        let start = Self::SIZE_OF_META + idx * 12 + 4;
-        let page_id = u32::from_le_bytes(
-            self.page.borrow().buffer[start..start + 4]
-                .try_into()
-                .unwrap(),
-        ) as PageID;
-        let offset = u32::from_le_bytes(
-            self.page.borrow().buffer[start + 4..start + 8]
-                .try_into()
-                .unwrap(),
-        ) as usize;
-        (page_id, offset)
+        let leaf_page = self.leaf_page();
+        *leaf_page.key_at(idx)
     }
 
     pub fn len(&self) -> usize {
-        let head = self.get_head();
-        (head - Self::SIZE_OF_META) / 12
+        let leaf_page = self.leaf_page();
+        leaf_page.capacity()
     }
 
     pub fn lower_bound(&self, key: &[Datum]) -> Option<usize> {
@@ -217,46 +150,43 @@ impl LeafNode {
         }
     }
 
-    pub fn ok_to_insert(&self, datums: &[Datum]) -> bool {
-        let bytes = Datum::to_bytes_with_schema(datums, self.schema.clone());
-        let head = self.get_head();
-        let tail = self.get_tail();
-        head + 12 + bytes.len() <= tail
-    }
-
     /// split current node into two node, the lhs node have the front half while the rhs node have
     /// the back half, and they have the same parent_id
     pub fn split(&mut self) -> Self {
-        let len = self.len();
-        // collect keys and record_ids
-        let mut keys = vec![];
-        let mut record_ids = vec![];
-        for idx in 0..len {
-            let key = self.key_at(idx);
-            let record_id = self.record_id_at(idx);
-            keys.push(key);
-            record_ids.push(record_id);
-        }
-        // clear lhs
-        self.set_head(Self::SIZE_OF_META);
-        self.set_tail(PAGE_SIZE);
+        let schema = self.schema.clone();
+        let mut rhs = LeafNode::new(self.bpm.clone(), self.schema.clone());
+        let leaf_page = self.leaf_page_mut();
+        let tuple_and_record_id_set = leaf_page
+            .key_data_iter()
+            .map(|(record_id, bytes)| {
+                (
+                    *record_id,
+                    Datum::from_bytes_and_schema(schema.as_ref(), bytes),
+                )
+            })
+            .collect_vec();
+        leaf_page.reset(&leaf_page.meta().clone());
+        let len = tuple_and_record_id_set.len();
         let len_lhs = len / 2;
         // setup lhs node
-        for idx in 0..len_lhs {
-            self.append(keys[idx].as_slice(), record_ids[idx]).unwrap();
+        for tuple_and_record_id in tuple_and_record_id_set.iter().take(len_lhs) {
+            leaf_page
+                .insert(
+                    &tuple_and_record_id.0,
+                    &Datum::to_bytes_with_schema(&tuple_and_record_id.1, schema.as_ref()),
+                )
+                .unwrap();
         }
-        // new rhs
-        let mut rhs = LeafNode::new(self.bpm.clone(), self.schema.clone());
-        for idx in len_lhs..len {
-            rhs.append(keys[idx].as_slice(), record_ids[idx]).unwrap();
+        // setup rhs node
+        for tuple_and_record_id in tuple_and_record_id_set.iter().take(len).skip(len_lhs) {
+            rhs.append(&tuple_and_record_id.1, tuple_and_record_id.0)
+                .unwrap();
         }
         // set parent_page_id
-        rhs.set_parent_page_id(self.get_parent_page_id());
-        rhs.page.borrow_mut().is_dirty = true;
+        rhs.meta_mut().parent_page_id = leaf_page.meta().parent_page_id;
+        rhs.meta_mut().next_page_id = leaf_page.meta().next_page_id;
+        leaf_page.meta_mut().next_page_id = Some(rhs.page_id());
         self.page.borrow_mut().is_dirty = true;
-        // set next_page_id
-        rhs.set_next_page_id(self.get_next_page_id());
-        self.set_next_page_id(Some(rhs.get_page_id()));
         rhs
     }
 
@@ -278,93 +208,23 @@ impl LeafNode {
         key: &[Datum],
         record_id: RecordID,
     ) -> Result<(), IndexError> {
-        let bytes = Datum::to_bytes_with_schema(key, self.schema.clone());
-        if self.get_head() + 12 > self.get_tail() - bytes.len() {
-            return Err(IndexError::NodeOutOfSpace);
-        }
-        let start = Self::SIZE_OF_META + idx * 12;
-        let end = Self::SIZE_OF_META + self.len() * 12;
-        self.page
-            .borrow_mut()
-            .buffer
-            .copy_within(start..end, start + 12);
-        let end = self.get_tail();
-        let start = end - bytes.len();
-        self.page.borrow_mut().buffer[start..end].copy_from_slice(&bytes);
-        self.set_tail(start);
-        let head = self.get_head();
-        self.set_head(head + 12);
-        // set offset
-        let start = Self::SIZE_OF_META + idx * 12;
-        self.page.borrow_mut().buffer[start..start + 4]
-            .copy_from_slice(&(end as u32).to_le_bytes());
-        // set page_id
-        let start = start + 4;
-        self.page.borrow_mut().buffer[start..start + 4]
-            .copy_from_slice(&(record_id.0 as u32).to_le_bytes());
-        // set offset
-        let start = start + 4;
-        self.page.borrow_mut().buffer[start..start + 4]
-            .copy_from_slice(&(record_id.1 as u32).to_le_bytes());
-        // mark dirty
-        self.page.borrow_mut().is_dirty = true;
+        let schema = self.schema.clone();
+        let leaf_page = self.leaf_page_mut();
+        leaf_page.move_backward(idx)?;
+        leaf_page.insert_at(
+            idx,
+            &record_id,
+            &Datum::to_bytes_with_schema(key, schema.as_ref()),
+        )?;
         Ok(())
     }
 
     pub fn remove(&mut self, key: &[Datum]) -> Result<(), IndexError> {
-        let idx = self.index_of(key);
-        if let Some(idx) = idx {
-            let offset1 = self.offset_at(idx);
-            let mut offset2 = self.get_tail();
-            // TODO hack here, do better later
-            for idx in 0..self.len() {
-                let offset = self.offset_at(idx);
-                if offset < offset1 && offset > offset2 {
-                    offset2 = offset;
-                }
-            }
-            let offset_delta = offset1 - offset2;
-            let tail = self.get_tail();
-            // move data
-            self.page
-                .borrow_mut()
-                .buffer
-                .copy_within(tail..offset2, tail + offset_delta);
-            // modify offset
-            for i in idx..self.len() - 1 {
-                let next_offset = self.offset_at(i + 1);
-                let next_record_id = self.record_id_at(i + 1);
-                let start = Self::SIZE_OF_META + i * 12;
-                let end = start + 4;
-                self.page.borrow_mut().buffer[start..end]
-                    .copy_from_slice(&(next_offset as u32).to_le_bytes());
-                let start = end;
-                let end = start + 4;
-                self.page.borrow_mut().buffer[start..end]
-                    .copy_from_slice(&(next_record_id.0 as u32).to_le_bytes());
-                let start = start + 4;
-                let end = end + 4;
-                self.page.borrow_mut().buffer[start..end]
-                    .copy_from_slice(&(next_record_id.1 as u32).to_le_bytes());
-            }
-            for i in 0..self.len() - 1 {
-                let offset = self.offset_at(i);
-                if offset < offset1 {
-                    self.set_offset_at(i, offset + offset_delta);
-                }
-            }
-            // set head
-            let head = self.get_head();
-            self.set_head(head - 12);
-            // set tail
-            let tail = self.get_tail();
-            self.set_tail(tail + offset_delta);
-            // dirty
-            self.page.borrow_mut().is_dirty = true;
-            Ok(())
-        } else {
-            Err(IndexError::KeyNotFound)
-        }
+        let idx = self.index_of(key).ok_or(IndexError::KeyNotFound)?;
+        let leaf_page_mut = self.leaf_page_mut();
+        leaf_page_mut.remove_at(idx)?;
+        leaf_page_mut.move_forward(idx)?;
+        Ok(())
     }
 
     #[allow(dead_code)]

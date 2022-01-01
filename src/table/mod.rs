@@ -245,7 +245,8 @@ mod tests {
             }
             // validate
             table
-                .iter().flat_map(|s| s.tuple_iter().collect_vec())
+                .iter()
+                .flat_map(|s| s.tuple_iter().collect_vec())
                 .sorted()
                 .enumerate()
                 .for_each(|(idx, datums)| {

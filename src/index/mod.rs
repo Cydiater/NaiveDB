@@ -1,6 +1,6 @@
 use crate::datum::Datum;
 use crate::expr::ExprImpl;
-use crate::storage::{BufferPoolManagerRef, PageID, PageRef, PAGE_SIZE};
+use crate::storage::{BufferPoolManagerRef, PageID, PageRef, SlottedPageError, PAGE_SIZE};
 use crate::table::{Schema, SchemaRef};
 use std::convert::TryInto;
 use std::ops::Range;
@@ -22,27 +22,33 @@ impl IndexNode {
             IndexNode::Internal(InternalNode::open(bpm, schema, page_id).unwrap())
         }
     }
+    pub fn get_free_space(&self) -> usize {
+        match self {
+            Self::Leaf(node) => node.get_free_space(),
+            Self::Internal(node) => node.get_tail() - node.get_head(),
+        }
+    }
     pub fn get_next_page_id(&self) -> Option<PageID> {
         match self {
-            Self::Leaf(node) => node.get_next_page_id(),
+            Self::Leaf(node) => node.meta().next_page_id,
             Self::Internal(node) => node.get_next_page_id(),
         }
     }
     pub fn set_next_page_id(&mut self, page_id: Option<PageID>) {
         match self {
-            Self::Leaf(node) => node.set_next_page_id(page_id),
+            Self::Leaf(node) => node.meta_mut().next_page_id = page_id,
             Self::Internal(node) => node.set_next_page_id(page_id),
         }
     }
     pub fn get_parent_page_id(&self) -> Option<PageID> {
         match self {
-            Self::Leaf(node) => node.get_parent_page_id(),
+            Self::Leaf(node) => node.meta().parent_page_id,
             Self::Internal(node) => node.get_parent_page_id(),
         }
     }
     pub fn get_page_id(&self) -> PageID {
         match self {
-            Self::Leaf(node) => node.get_page_id(),
+            Self::Leaf(node) => node.page_id(),
             Self::Internal(node) => node.get_page_id(),
         }
     }
@@ -60,20 +66,8 @@ impl IndexNode {
     }
     pub fn set_parent_page_id(&mut self, parent_page_id: Option<PageID>) {
         match self {
-            Self::Leaf(node) => node.set_parent_page_id(parent_page_id),
+            Self::Leaf(node) => node.meta_mut().parent_page_id = parent_page_id,
             Self::Internal(node) => node.set_parent_page_id(parent_page_id),
-        }
-    }
-    pub fn get_tail(&self) -> usize {
-        match self {
-            Self::Leaf(node) => node.get_tail(),
-            Self::Internal(node) => node.get_tail(),
-        }
-    }
-    pub fn get_head(&self) -> usize {
-        match self {
-            Self::Leaf(node) => node.get_head(),
-            Self::Internal(node) => node.get_head(),
         }
     }
     pub fn first_key(&self) -> Vec<Datum> {
@@ -81,13 +75,6 @@ impl IndexNode {
             Self::Internal(node) => node.key_at(0),
             Self::Leaf(node) => node.key_at(0),
         }
-    }
-    pub fn get_free_space(&self) -> usize {
-        self.get_tail() - self.get_head()
-    }
-    pub fn get_payload_size(&self) -> usize {
-        // meta size of both internal and leaf is 17
-        PAGE_SIZE - self.get_free_space() - 17
     }
     pub fn steal_from_right(
         &mut self,
@@ -225,7 +212,7 @@ impl Iterator for IndexIter {
     fn next(&mut self) -> Option<Self::Item> {
         let len = self.leaf.len();
         if self.idx == len {
-            let next_page_id = self.leaf.get_next_page_id();
+            let next_page_id = self.leaf.meta().next_page_id;
             if let Some(next_page_id) = next_page_id {
                 self.idx = 0;
                 self.leaf =
@@ -257,7 +244,7 @@ impl BPTIndex {
         let page = bpm.borrow_mut().alloc().unwrap();
         let schema = Rc::new(Schema::from_exprs(exprs));
         let leaf_node = LeafNode::new(bpm.clone(), schema);
-        let page_id_of_root = leaf_node.get_page_id();
+        let page_id_of_root = leaf_node.page_id();
         // set page_id_of_root
         page.borrow_mut().buffer[0..4].copy_from_slice(&(page_id_of_root as u32).to_le_bytes());
         // set exprs
@@ -386,32 +373,25 @@ impl BPTIndex {
     /// 3. have enough space ? insert => done : split => 4
     /// 4. split, insert into parent => 3
     pub fn insert(&mut self, key: &[Datum], record_id: RecordID) -> Result<(), IndexError> {
-        let leaf_node = if let Some(leaf_node) = self.find_leaf(key) {
+        let mut leaf_node = if let Some(leaf_node) = self.find_leaf(key) {
             leaf_node
         } else {
             return Err(IndexError::KeyNotFound);
         };
-        let mut node = if !leaf_node.ok_to_insert(key) {
+        if leaf_node.index_of(key).is_some() {
+            return Err(IndexError::Duplicated);
+        }
+        if leaf_node.insert(key, record_id).is_err() {
             let mut index_node = IndexNode::Leaf(leaf_node);
             let (middle_key, rhs_node) = self.split(&mut index_node);
             if key >= middle_key.as_slice() {
-                if let IndexNode::Leaf(rhs_node) = rhs_node {
-                    rhs_node
-                } else {
-                    unreachable!()
+                if let IndexNode::Leaf(mut rhs_node) = rhs_node {
+                    rhs_node.insert(key, record_id)?;
                 }
-            } else if let IndexNode::Leaf(node) = index_node {
-                node
-            } else {
-                unreachable!()
+            } else if let IndexNode::Leaf(mut node) = index_node {
+                node.insert(key, record_id)?;
             }
-        } else {
-            leaf_node
-        };
-        if node.index_of(key).is_some() {
-            return Err(IndexError::Duplicated);
         }
-        node.insert(key, record_id)?;
         Ok(())
     }
 
@@ -505,7 +485,7 @@ impl BPTIndex {
                 page_id_of_left_sibling,
             );
             // 2.1.2 ok to merge
-            if left_sibling.get_free_space() >= node.get_payload_size() {
+            if left_sibling.get_free_space() >= PAGE_SIZE - node.get_free_space() {
                 parent.remove(&key).unwrap();
                 left_sibling.merge_in_back(node, self.bpm.clone(), Rc::new(self.get_key_schema()));
                 self.balance(&mut IndexNode::Internal(parent));
@@ -527,7 +507,7 @@ impl BPTIndex {
                 page_id_of_right_sibling,
             );
             // 2.1.2 ok to merge
-            if node.get_free_space() >= right_sibling.get_payload_size() {
+            if node.get_free_space() >= PAGE_SIZE - right_sibling.get_free_space() {
                 parent.remove(&key).unwrap();
                 node.merge_in_back(
                     &mut right_sibling,
@@ -570,6 +550,8 @@ pub enum IndexError {
     NodeOutOfSpace,
     #[error("duplicated key")]
     Duplicated,
+    #[error("Page Error: {0}")]
+    PageError(#[from] SlottedPageError),
 }
 
 #[cfg(test)]
