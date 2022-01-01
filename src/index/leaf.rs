@@ -218,7 +218,6 @@ impl LeafNode {
         let leaf_page_mut = self.leaf_page_mut();
         leaf_page_mut.remove_at(idx)?;
         leaf_page_mut.move_forward(idx + 1)?;
-        println!("remove slot {} at #{}", idx, self.page_id());
         Ok(())
     }
 
