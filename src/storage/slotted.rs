@@ -273,6 +273,62 @@ where
         self.insert_at(idx, key, data)?;
         Ok(idx)
     }
+    pub fn move_backward(&mut self, start: usize) -> Result<(), SlottedPageError> {
+        let cap = self.capacity();
+        for idx in (start + 1..cap + 1).rev() {
+            {
+                let last_range = self
+                    .data_range_at(idx - 1)
+                    .ok_or(SlottedPageError::SlotNotFound)?;
+                let current_range_mut_ptr = self.data_range_mut_ptr_at(idx);
+                unsafe {
+                    *current_range_mut_ptr.0 = last_range.0;
+                    *current_range_mut_ptr.1 = last_range.1;
+                }
+            }
+            {
+                let last_key = *self.key_at(idx - 1);
+                let current_key_mut_ptr = self.key_mut_ptr_at(idx);
+                unsafe {
+                    *current_key_mut_ptr = last_key;
+                }
+            }
+        }
+        let range_mut_ptr = self.data_range_mut_ptr_at(start);
+        unsafe {
+            *range_mut_ptr.0 = 0;
+            *range_mut_ptr.1 = 0;
+        }
+        self.head += size_of::<Key>() + 16;
+        Ok(())
+    }
+    pub fn move_forward(&mut self, start: usize) -> Result<(), SlottedPageError> {
+        if self.data_range_at(start - 1).is_some() {
+            return Err(SlottedPageError::InsertAtUsingSlot);
+        }
+        let cap = self.capacity();
+        for idx in start - 1..cap - 1 {
+            {
+                let next_range = self
+                    .data_range_at(idx + 1)
+                    .ok_or(SlottedPageError::SlotNotFound)?;
+                let current_range_mut_ptr = self.data_range_mut_ptr_at(idx);
+                unsafe {
+                    *current_range_mut_ptr.0 = next_range.0;
+                    *current_range_mut_ptr.1 = next_range.1;
+                }
+            }
+            {
+                let next_key = *self.key_at(idx + 1);
+                let current_key = self.key_mut_ptr_at(idx);
+                unsafe {
+                    *current_key = next_key;
+                }
+            }
+        }
+        self.head -= size_of::<Key>() + 16;
+        Ok(())
+    }
     pub fn count(&self) -> usize {
         let mut cnt = 0;
         for byte in self.bitmap {
@@ -333,6 +389,13 @@ mod tests {
             .insert(&Key { page_id: 3 }, &[1u8, 2u8, 3u8])
             .unwrap();
         assert_eq!(slotted.key_at(1), &Key { page_id: 3 });
+        slotted.move_backward(0).unwrap();
+        assert_eq!(slotted.capacity(), 4);
+        assert_eq!(slotted.key_at(1), &Key { page_id: 0 });
+        slotted.move_forward(1).unwrap();
+        assert_eq!(slotted.capacity(), 3);
+        assert_eq!(slotted.key_at(1), &Key { page_id: 3 });
+        slotted.move_backward(1).unwrap();
     }
 
     #[test]
