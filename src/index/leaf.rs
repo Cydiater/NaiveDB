@@ -1,19 +1,8 @@
 use crate::datum::Datum;
-use crate::index::{IndexError, RecordID};
+use crate::index::{IndexError, IndexNodeMeta, RecordID};
 use crate::storage::{BufferPoolManagerRef, PageID, PageRef, SlottedPage};
 use crate::table::SchemaRef;
 use itertools::Itertools;
-
-///
-/// LeafNode Format:
-///
-///     | Meta | offset[0] | record_id[0] | ...
-///                                       ... | data[1] | data[0] |
-///
-/// Meta Format:
-///
-///     | is_leaf | parent_page_id | head | tail |
-///
 
 impl Drop for LeafNode {
     fn drop(&mut self) {
@@ -24,9 +13,7 @@ impl Drop for LeafNode {
 
 #[derive(Clone, Copy)]
 pub struct LeafMeta {
-    pub is_leaf: bool,
-    pub parent_page_id: Option<PageID>,
-    pub next_page_id: Option<PageID>,
+    pub common: IndexNodeMeta,
 }
 
 type LeafPage = SlottedPage<LeafMeta, RecordID>;
@@ -53,9 +40,9 @@ impl LeafNode {
         self.page.borrow().page_id.unwrap()
     }
 
-    pub fn get_free_space(&self) -> usize {
+    pub fn store_stat(&self) -> (usize, usize) {
         let leaf_page = self.leaf_page();
-        leaf_page.get_free_space()
+        leaf_page.store_stat()
     }
 
     pub fn meta(&self) -> &LeafMeta {
@@ -73,9 +60,11 @@ impl LeafNode {
         unsafe {
             let slotted = &mut *(page.borrow_mut().buffer.as_mut_ptr() as *mut LeafPage);
             slotted.reset(&LeafMeta {
-                is_leaf: true,
-                parent_page_id: None,
-                next_page_id: None,
+                common: IndexNodeMeta {
+                    is_leaf: true,
+                    parent_page_id: None,
+                    next_page_id: None,
+                },
             });
         }
         // mark dirty
@@ -91,7 +80,7 @@ impl LeafNode {
         let page = bpm.borrow_mut().fetch(page_id).unwrap();
         unsafe {
             let slotted = &*(page.borrow().buffer.as_ptr() as *const LeafPage);
-            if !slotted.meta().is_leaf {
+            if !slotted.meta().common.is_leaf {
                 return Err(IndexError::NotLeafIndexNode);
             }
         }
@@ -181,9 +170,9 @@ impl LeafNode {
                 .unwrap();
         }
         // set parent_page_id
-        rhs.meta_mut().parent_page_id = leaf_page.meta().parent_page_id;
-        rhs.meta_mut().next_page_id = leaf_page.meta().next_page_id;
-        leaf_page.meta_mut().next_page_id = Some(rhs.page_id());
+        rhs.meta_mut().common.parent_page_id = leaf_page.meta().common.parent_page_id;
+        rhs.meta_mut().common.next_page_id = leaf_page.meta().common.next_page_id;
+        leaf_page.meta_mut().common.next_page_id = Some(rhs.page_id());
         self.page.borrow_mut().is_dirty = true;
         rhs
     }

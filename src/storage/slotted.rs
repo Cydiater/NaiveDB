@@ -118,8 +118,10 @@ where
     pub fn capacity(&self) -> usize {
         self.head / (size_of::<Key>() + 16)
     }
-    pub fn get_free_space(&self) -> usize {
-        self.tail - self.head
+    pub fn store_stat(&self) -> (usize, usize) {
+        let cap = self.bytes.len();
+        let using = self.head + (cap - self.tail);
+        (using, cap - using)
     }
     fn data_range_at(&self, idx: usize) -> Option<(usize, usize)> {
         let data_range_ptr = self.data_range_ptr_at(idx);
