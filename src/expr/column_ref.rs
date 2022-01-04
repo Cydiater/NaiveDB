@@ -1,6 +1,7 @@
 use crate::datum::{DataType, Datum};
 use crate::expr::Expr;
 use crate::table::Slice;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
@@ -26,14 +27,10 @@ impl ColumnRefExpr {
 impl Expr for ColumnRefExpr {
     fn eval(&self, slice: Option<&Slice>) -> Vec<Datum> {
         if let Some(slice) = slice {
-            let len = slice.get_num_tuple();
-            let mut res = vec![];
-            for idx in 0..len {
-                if let Some(mut tuple) = slice.at(idx).unwrap() {
-                    res.push(tuple.remove(self.idx));
-                }
-            }
-            res
+            slice
+                .tuple_iter()
+                .map(|mut tuple| tuple.remove(self.idx))
+                .collect_vec()
         } else {
             vec![]
         }

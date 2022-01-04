@@ -21,7 +21,7 @@ impl ConstantExpr {
 impl Expr for ConstantExpr {
     fn eval(&self, slice: Option<&Slice>) -> Vec<Datum> {
         if let Some(slice) = slice {
-            vec![self.value.clone(); slice.get_num_tuple()]
+            vec![self.value.clone(); slice.count()]
         } else {
             vec![self.value.clone()]
         }

@@ -27,25 +27,22 @@ impl Executor for InsertExecutor {
     fn execute(&mut self) -> Result<Option<Slice>, ExecutionError> {
         let input = self.child.execute()?;
         if let Some(input) = input {
-            let len = input.get_num_tuple();
             let mut indexes_rows = vec![];
             for index in &mut self.indexes {
                 let mut exprs = index.get_exprs();
                 let rows = ExprImpl::batch_eval(&mut exprs, Some(&input));
                 indexes_rows.push(rows);
             }
-            for idx in 0..len {
-                if let Some(tuple) = input.at(idx)? {
-                    info!("insert tuple {:?}", tuple);
-                    for (rows, index) in indexes_rows.iter_mut().zip(&mut self.indexes) {
-                        if index.find(&rows[0]).is_some() {
-                            return Err(ExecutionError::InsertDuplicatedKey(rows[0].clone()));
-                        }
+            for tuple in input.tuple_iter() {
+                info!("insert tuple {:?}", tuple);
+                for (rows, index) in indexes_rows.iter_mut().zip(&mut self.indexes) {
+                    if index.find(&rows[0]).is_some() {
+                        return Err(ExecutionError::InsertDuplicatedKey(rows[0].clone()));
                     }
-                    let record_id = self.table.insert(tuple)?;
-                    for (rows, index) in indexes_rows.iter_mut().zip(&mut self.indexes) {
-                        index.insert(&rows.remove(0), record_id)?;
-                    }
+                }
+                let record_id = self.table.insert(tuple)?;
+                for (rows, index) in indexes_rows.iter_mut().zip(&mut self.indexes) {
+                    index.insert(&rows.remove(0), record_id)?;
                 }
             }
             Ok(Some(input))

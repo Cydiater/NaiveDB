@@ -44,7 +44,7 @@ impl Executor for SeqScanExecutor {
         if let Some(page_id) = self.page_id {
             if !self.with_record_id {
                 let slice = Slice::open(self.bpm.clone(), self.schema.clone(), page_id);
-                self.page_id = slice.get_next_page_id();
+                self.page_id = slice.meta()?.next_page_id;
                 Ok(Some(slice))
             } else {
                 let mut slice = Slice::new(self.bpm.clone(), self.schema());
@@ -55,18 +55,16 @@ impl Executor for SeqScanExecutor {
                         }
                         let page_id = self.page_id.unwrap();
                         let source = Slice::open(self.bpm.clone(), self.schema.clone(), page_id);
-                        let len = source.get_num_tuple();
-                        for idx in 0..len {
-                            if let Some(mut tuple) = source.at(idx)? {
-                                tuple.push(Datum::Int(Some(page_id as i32)));
-                                tuple.push(Datum::Int(Some(idx as i32)));
-                                self.buffer.push(tuple);
-                            }
+                        for idx in source.slot_iter().collect::<Vec<_>>() {
+                            let mut tuple = source.tuple_at(idx)?;
+                            tuple.push(Datum::Int(Some(page_id as i32)));
+                            tuple.push(Datum::Int(Some(idx as i32)));
+                            self.buffer.push(tuple);
                         }
-                        self.page_id = source.get_next_page_id();
+                        self.page_id = source.meta()?.next_page_id;
                     }
-                    if slice.ok_to_add(&self.buffer[0]) {
-                        slice.add(&self.buffer.remove(0))?;
+                    if slice.insert(&self.buffer[0]).is_ok() {
+                        self.buffer.remove(0);
                     } else {
                         return Ok(Some(slice));
                     }

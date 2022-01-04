@@ -31,8 +31,10 @@ impl Executor for ShowDatabasesExecutor {
     fn execute(&mut self) -> Result<Option<Slice>, ExecutionError> {
         if !self.executed {
             let mut slice = Slice::new(self.bpm.clone(), self.schema());
-            self.catalog.borrow().iter().for_each(|(_, _, name)| {
-                slice.add(&[Datum::VarChar(Some(name))]).unwrap();
+            self.catalog.borrow().database_iter().for_each(|(name, _)| {
+                slice
+                    .insert(&[Datum::VarChar(Some(name.to_owned()))])
+                    .unwrap();
             });
             self.executed = true;
             Ok(Some(slice))

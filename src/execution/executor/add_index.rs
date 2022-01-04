@@ -5,7 +5,6 @@ use crate::expr::ExprImpl;
 use crate::index::BPTIndex;
 use crate::storage::BufferPoolManagerRef;
 use crate::table::{Schema, SchemaRef, Slice};
-use itertools::Itertools;
 use std::rc::Rc;
 
 pub struct AddIndexExecutor {
@@ -50,20 +49,9 @@ impl Executor for AddIndexExecutor {
         let slices = table.into_slice();
         let mut indexed_cnt = 0;
         for slice in slices {
-            let rows = self.exprs.iter_mut().map(|e| e.eval(Some(&slice))).fold(
-                vec![vec![]; slice.get_num_tuple()],
-                |rows, col| {
-                    rows.into_iter()
-                        .zip(col.into_iter())
-                        .map(|(mut r, d)| {
-                            r.push(d);
-                            r
-                        })
-                        .collect_vec()
-                },
-            );
+            let rows = ExprImpl::batch_eval(&mut self.exprs, Some(&slice));
             for (idx, row) in rows.iter().enumerate() {
-                let record_id = (slice.get_page_id(), idx);
+                let record_id = (slice.page_id(), idx);
                 index.insert(row, record_id).unwrap();
                 indexed_cnt += 1;
             }
@@ -75,7 +63,7 @@ impl Executor for AddIndexExecutor {
             page_id,
         )?;
         let mut msg = Slice::new(self.bpm.clone(), self.schema());
-        msg.add(&[Datum::Int(Some(indexed_cnt))])?;
+        msg.insert(&[Datum::Int(Some(indexed_cnt))])?;
         Ok(Some(msg))
     }
 }

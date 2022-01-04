@@ -1,6 +1,6 @@
 use crate::datum::{DataType, Datum};
 use crate::index::RecordID;
-use crate::storage::{BufferPoolManagerRef, PageID, PageRef, StorageError};
+use crate::storage::{BufferPoolManagerRef, PageID, PageRef, SlottedPageError, StorageError};
 use itertools::Itertools;
 use prettytable::{Cell, Row, Table as PrintTable};
 use std::convert::TryInto;
@@ -12,7 +12,7 @@ mod schema;
 mod slice;
 
 pub use schema::{Column, ColumnConstraint, Schema, SchemaRef};
-pub use slice::Slice;
+pub use slice::{Slice, SlotIter, TupleIter};
 
 ///
 /// Table Format:
@@ -42,43 +42,35 @@ impl fmt::Display for Table {
             .map(|c| Cell::new(c.desc.as_str()))
             .collect_vec();
         table.add_row(Row::new(header));
-        self.iter().for_each(|tuple| {
-            let tuple = tuple
-                .iter()
-                .map(|d| Cell::new(d.to_string().as_str()))
-                .collect_vec();
-            table.add_row(Row::new(tuple));
-        });
+        self.iter()
+            .flat_map(|s| s.tuple_iter().collect_vec())
+            .for_each(|tuple| {
+                let tuple = tuple
+                    .iter()
+                    .map(|d| Cell::new(d.to_string().as_str()))
+                    .collect_vec();
+                table.add_row(Row::new(tuple));
+            });
         write!(f, "{}", table)
     }
 }
 
 pub struct TableIter {
-    idx: usize,
-    slice: Slice,
+    slice: Option<Slice>,
     bpm: BufferPoolManagerRef,
-    pub schema: SchemaRef,
+    schema: SchemaRef,
 }
 
 impl Iterator for TableIter {
-    type Item = Vec<Datum>;
+    type Item = Slice;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.idx < self.slice.get_num_tuple() {
-            let tuple = self.slice.at(self.idx).unwrap();
-            self.idx += 1;
-            if let Some(tuple) = tuple {
-                Some(tuple)
+        if let Some(slice) = &self.slice {
+            if let Some(next_page_id) = slice.meta().unwrap().next_page_id {
+                let next_slice = Slice::open(self.bpm.clone(), self.schema.clone(), next_page_id);
+                std::mem::replace(&mut self.slice, Some(next_slice))
             } else {
-                self.next()
-            }
-        } else if let Some(page_id_of_next_slice) = self.slice.get_next_page_id() {
-            self.slice = Slice::open(self.bpm.clone(), self.schema.clone(), page_id_of_next_slice);
-            self.idx = 1;
-            if let Some(tuple) = self.slice.at(0).unwrap() {
-                Some(tuple)
-            } else {
-                self.next()
+                std::mem::replace(&mut self.slice, None)
             }
         } else {
             None
@@ -101,7 +93,7 @@ impl Table {
         let page = bpm.borrow_mut().alloc().unwrap();
         // alloc slice page
         let slice = Slice::new(bpm.clone(), schema.clone());
-        let page_id_of_root_slice = slice.get_page_id();
+        let page_id_of_root_slice = slice.page_id();
         // set page_id_of_first_slice
         page.borrow_mut().buffer[0..4]
             .copy_from_slice(&(page_id_of_root_slice as u32).to_le_bytes());
@@ -142,13 +134,14 @@ impl Table {
         } else {
             Slice::new(self.bpm.clone(), self.schema.clone())
         };
-        if slice.ok_to_add(&datums) {
-            slice.add(&datums)
+        if let Ok(record_id) = slice.insert(&datums) {
+            Ok(record_id)
         } else {
             let mut new_slice = Slice::new(self.bpm.clone(), self.schema.clone());
-            self.set_page_id_of_first_slice(new_slice.get_page_id());
-            new_slice.set_next_page_id(Some(slice.get_page_id()));
-            new_slice.add(&datums)
+            self.set_page_id_of_first_slice(new_slice.page_id());
+            new_slice.meta_mut()?.next_page_id = Some(slice.page_id());
+            let record_id = new_slice.insert(&datums)?;
+            Ok(record_id)
         }
     }
     pub fn iter(&self) -> TableIter {
@@ -163,25 +156,20 @@ impl Table {
             Slice::new(self.bpm.clone(), self.schema.clone())
         };
         TableIter {
-            idx: 0,
-            slice,
+            slice: Some(slice),
             bpm: self.bpm.clone(),
             schema: self.schema.clone(),
         }
     }
-    pub fn datums_from_record_id(&self, record_id: RecordID) -> Option<Vec<Datum>> {
+    pub fn tuple_at(&self, record_id: RecordID) -> Option<Vec<Datum>> {
         let slice = Slice::open(self.bpm.clone(), self.schema.clone(), record_id.0);
-        slice.at(record_id.1).unwrap()
+        Some(slice.tuple_at(record_id.1).unwrap())
     }
     pub fn from_slice(slices: Vec<Slice>, schema: SchemaRef, bpm: BufferPoolManagerRef) -> Self {
         let mut table = Table::new(schema, bpm);
         slices.iter().for_each(|s| {
-            let num_tuple = s.get_num_tuple();
-            for idx in 0..num_tuple {
-                let tuple = s.at(idx).unwrap();
-                if let Some(tuple) = tuple {
-                    table.insert(tuple).unwrap();
-                }
+            for tuple in s.tuple_iter() {
+                table.insert(tuple).unwrap();
             }
         });
         table
@@ -191,7 +179,7 @@ impl Table {
         let mut page_id = self.get_page_id_of_first_slice();
         while page_id.is_some() {
             let slice = Slice::open(self.bpm.clone(), self.schema.clone(), page_id.unwrap());
-            let next_page_id = slice.get_next_page_id();
+            let next_page_id = slice.meta().unwrap().next_page_id;
             slices.push(slice);
             page_id = next_page_id;
         }
@@ -199,7 +187,7 @@ impl Table {
     }
     pub fn remove(&mut self, record_id: RecordID) -> Result<(), TableError> {
         let mut slice = Slice::open(self.bpm.clone(), self.schema.clone(), record_id.0);
-        slice.remove(record_id.1)
+        slice.remove_at(record_id.1)
     }
     pub fn erase(self) {
         let bpm = self.bpm.clone();
@@ -207,7 +195,7 @@ impl Table {
         let slice_page_ids = self
             .into_slice()
             .into_iter()
-            .map(|s| s.get_page_id())
+            .map(|s| s.page_id())
             .collect_vec();
         for page_id in slice_page_ids
             .into_iter()
@@ -232,6 +220,8 @@ pub enum TableError {
     SliceIndexOutOfBound,
     #[error("Delete Tuple That Already Deleted")]
     AlreadyDeleted,
+    #[error("SlicePage: {0}")]
+    SlicePage(#[from] SlottedPageError),
 }
 
 #[cfg(test)]
@@ -254,9 +244,14 @@ mod tests {
                 let _ = table.insert(vec![Datum::Int(Some(idx))]).unwrap();
             }
             // validate
-            table.iter().sorted().enumerate().for_each(|(idx, datums)| {
-                assert_eq!(Datum::Int(Some(idx as i32)), datums[0]);
-            });
+            table
+                .iter()
+                .flat_map(|s| s.tuple_iter().collect_vec())
+                .sorted()
+                .enumerate()
+                .for_each(|(idx, datums)| {
+                    assert_eq!(Datum::Int(Some(idx as i32)), datums[0]);
+                });
             filename
         };
         remove_file(filename).unwrap();

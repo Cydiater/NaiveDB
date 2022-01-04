@@ -103,6 +103,7 @@ mod tests {
                     db.run(format!("select v1 from t where v1 = {};", num).as_str())
                         .unwrap()
                         .iter()
+                        .flat_map(|s| s.tuple_iter().collect_vec())
                         .collect_vec(),
                     [[Datum::Int(Some(*num as i32))]],
                 );
@@ -128,7 +129,10 @@ mod tests {
             db.run("insert into t values (4, '4'), (5, '5'), (6, '6');")
                 .unwrap();
             let table = db.run("select * from t where v1 > 1 and v1 < 6;").unwrap();
-            let res = table.iter().collect_vec();
+            let res = table
+                .iter()
+                .flat_map(|s| s.tuple_iter().collect_vec())
+                .collect_vec();
             assert_eq!(
                 res,
                 vec![
@@ -153,7 +157,10 @@ mod tests {
             db.run("create table t (v1 int not null);").unwrap();
             db.run("insert into t values (1), (2), (3);").unwrap();
             let table = db.run("select * from t;").unwrap();
-            let tuples = table.iter().collect_vec();
+            let tuples = table
+                .iter()
+                .flat_map(|s| s.tuple_iter().collect_vec())
+                .collect_vec();
             assert_eq!(
                 tuples,
                 vec![
@@ -163,7 +170,10 @@ mod tests {
                 ]
             );
             let table = db.run("select v1 from t;").unwrap();
-            let tuples = table.iter().collect_vec();
+            let tuples = table
+                .iter()
+                .flat_map(|s| s.tuple_iter().collect_vec())
+                .collect_vec();
             assert_eq!(
                 tuples,
                 vec![
@@ -173,7 +183,10 @@ mod tests {
                 ]
             );
             let table = db.run("select v1 from t where v1 = 1;").unwrap();
-            let tuples = table.iter().collect_vec();
+            let tuples = table
+                .iter()
+                .flat_map(|s| s.tuple_iter().collect_vec())
+                .collect_vec();
             assert_eq!(tuples, vec![vec![Datum::Int(Some(1))],]);
             db.run("alter table t add index (v1);").unwrap();
             db.run("desc t;").unwrap();
@@ -183,7 +196,10 @@ mod tests {
             db.run("create table t1 (v1 int not null, v2 int not null, primary key (v1), foreign key (v2) references t (v1));").unwrap();
             db.run("insert into t values (4), (5), (6);").unwrap();
             let table = db.run("select * from t;").unwrap();
-            let tuples = table.iter().collect_vec();
+            let tuples = table
+                .iter()
+                .flat_map(|s| s.tuple_iter().collect_vec())
+                .collect_vec();
             assert_eq!(
                 tuples,
                 vec![
@@ -194,7 +210,10 @@ mod tests {
             );
             db.run("delete from t where v1 = 5;").unwrap();
             let table = db.run("select * from t;").unwrap();
-            let tuples = table.iter().collect_vec();
+            let tuples = table
+                .iter()
+                .flat_map(|s| s.tuple_iter().collect_vec())
+                .collect_vec();
             assert_eq!(
                 tuples,
                 vec![vec![Datum::Int(Some(4))], vec![Datum::Int(Some(6))],]
@@ -219,7 +238,10 @@ mod tests {
             db.run("create table t (v1 int not null);").unwrap();
             db.run("insert into t values (1), (2), (3);").unwrap();
             let table = db.run("select * from t;").unwrap();
-            let tuples = table.iter().collect_vec();
+            let tuples = table
+                .iter()
+                .flat_map(|s| s.tuple_iter().collect_vec())
+                .collect_vec();
             assert_eq!(
                 tuples,
                 vec![
@@ -229,7 +251,10 @@ mod tests {
                 ]
             );
             let table = db.run("select v1 from t;").unwrap();
-            let tuples = table.iter().collect_vec();
+            let tuples = table
+                .iter()
+                .flat_map(|s| s.tuple_iter().collect_vec())
+                .collect_vec();
             assert_eq!(
                 tuples,
                 vec![
@@ -244,7 +269,10 @@ mod tests {
             let mut db = NaiveDB::new_with_name(filename.clone());
             db.run("use d;").unwrap();
             let table = db.run("select * from t;").unwrap();
-            let tuples = table.iter().collect_vec();
+            let tuples = table
+                .iter()
+                .flat_map(|s| s.tuple_iter().collect_vec())
+                .collect_vec();
             assert_eq!(
                 tuples,
                 vec![
@@ -270,7 +298,10 @@ mod tests {
             db.run("insert into t values (1, 'foo'), (2, null), (null, 'bar');")
                 .unwrap();
             let table = db.run("select * from t;").unwrap();
-            let tuples = table.iter().collect_vec();
+            let tuples = table
+                .iter()
+                .flat_map(|s| s.tuple_iter().collect_vec())
+                .collect_vec();
             assert_eq!(
                 tuples,
                 vec![
@@ -280,7 +311,10 @@ mod tests {
                 ]
             );
             let table = db.run("select v1 from t;").unwrap();
-            let tuples = table.iter().collect_vec();
+            let tuples = table
+                .iter()
+                .flat_map(|s| s.tuple_iter().collect_vec())
+                .collect_vec();
             assert_eq!(
                 tuples,
                 vec![

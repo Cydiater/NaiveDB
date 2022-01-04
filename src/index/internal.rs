@@ -1,20 +1,8 @@
 use crate::datum::Datum;
-use crate::index::IndexError;
-use crate::storage::{BufferPoolManagerRef, PageID, PageRef, PAGE_SIZE};
+use crate::index::{IndexError, IndexNode, IndexNodeMeta};
+use crate::storage::{BufferPoolManagerRef, PageID, PageRef, SlottedPage};
 use crate::table::SchemaRef;
-use std::convert::TryInto;
-use std::ops::Range;
-
-///
-/// InternalNode Format:
-///
-///     | Meta | page_id[0] | offset[0] | ... | page_id[n - 1]    |
-///                                       ... | data[1] | data[0] |
-///
-/// Meta Format:
-///
-///     | is_leaf | parent_page_id | next_page_id | head | tail |
-///
+use itertools::Itertools;
 
 impl Drop for InternalNode {
     fn drop(&mut self) {
@@ -32,15 +20,56 @@ pub struct InternalNode {
 
 pub type Siblings = (Option<(PageID, Vec<Datum>)>, Option<(Vec<Datum>, PageID)>);
 
-impl InternalNode {
-    const IS_LEAF: Range<usize> = 0..1;
-    const PARENT_PAGE_ID: Range<usize> = 1..5;
-    const NEXT_PAGE_ID: Range<usize> = 5..9;
-    const HEAD: Range<usize> = 9..13;
-    const TAIL: Range<usize> = 13..17;
-    const SIZE_OF_META: usize = 17;
+#[derive(Clone, Copy)]
+pub struct InternalMeta {
+    pub common: IndexNodeMeta,
+    pub leftmost: Option<PageID>,
+}
 
-    pub fn new_root(
+type InternalPage = SlottedPage<InternalMeta, PageID>;
+
+impl InternalNode {
+    fn internal_page(&self) -> &InternalPage {
+        unsafe { &*(self.page.borrow().buffer.as_ptr() as *const InternalPage) }
+    }
+
+    fn internal_page_mut(&mut self) -> &mut InternalPage {
+        self.page.borrow_mut().is_dirty = true;
+        unsafe { &mut *(self.page.borrow_mut().buffer.as_mut_ptr() as *mut InternalPage) }
+    }
+
+    pub fn store_stat(&self) -> (usize, usize) {
+        self.internal_page().store_stat()
+    }
+
+    pub fn meta(&self) -> &InternalMeta {
+        let internal_page = self.internal_page();
+        internal_page.meta()
+    }
+
+    pub fn page_id(&self) -> PageID {
+        self.page.borrow().page_id.unwrap()
+    }
+
+    pub fn meta_mut(&mut self) -> &mut InternalMeta {
+        self.internal_page_mut().meta_mut()
+    }
+
+    pub fn candidate_child(&self) -> Option<usize> {
+        if self.len() == 0 {
+            self.meta().leftmost
+        } else if self.len() == 1 {
+            if self.meta().leftmost.is_some() {
+                None
+            } else {
+                Some(self.page_id_at(0))
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn new_as_root(
         bpm: BufferPoolManagerRef,
         schema: SchemaRef,
         key: &[Datum],
@@ -48,90 +77,37 @@ impl InternalNode {
         page_id_rhs: PageID,
     ) -> Self {
         let page = bpm.borrow_mut().alloc().unwrap();
-        {
+        unsafe {
             let buffer = &mut page.borrow_mut().buffer;
-            // not leaf
-            buffer[Self::IS_LEAF].copy_from_slice(&[0u8]);
-            // no parent
-            buffer[Self::PARENT_PAGE_ID].copy_from_slice(&[0u8; 4]);
-            // set head
-            buffer[Self::HEAD].copy_from_slice(&((Self::SIZE_OF_META + 12) as u32).to_le_bytes());
-            // page_id
-            buffer[Self::SIZE_OF_META..Self::SIZE_OF_META + 4]
-                .copy_from_slice(&(page_id_lhs as u32).to_le_bytes());
-            buffer[Self::SIZE_OF_META + 8..Self::SIZE_OF_META + 12]
-                .copy_from_slice(&(page_id_rhs as u32).to_le_bytes());
-            // key
-            let bytes = Datum::to_bytes_with_schema(key, schema.clone());
-            let end = PAGE_SIZE;
-            let start = end - bytes.len();
-            buffer[start..end].copy_from_slice(&bytes);
-            buffer[Self::SIZE_OF_META + 4..Self::SIZE_OF_META + 8]
-                .copy_from_slice(&(end as u32).to_le_bytes());
-            // set tail
-            buffer[Self::TAIL].copy_from_slice(&(start as u32).to_le_bytes());
-            // set next_page_id
-            buffer[Self::NEXT_PAGE_ID].copy_from_slice(&0u32.to_le_bytes());
+            let slotted = &mut *(buffer.as_mut_ptr() as *mut InternalPage);
+            slotted.reset(&InternalMeta {
+                common: IndexNodeMeta {
+                    is_leaf: false,
+                    parent_page_id: None,
+                    next_page_id: None,
+                },
+                leftmost: Some(page_id_lhs),
+            });
+            let bytes = Datum::to_bytes_with_schema(key, schema.as_ref());
+            slotted.append(&page_id_rhs, &bytes).unwrap();
         }
         page.borrow_mut().is_dirty = true;
         Self { page, bpm, schema }
     }
 
-    pub fn get_next_page_id(&self) -> Option<usize> {
-        let next_page_id = u32::from_le_bytes(
-            self.page.borrow().buffer[Self::NEXT_PAGE_ID]
-                .try_into()
-                .unwrap(),
-        ) as usize;
-        if next_page_id == 0 {
-            None
-        } else {
-            Some(next_page_id)
-        }
-    }
-
-    pub fn set_next_page_id(&mut self, page_id: Option<PageID>) {
-        let page_id = page_id.unwrap_or(0);
-        self.page.borrow_mut().buffer[Self::NEXT_PAGE_ID]
-            .copy_from_slice(&((page_id as u32).to_le_bytes()));
-        self.page.borrow_mut().is_dirty = true;
-    }
-
-    pub fn get_only_child(&self) -> Option<PageID> {
-        let mut page_id = None;
-        for idx in 0..self.len() {
-            if let Some(child) = self.page_id_at(idx) {
-                if page_id.is_some() {
-                    return None;
-                } else {
-                    page_id = Some(child);
-                }
-            }
-        }
-        page_id
-    }
-
-    pub fn new_single_child(
-        bpm: BufferPoolManagerRef,
-        schema: SchemaRef,
-        page_id: Option<PageID>,
-    ) -> Self {
+    pub fn new(bpm: BufferPoolManagerRef, schema: SchemaRef, leftmost: Option<PageID>) -> Self {
         let page = bpm.borrow_mut().alloc().unwrap();
-        {
+        unsafe {
             let buffer = &mut page.borrow_mut().buffer;
-            // not leaf
-            buffer[Self::IS_LEAF].copy_from_slice(&[0u8]);
-            // no parent
-            buffer[Self::PARENT_PAGE_ID].copy_from_slice(&[0u8; 4]);
-            // set head
-            buffer[Self::HEAD].copy_from_slice(&((Self::SIZE_OF_META + 4) as u32).to_le_bytes());
-            // set tail
-            buffer[Self::TAIL].copy_from_slice(&(PAGE_SIZE as u32).to_le_bytes());
-            // page_id
-            buffer[Self::SIZE_OF_META..Self::SIZE_OF_META + 4]
-                .copy_from_slice(&(page_id.unwrap_or(0) as u32).to_le_bytes());
-            // set next_page_id
-            buffer[Self::NEXT_PAGE_ID].copy_from_slice(&0u32.to_le_bytes());
+            let slotted = &mut *(buffer.as_mut_ptr() as *mut InternalPage);
+            slotted.reset(&InternalMeta {
+                common: IndexNodeMeta {
+                    is_leaf: false,
+                    parent_page_id: None,
+                    next_page_id: None,
+                },
+                leftmost,
+            });
         }
         page.borrow_mut().is_dirty = true;
         Self { page, bpm, schema }
@@ -143,104 +119,34 @@ impl InternalNode {
         page_id: PageID,
     ) -> Result<Self, IndexError> {
         let page = bpm.borrow_mut().fetch(page_id).unwrap();
-        if page.borrow().buffer[Self::IS_LEAF] != [0u8] {
-            return Err(IndexError::NotInternalIndexNode);
+        unsafe {
+            let slotted = &*(page.borrow().buffer.as_ptr() as *const InternalPage);
+            if slotted.meta().common.is_leaf {
+                return Err(IndexError::NotInternalIndexNode);
+            }
         }
         Ok(Self { page, bpm, schema })
     }
 
-    pub fn get_parent_page_id(&self) -> Option<PageID> {
-        let parent_page_id = u32::from_le_bytes(
-            self.page.borrow().buffer[Self::PARENT_PAGE_ID]
-                .try_into()
-                .unwrap(),
-        ) as usize;
-        if parent_page_id == 0 {
-            None
-        } else {
-            Some(parent_page_id)
-        }
-    }
-
-    pub fn get_page_id(&self) -> PageID {
-        self.page.borrow().page_id.unwrap()
-    }
-
-    pub fn get_head(&self) -> usize {
-        u32::from_le_bytes(self.page.borrow().buffer[Self::HEAD].try_into().unwrap()) as usize
-    }
-
-    pub fn get_tail(&self) -> usize {
-        u32::from_le_bytes(self.page.borrow().buffer[Self::TAIL].try_into().unwrap()) as usize
-    }
-
-    fn set_head(&self, head: usize) {
-        self.page.borrow_mut().buffer[Self::HEAD].copy_from_slice(&(head as u32).to_le_bytes());
-        self.page.borrow_mut().is_dirty = true;
-    }
-
-    fn set_tail(&self, tail: usize) {
-        self.page.borrow_mut().buffer[Self::TAIL].copy_from_slice(&(tail as u32).to_le_bytes());
-        self.page.borrow_mut().is_dirty = true;
-    }
-
-    /// return the number of page_id
     pub fn len(&self) -> usize {
-        let head = self.get_head();
-        (head - Self::SIZE_OF_META + 4) / 8
+        self.internal_page().capacity()
     }
 
-    pub fn set_parent_page_id(&self, page_id: Option<PageID>) {
-        let page_id = page_id.unwrap_or(0);
-        self.page.borrow_mut().buffer[Self::PARENT_PAGE_ID]
-            .copy_from_slice(&((page_id as u32).to_le_bytes()));
-        self.page.borrow_mut().is_dirty = true;
-    }
-
-    fn set_offset_at(&mut self, idx: usize, offset: usize) {
-        let start = Self::SIZE_OF_META + idx * 8 + 4;
-        let end = start + 4;
-        self.page.borrow_mut().buffer[start..end].copy_from_slice(&(offset as u32).to_le_bytes());
-        self.page.borrow_mut().is_dirty = true;
-    }
-
-    fn offset_at(&self, idx: usize) -> usize {
-        let start = Self::SIZE_OF_META + idx * 8 + 4;
-        let end = start + 4;
-        let bytes: [u8; 4] = self.page.borrow().buffer[start..end].try_into().unwrap();
-        u32::from_le_bytes(bytes) as usize
-    }
-
-    pub fn page_id_at(&self, idx: usize) -> Option<PageID> {
-        let start = Self::SIZE_OF_META + idx * 8;
-        let end = start + 4;
-        let bytes: [u8; 4] = self.page.borrow().buffer[start..end].try_into().unwrap();
-        match u32::from_le_bytes(bytes) as usize {
-            0 => None,
-            page_id => Some(page_id),
-        }
+    pub fn page_id_at(&self, idx: usize) -> PageID {
+        *self.internal_page().key_at(idx)
     }
 
     pub fn key_at(&self, idx: usize) -> Vec<Datum> {
-        assert!(idx < self.len() - 1);
-        let base_offset = self.offset_at(idx);
-        let bytes = &self.page.borrow().buffer[..base_offset];
-        Datum::from_bytes_and_schema(self.schema.clone(), bytes)
+        let internal_page = self.internal_page();
+        Datum::from_bytes_and_schema(self.schema.as_ref(), internal_page.data_at(idx))
     }
 
-    /// return the index of child where this key belong
-    pub fn index_of(&self, key: &[Datum]) -> usize {
-        let num_child = self.len();
-        // if we have only one child
-        if num_child == 1 {
-            return 0;
-        }
-        // the index here is about key
-        let mut left = 0usize;
-        let mut right = num_child as usize - 2;
-        let mut mid;
+    pub fn index_of(&self, key: &[Datum]) -> isize {
+        let len = self.len();
+        let mut left = 0;
+        let mut right = len - 1;
         while left + 1 < right {
-            mid = (left + right) / 2;
+            let mid = (left + right) / 2;
             if key < &self.key_at(mid) {
                 right = mid;
             } else {
@@ -248,187 +154,118 @@ impl InternalNode {
             }
         }
         if key >= &self.key_at(right) {
-            right + 1
+            right as isize
         } else if key >= &self.key_at(left) {
-            left + 1
+            left as isize
         } else {
-            0
+            -1
         }
     }
 
     pub fn split(&mut self) -> Self {
-        let len = self.len();
-        let mut keys = vec![];
-        let mut page_ids = vec![];
-        // collect keys and page_ids
-        for idx in 0..len - 1 {
-            let key = self.key_at(idx);
-            keys.push(key);
-        }
-        for idx in 0..len {
-            let page_id = self.page_id_at(idx);
-            page_ids.push(page_id);
-        }
-        // clear lhs
-        self.set_head(Self::SIZE_OF_META + 4);
-        self.set_tail(PAGE_SIZE);
-        let len_lhs = (len - 1) / 2;
-        self.set_left_most_page_id(page_ids.remove(0));
-        for idx in 0..len_lhs {
-            self.append(keys[idx].as_slice(), page_ids[idx].unwrap_or(0))
+        let schema = self.schema.clone();
+        let bpm = self.bpm.clone();
+        let internal_page = self.internal_page_mut();
+        let key_page_id_set = internal_page
+            .key_data_iter()
+            .map(|(k, d)| (Datum::from_bytes_and_schema(schema.as_ref(), d), *k))
+            .collect_vec();
+        let meta = *internal_page.meta();
+        internal_page.reset(&meta);
+        let len = key_page_id_set.len();
+        let len_lhs = len / 2;
+        for (key, page_id) in key_page_id_set.iter().take(len_lhs) {
+            internal_page
+                .append(page_id, &Datum::to_bytes_with_schema(key, schema.as_ref()))
                 .unwrap();
         }
-        self.page.borrow_mut().is_dirty = true;
-        // setup rhs
-        let mut rhs = Self::new_single_child(self.bpm.clone(), self.schema.clone(), None);
-        for idx in len_lhs..len - 1 {
-            rhs.append(keys[idx].as_slice(), page_ids[idx].unwrap_or(0))
-                .unwrap();
+        let mut rhs = InternalNode::new(bpm.clone(), schema.clone(), None);
+        for (key, page_id) in key_page_id_set.into_iter().skip(len_lhs) {
+            rhs.append(&key, page_id).unwrap();
+            let mut child = IndexNode::open(bpm.clone(), schema.clone(), page_id);
+            child.meta_mut().parent_page_id = Some(rhs.page_id());
         }
-        // set parent_page_id
-        rhs.set_parent_page_id(self.get_parent_page_id());
-        rhs.page.borrow_mut().is_dirty = true;
-        // set next_page_id
-        rhs.set_next_page_id(self.get_next_page_id());
-        self.set_next_page_id(Some(rhs.get_page_id()));
+        rhs.meta_mut().common.parent_page_id = internal_page.meta().common.parent_page_id;
+        rhs.meta_mut().common.next_page_id = internal_page.meta().common.next_page_id;
+        internal_page.meta_mut().common.next_page_id = Some(rhs.page_id());
         rhs
     }
 
-    pub fn ok_to_insert(&self, datums: &[Datum]) -> bool {
-        let bytes = Datum::to_bytes_with_schema(datums, self.schema.clone());
-        let head = self.get_head();
-        let tail = self.get_tail();
-        head + 8 + bytes.len() <= tail
-    }
-
-    /// since you can't modify left-most page_id with insert
-    pub fn set_left_most_page_id(&mut self, page_id: Option<PageID>) {
-        self.page.borrow_mut().buffer[Self::SIZE_OF_META..Self::SIZE_OF_META + 4]
-            .copy_from_slice(&(page_id.unwrap_or(0) as u32).to_le_bytes());
-        self.page.borrow_mut().is_dirty = true;
-    }
-
-    pub fn find_siblings(&self, page_id: PageID) -> Siblings {
-        let idx = (0..self.len())
-            .find(|idx| self.page_id_at(*idx) == Some(page_id))
+    pub fn siblings_of(&self, page_id: PageID) -> Siblings {
+        if Some(page_id) == self.meta().leftmost {
+            let right = if self.len() > 0 {
+                Some((self.key_at(0), self.page_id_at(0)))
+            } else {
+                None
+            };
+            return (None, right);
+        }
+        let len = self.len();
+        let idx = (0..len)
+            .into_iter()
+            .find(|idx| self.page_id_at(*idx) == page_id)
             .unwrap();
-        let p_page_id = if idx == 0 {
-            None
+        let left = if idx > 0 {
+            Some((self.page_id_at(idx - 1), self.key_at(idx)))
         } else {
-            Some((self.page_id_at(idx - 1).unwrap(), self.key_at(idx - 1)))
+            self.meta()
+                .leftmost
+                .map(|leftmost_page_id| (leftmost_page_id, self.key_at(idx)))
         };
-        let q_page_id = if idx == self.len() - 1 {
-            None
+        let right = if idx + 1 < len {
+            Some((self.key_at(idx + 1), self.page_id_at(idx + 1)))
         } else {
-            Some((self.key_at(idx), self.page_id_at(idx + 1).unwrap()))
+            None
         };
-        (p_page_id, q_page_id)
+        (left, right)
     }
 
-    #[allow(dead_code)]
     pub fn remove(&mut self, key: &[Datum]) -> Result<(), IndexError> {
-        let idx = self.index_of(key) - 1;
-        if self.key_at(idx) != key {
-            return Err(IndexError::KeyNotFound);
-        }
-        let offset1 = self.offset_at(idx);
-        let mut offset2 = self.get_tail();
-        // TODO hack here, do better later
-        for idx in 0..self.len() - 1 {
-            let offset = self.offset_at(idx);
-            if offset < offset1 && offset > offset2 {
-                offset2 = offset;
+        let idx = match self.index_of(key) {
+            -1 => Err(IndexError::KeyNotFound),
+            idx => {
+                let idx = idx as usize;
+                if self.key_at(idx) != key {
+                    Err(IndexError::KeyNotFound)
+                } else {
+                    Ok(idx)
+                }
             }
-        }
-        let tail = self.get_tail();
-        let offset_delta = offset1 - offset2;
-        self.page
-            .borrow_mut()
-            .buffer
-            .copy_within(tail..offset2, tail + offset_delta);
-        for i in idx..self.len() - 2 {
-            let next_offset = self.offset_at(i + 1);
-            let next_page_id = self.page_id_at(i + 2).unwrap();
-            let start = Self::SIZE_OF_META + i * 8 + 4;
-            let end = start + 4;
-            self.page.borrow_mut().buffer[start..end]
-                .copy_from_slice(&(next_offset as u32).to_le_bytes());
-            let start = end;
-            let end = start + 4;
-            self.page.borrow_mut().buffer[start..end]
-                .copy_from_slice(&(next_page_id as u32).to_le_bytes());
-        }
-        for i in 0..self.len() - 2 {
-            let offset = self.offset_at(i);
-            if offset < offset1 {
-                self.set_offset_at(i, offset + offset_delta);
-            }
-        }
-        self.page.borrow_mut().is_dirty = true;
-        let head = self.get_head();
-        self.set_head(head - 8);
-        let tail = self.get_tail();
-        self.set_tail(tail + offset_delta);
+        }?;
+        let internal_page = self.internal_page_mut();
+        internal_page.remove_at(idx)?;
+        internal_page.move_forward(idx + 1)?;
         Ok(())
     }
 
     /// append to the end, the order should be preserved
     pub fn append(&mut self, key: &[Datum], page_id: PageID) -> Result<(), IndexError> {
-        self.insert_at(self.len() - 1, key, page_id)
+        let schema = self.schema.clone();
+        let internal_page = self.internal_page_mut();
+        internal_page.append(&page_id, &Datum::to_bytes_with_schema(key, schema.as_ref()))?;
+        Ok(())
     }
 
     /// random insert
     pub fn insert(&mut self, key: &[Datum], page_id: PageID) -> Result<(), IndexError> {
-        let idx = self.index_of(key);
-        self.insert_at(idx, key, page_id)
+        let idx = (self.index_of(key) + 1) as usize;
+        let schema = self.schema.clone();
+        let internal_page = self.internal_page_mut();
+        if internal_page.store_stat().1
+            < Datum::to_bytes_with_schema(key, &schema).len() + std::mem::size_of::<PageID>() + 16
+        {
+            return Err(IndexError::NodeOutOfSpace);
+        }
+        internal_page.move_backward(idx)?;
+        internal_page.insert_at(idx, &page_id, &Datum::to_bytes_with_schema(key, &schema))?;
+        Ok(())
     }
 
     pub fn update_key_with(&mut self, key: &[Datum], new_key: &[Datum]) {
-        let idx = self.index_of(key);
+        let idx = self.index_of(key) as usize;
         let page_id = self.page_id_at(idx);
         self.remove(key).unwrap();
-        self.insert(new_key, page_id.unwrap()).unwrap();
-    }
-
-    pub fn insert_at(
-        &mut self,
-        idx: usize,
-        key: &[Datum],
-        page_id: PageID,
-    ) -> Result<(), IndexError> {
-        // | offset[idx - 1] | page_id[idx] | offset[idx] | ... | page_id[n - 1] |
-        //                                start                                 end
-        //                      =>
-        // | offset[idx - 1] | page_id[idx] | new_offset | new_page_id | offset[idx]
-        let bytes = Datum::to_bytes_with_schema(key, self.schema.clone());
-        if self.get_head() + 8 > self.get_tail() - bytes.len() {
-            return Err(IndexError::NodeOutOfSpace);
-        }
-        let start = Self::SIZE_OF_META + idx * 8 + 4;
-        let end = Self::SIZE_OF_META + self.len() * 8 + 4;
-        // move bytes at start..end 8 bytes backward
-        self.page
-            .borrow_mut()
-            .buffer
-            .copy_within(start..end, start + 8);
-        // fill key
-        let end = self.get_tail();
-        let start = end - bytes.len();
-        self.page.borrow_mut().buffer[start..end].copy_from_slice(&bytes);
-        self.set_tail(start);
-        let head = self.get_head();
-        self.set_head(head + 8);
-        // set offset
-        let start = Self::SIZE_OF_META + idx * 8 + 4;
-        self.page.borrow_mut().buffer[start..start + 4]
-            .copy_from_slice(&(end as u32).to_le_bytes());
-        // set page_id
-        let start = Self::SIZE_OF_META + idx * 8 + 8;
-        self.page.borrow_mut().buffer[start..start + 4]
-            .copy_from_slice(&(page_id as u32).to_le_bytes());
-        // mark dirty
-        self.page.borrow_mut().is_dirty = true;
-        Ok(())
+        self.insert(new_key, page_id).unwrap();
     }
 
     #[allow(dead_code)]
@@ -464,7 +301,7 @@ mod tests {
                 "v1".to_string(),
             )]));
             let dummy_page_id = 10;
-            let mut node = InternalNode::new_root(
+            let mut node = InternalNode::new_as_root(
                 bpm,
                 key_schema,
                 &[Datum::Int(Some(1))],
@@ -477,8 +314,8 @@ mod tests {
                 .unwrap();
             node.insert(&[Datum::Int(Some(8))], dummy_page_id + 3)
                 .unwrap();
-            assert_eq!(node.index_of(&[Datum::Int(Some(5))]), 3);
-            assert_eq!(node.index_of(&[Datum::Int(Some(-5))]), 0);
+            assert_eq!(node.index_of(&[Datum::Int(Some(5))]), 2);
+            assert_eq!(node.index_of(&[Datum::Int(Some(-5))]), -1);
             node.remove(&[Datum::Int(Some(4))]).unwrap();
             assert_eq!(node.key_at(2), [Datum::Int(Some(8))]);
             filename

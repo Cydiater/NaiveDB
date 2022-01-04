@@ -41,10 +41,10 @@ impl Executor for DropTableExecutor {
         self.catalog
             .borrow_mut()
             .remove_indexes_by_table(&self.table_name)?;
-        Ok(Some(Slice::new_simple_message(
+        Ok(Some(Slice::new_as_message(
             self.bpm.clone(),
-            "table".to_string(),
-            self.table_name.clone(),
+            "table",
+            &self.table_name,
         )?))
     }
 }

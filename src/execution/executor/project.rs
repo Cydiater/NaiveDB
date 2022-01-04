@@ -50,14 +50,14 @@ impl Executor for ProjectExecutor {
                         let datums = columns.iter_mut().map(|v| v.remove(0)).collect_vec();
                         self.buffer.push(datums);
                     }
-                } else if slice.get_num_tuple() == 0 {
+                } else if slice.count() == 0 {
                     return Ok(None);
                 } else {
                     return Ok(Some(slice));
                 }
             }
-            if slice.ok_to_add(&self.buffer[0]) {
-                slice.add(&self.buffer.remove(0))?;
+            if slice.insert(&self.buffer[0]).is_ok() {
+                self.buffer.remove(0);
             } else {
                 break;
             }

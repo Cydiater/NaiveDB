@@ -1,4 +1,4 @@
-use crate::table::SchemaRef;
+use crate::table::Schema;
 use pad::PadStr;
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
@@ -66,7 +66,7 @@ impl Datum {
             _ => todo!(),
         }
     }
-    pub fn to_bytes_with_schema(datums: &[Datum], schema: SchemaRef) -> Vec<u8> {
+    pub fn to_bytes_with_schema(datums: &[Datum], schema: &Schema) -> Vec<u8> {
         let mut bytes_fragment = vec![];
         let mut not_inlined_data = Vec::<(usize, DataType, &Datum)>::new();
         let mut offset = 0;
@@ -99,7 +99,7 @@ impl Datum {
         });
         bytes
     }
-    pub fn from_bytes_and_schema(schema: SchemaRef, bytes: &[u8]) -> Vec<Datum> {
+    pub fn from_bytes_and_schema(schema: &Schema, bytes: &[u8]) -> Vec<Datum> {
         let base_offset = bytes.len();
         let mut datums = vec![];
         for col in schema.iter() {
@@ -200,8 +200,8 @@ mod tests {
             Datum::VarChar(Some("foo".to_string())),
             Datum::Char(Some("bar".to_string())),
         ];
-        let bytes = Datum::to_bytes_with_schema(&datums, schema.clone());
-        let datums_to_check = Datum::from_bytes_and_schema(schema, bytes.as_slice());
+        let bytes = Datum::to_bytes_with_schema(&datums, schema.as_ref());
+        let datums_to_check = Datum::from_bytes_and_schema(schema.as_ref(), bytes.as_slice());
         assert_eq!(datums, datums_to_check);
     }
 }

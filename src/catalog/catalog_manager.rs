@@ -19,7 +19,7 @@ impl CatalogManager {
     pub fn new(bpm: BufferPoolManagerRef) -> Self {
         Self {
             bpm: bpm.clone(),
-            database_catalog: Catalog::new_database_catalog(bpm),
+            database_catalog: Catalog::new_for_database(bpm),
             table_catalog: None,
         }
     }
@@ -28,8 +28,8 @@ impl CatalogManager {
     }
     pub fn create_database(&mut self, database_name: &str) -> Result<(), CatalogError> {
         // create table catalog
-        let table_catalog = Catalog::new_empty(self.bpm.clone()).unwrap();
-        let page_id = table_catalog.get_page_id();
+        let table_catalog = Catalog::new(self.bpm.clone()).unwrap();
+        let page_id = table_catalog.page_id();
         // add to database catalog
         self.database_catalog
             .insert(page_id, database_name)
@@ -39,21 +39,15 @@ impl CatalogManager {
     pub fn create_table(&mut self, table_name: &str, page_id: PageID) -> Result<(), CatalogError> {
         if let Some(table_catalog) = self.table_catalog.as_mut() {
             info!("create table {}", table_name);
-            table_catalog.insert(page_id, table_name).unwrap();
+            table_catalog.insert(page_id, table_name)?;
             Ok(())
         } else {
             Err(CatalogError::NotUsingDatabase)
         }
     }
     pub fn use_database(&mut self, database_name: &str) -> Result<(), CatalogError> {
-        if let Some(page_id) = self
-            .database_catalog
-            .iter()
-            .filter(|(_, _, name)| name == database_name)
-            .map(|(_, page_id, _)| page_id)
-            .next()
-        {
-            let table_catalog = Catalog::new_with_page_id(self.bpm.clone(), page_id);
+        if let Some(page_id) = self.database_catalog.page_id_of(database_name) {
+            let table_catalog = Catalog::open(self.bpm.clone(), page_id)?;
             self.table_catalog = Some(table_catalog);
             info!("checkout to database {}", database_name);
             Ok(())
@@ -71,12 +65,7 @@ impl CatalogManager {
     }
     pub fn find_table(&self, table_name: &str) -> Result<Table, CatalogError> {
         if let Some(table_catalog) = &self.table_catalog {
-            if let Some(page_id) = table_catalog
-                .iter()
-                .filter(|(_, _, name)| name == table_name)
-                .map(|(_, page_id, _)| page_id)
-                .next()
-            {
+            if let Some(page_id) = table_catalog.page_id_of(table_name) {
                 Ok(Table::open(page_id, self.bpm.clone()))
             } else {
                 Err(CatalogError::EntryNotFound)
@@ -87,20 +76,13 @@ impl CatalogManager {
     }
     pub fn remove_indexes_by_table(&mut self, table_name: &str) -> Result<(), CatalogError> {
         if let Some(table_catalog) = &mut self.table_catalog {
-            let mut index_names = vec![];
-            for (_, _, name) in table_catalog.iter() {
-                let index_name = name.clone();
-                let parts = name.split(':').collect_vec();
-                if parts.len() == 1 {
-                    continue;
-                }
-                if parts[0] == table_name {
-                    index_names.push(index_name);
-                }
-            }
-            for index_name in index_names {
-                table_catalog.remove(&index_name)?;
-            }
+            table_catalog
+                .prefix_with(&format!("{}:", table_name))
+                .into_iter()
+                .map(|index_name| index_name.to_owned())
+                .collect_vec()
+                .into_iter()
+                .try_for_each(|index_name| table_catalog.remove(&index_name))?;
             Ok(())
         } else {
             Err(CatalogError::NotUsingDatabase)
@@ -108,21 +90,20 @@ impl CatalogManager {
     }
     pub fn find_indexes_by_table(&self, table_name: &str) -> Result<Vec<BPTIndex>, CatalogError> {
         if let Some(table_catalog) = &self.table_catalog {
-            let mut indexes = vec![];
-            for (_, page_id, name) in table_catalog.iter() {
-                let parts = name.split(':').collect_vec();
-                if parts.len() == 1 {
-                    continue;
-                }
-                if parts[0] == table_name {
-                    let index = BPTIndex::open(self.bpm.clone(), page_id);
-                    indexes.push(index);
-                }
-            }
-            Ok(indexes)
+            Ok(table_catalog
+                .prefix_with(&format!("{}:", table_name))
+                .into_iter()
+                .map(|name| {
+                    let page_id = table_catalog.page_id_of(name).unwrap();
+                    BPTIndex::open(self.bpm.clone(), page_id)
+                })
+                .collect_vec())
         } else {
             Err(CatalogError::NotUsingDatabase)
         }
+    }
+    pub fn database_iter(&self) -> CatalogIter {
+        self.database_catalog.iter()
     }
     pub fn add_index(
         &mut self,
@@ -138,9 +119,6 @@ impl CatalogManager {
         } else {
             Err(CatalogError::NotUsingDatabase)
         }
-    }
-    pub fn iter(&self) -> CatalogIter {
-        self.database_catalog.iter()
     }
 }
 
