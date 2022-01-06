@@ -10,6 +10,7 @@ pub use desc::DescPlan;
 pub use drop_table::DropTablePlan;
 pub use filter::FilterPlan;
 pub use insert::InsertPlan;
+pub use nested_loop_join::NestedLoopJoinPlan;
 pub use scan::{IndexScanPlan, SeqScanPlan};
 pub use select::ProjectPlan;
 pub use use_database::UseDatabasePlan;
@@ -23,6 +24,7 @@ mod desc;
 mod drop_table;
 mod filter;
 mod insert;
+mod nested_loop_join;
 mod scan;
 mod select;
 mod use_database;
@@ -44,6 +46,7 @@ pub enum Plan {
     IndexScan(IndexScanPlan),
     DropTable(DropTablePlan),
     Delete(DeletePlan),
+    NestedLoopJoin(NestedLoopJoinPlan),
 }
 
 pub struct Planner {

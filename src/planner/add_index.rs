@@ -11,12 +11,12 @@ pub struct AddIndexPlan {
 
 impl Planner {
     pub fn plan_add_index(&self, stmt: AddIndexStmt) -> Plan {
-        let table_name = stmt.table_name.clone();
+        let table = self.catalog.borrow().find_table(&stmt.table_name).unwrap();
         let exprs = stmt
             .exprs
             .into_iter()
             .map(|node| {
-                ExprImpl::from_ast(&node, self.catalog.clone(), Some(table_name.clone()), None)
+                ExprImpl::from_ast(&node, self.catalog.clone(), table.schema.as_ref(), None)
                     .unwrap()
             })
             .collect_vec();

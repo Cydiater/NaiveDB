@@ -34,6 +34,7 @@ pub struct ConstantExprNode {
 
 #[derive(Debug)]
 pub struct ColumnRefExprNode {
+    pub table_name: Option<String>,
     pub column_name: String,
 }
 
@@ -60,14 +61,14 @@ pub enum Selectors {
 #[derive(Debug)]
 pub struct DeleteStmt {
     pub table_name: String,
-    pub where_exprs: Option<Vec<ExprNode>>,
+    pub where_exprs: Vec<ExprNode>,
 }
 
 #[derive(Debug)]
 pub struct SelectStmt {
-    pub table_name: String,
+    pub table_names: Vec<String>,
     pub selectors: Selectors,
-    pub where_exprs: Option<Vec<ExprNode>>,
+    pub where_exprs: Vec<ExprNode>,
 }
 
 #[derive(Debug)]

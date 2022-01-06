@@ -133,6 +133,7 @@ impl Engine {
                     self.bpm.clone(),
                 )))
             }
+            _ => todo!(),
         }
     }
     pub fn new(catalog: CatalogManagerRef, bpm: BufferPoolManagerRef) -> Self {
