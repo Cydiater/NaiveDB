@@ -3,7 +3,7 @@ use crate::table::SchemaRef;
 
 #[derive(Debug)]
 pub struct NestedLoopJoinPlan {
-    pub childs: Vec<Plan>,
+    pub children: Vec<Plan>,
     pub schema: SchemaRef,
 }
 
@@ -12,7 +12,7 @@ impl Planner {
         match plans.len() {
             1 => plans.remove(0),
             _ => Plan::NestedLoopJoin(NestedLoopJoinPlan {
-                childs: plans,
+                children: plans,
                 schema,
             }),
         }

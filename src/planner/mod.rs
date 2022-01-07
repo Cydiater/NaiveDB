@@ -1,6 +1,7 @@
-use crate::catalog::CatalogManagerRef;
+use crate::catalog::{CatalogError, CatalogManagerRef};
 use crate::parser::ast::Statement;
 use log::info;
+use thiserror::Error;
 
 pub use add_index::AddIndexPlan;
 pub use create_database::CreateDatabasePlan;
@@ -57,11 +58,11 @@ impl Planner {
     pub fn new(catalog: CatalogManagerRef) -> Self {
         Self { catalog }
     }
-    pub fn plan(&self, stmt: Statement) -> Plan {
+    pub fn plan(&self, stmt: Statement) -> Result<Plan, PlanError> {
         info!("plan with statement {:#?}", stmt);
         match stmt {
             Statement::CreateDatabase(stmt) => self.plan_create_database(stmt),
-            Statement::ShowDatabases => Plan::ShowDatabases,
+            Statement::ShowDatabases => Ok(Plan::ShowDatabases),
             Statement::UseDatabase(stmt) => self.plan_use_database(stmt),
             Statement::CreateTable(stmt) => self.plan_create_table(stmt),
             Statement::Insert(stmt) => self.plan_insert(stmt),
@@ -72,6 +73,12 @@ impl Planner {
             Statement::Delete(stmt) => self.plan_delete(stmt),
         }
     }
+}
+
+#[derive(Error, Debug)]
+pub enum PlanError {
+    #[error("CatalogError: {0}")]
+    Catalog(#[from] CatalogError),
 }
 
 #[cfg(test)]
@@ -92,7 +99,7 @@ mod tests {
             let stmt = Statement::CreateDatabase(CreateDatabaseStmt {
                 database_name: "sample_database".to_string(),
             });
-            let plan = planner.plan(stmt);
+            let plan = planner.plan(stmt).unwrap();
             if let Plan::CreateDatabase(plan) = plan {
                 assert_eq!(plan.database_name, "sample_database");
             } else {

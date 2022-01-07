@@ -280,29 +280,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_schema_from_slice() {
-        let type_and_names = vec![
-            (DataType::new_int(false), "v1".to_string()),
-            (DataType::new_char(20, false), "v2".to_string()),
-            (DataType::new_varchar(false), "v3".to_string()),
-        ];
-        let schema = Schema::from_slice(type_and_names.as_slice());
-        let columns = schema.columns;
-        assert_eq!(
-            columns,
-            vec![
-                Column::new(5, DataType::new_int(false), "v1".to_string()),
-                Column::new(26, DataType::new_char(20, false), "v2".to_string(),),
-                Column::new(34, DataType::new_varchar(false), "v3".to_string()),
-            ]
-        );
-    }
-
-    #[test]
     fn test_to_from_bytes() {
         let type_and_names = vec![
             (DataType::new_int(false), "v1".to_string()),
-            (DataType::new_char(20, false), "v2".to_string()),
             (DataType::new_varchar(false), "v3".to_string()),
         ];
         let mut schema = Schema::from_slice(type_and_names.as_slice());

@@ -1,4 +1,4 @@
-use super::{Plan, Planner};
+use super::{Plan, PlanError, Planner};
 use crate::parser::ast::UseDatabaseStmt;
 
 #[derive(Debug)]
@@ -7,9 +7,9 @@ pub struct UseDatabasePlan {
 }
 
 impl Planner {
-    pub fn plan_use_database(&self, stmt: UseDatabaseStmt) -> Plan {
-        Plan::UseDatabase(UseDatabasePlan {
+    pub fn plan_use_database(&self, stmt: UseDatabaseStmt) -> Result<Plan, PlanError> {
+        Ok(Plan::UseDatabase(UseDatabasePlan {
             database_name: stmt.database_name,
-        })
+        }))
     }
 }

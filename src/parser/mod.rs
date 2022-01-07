@@ -44,7 +44,7 @@ mod tests {
     fn test_table_sql() {
         // create table
         assert!(sql::StatementsParser::new()
-            .parse("create table sample(v1 int not null, v2 char(20) null, primary key (v1), foreign key (v2) references t (v1));")
+            .parse("create table sample(v1 int not null, primary key (v1), foreign key (v2) references t (v1));")
             .is_ok());
         // insert into
         assert!(sql::StatementsParser::new()

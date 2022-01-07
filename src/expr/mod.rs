@@ -88,10 +88,6 @@ impl ExprImpl {
                         Datum::Int(None),
                         DataType::Int(*int_type),
                     )),
-                    DataType::Char(char_type) => ExprImpl::Constant(ConstantExpr::new(
-                        Datum::Char(None),
-                        DataType::Char(*char_type),
-                    )),
                     DataType::VarChar(varchar_type) => ExprImpl::Constant(ConstantExpr::new(
                         Datum::VarChar(None),
                         DataType::VarChar(*varchar_type),

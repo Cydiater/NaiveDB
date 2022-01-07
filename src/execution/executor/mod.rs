@@ -10,6 +10,7 @@ pub use drop_table::DropTableExecutor;
 pub use filter::FilterExecutor;
 pub use index_scan::IndexScanExecutor;
 pub use insert::InsertExecutor;
+pub use nested_loop_join::NestedLoopJoinExecutor;
 pub use project::ProjectExecutor;
 pub use seq_scan::SeqScanExecutor;
 pub use show_databases::ShowDatabasesExecutor;
@@ -25,6 +26,7 @@ mod drop_table;
 mod filter;
 mod index_scan;
 mod insert;
+mod nested_loop_join;
 mod project;
 mod seq_scan;
 mod show_databases;
@@ -52,6 +54,7 @@ pub enum ExecutorImpl {
     AddIndex(AddIndexExecutor),
     DropTable(DropTableExecutor),
     Delete(DeleteExecutor),
+    NestedLoopJoin(NestedLoopJoinExecutor),
 }
 
 impl ExecutorImpl {
@@ -71,6 +74,7 @@ impl ExecutorImpl {
             Self::IndexScan(executor) => executor.execute(),
             Self::DropTable(executor) => executor.execute(),
             Self::Delete(executor) => executor.execute(),
+            Self::NestedLoopJoin(executor) => executor.execute(),
         }
     }
     pub fn schema(&self) -> SchemaRef {
@@ -89,6 +93,7 @@ impl ExecutorImpl {
             Self::IndexScan(executor) => executor.schema(),
             Self::DropTable(executor) => executor.schema(),
             Self::Delete(executor) => executor.schema(),
+            Self::NestedLoopJoin(executor) => executor.schema(),
         }
     }
 }

@@ -1,7 +1,7 @@
 use crate::catalog::CatalogManagerRef;
 use crate::expr::ExprImpl;
 use crate::parser::ast::{ExprNode, SelectStmt, Selectors};
-use crate::planner::{Plan, Planner};
+use crate::planner::{Plan, PlanError, Planner};
 use crate::table::Schema;
 use itertools::Itertools;
 use std::collections::HashMap;
@@ -37,8 +37,22 @@ fn pair_table_name_with_filter(
         .collect();
     for expr in exprs {
         match expr {
-            ExprNode::Binary(expr) => match (expr.lhs.as_ref(), expr.rhs.as_ref()) {
-                (ExprNode::ColumnRef(_), ExprNode::ColumnRef(_)) => {
+            ExprNode::Binary(mut expr) => match (expr.lhs.as_mut(), expr.rhs.as_mut()) {
+                (ExprNode::ColumnRef(lhs), ExprNode::ColumnRef(rhs)) => {
+                    let table_name_lhs = lhs
+                        .table_name
+                        .as_ref()
+                        .unwrap_or_else(|| &column_to_table[&lhs.column_name])
+                        .to_owned();
+                    let table_name_rhs = rhs
+                        .table_name
+                        .as_ref()
+                        .unwrap_or_else(|| &column_to_table[&rhs.column_name])
+                        .to_owned();
+                    lhs.table_name = None;
+                    lhs.column_name = format!("{}.{}", table_name_lhs, lhs.column_name);
+                    rhs.table_name = None;
+                    rhs.column_name = format!("{}.{}", table_name_rhs, rhs.column_name);
                     overall_exprs.push(ExprNode::Binary(expr));
                 }
                 (ExprNode::ColumnRef(column_ref), _) | (_, ExprNode::ColumnRef(column_ref)) => {
@@ -64,7 +78,7 @@ fn pair_table_name_with_filter(
 }
 
 impl Planner {
-    pub fn plan_select(&self, stmt: SelectStmt) -> Plan {
+    pub fn plan_select(&self, stmt: SelectStmt) -> Result<Plan, PlanError> {
         let (table_with_filter_expr, overall) =
             pair_table_name_with_filter(&stmt.table_names, stmt.where_exprs, self.catalog.clone());
         let scan_plans = table_with_filter_expr
@@ -79,13 +93,26 @@ impl Planner {
                 }
             })
             .collect_vec();
+        let use_table_name = stmt.table_names.len() > 1;
         let schema = Rc::new(Schema::from_slice(
             &stmt
                 .table_names
                 .iter()
                 .flat_map(|table_name| {
                     let table = self.catalog.borrow().find_table(table_name).unwrap();
-                    table.schema.to_vec().into_iter()
+                    table
+                        .schema
+                        .to_vec()
+                        .into_iter()
+                        .map(|(data_type, column_name)| {
+                            if use_table_name {
+                                (data_type, format!("{}.{}", table_name, column_name))
+                            } else {
+                                (data_type, column_name)
+                            }
+                        })
+                        .collect_vec()
+                        .into_iter()
                 })
                 .collect_vec(),
         ));
@@ -97,12 +124,12 @@ impl Planner {
                 .into_iter()
                 .map(|node| ExprImpl::from_ast(&node, self.catalog.clone(), &schema, None).unwrap())
                 .collect_vec();
-            Plan::Project(ProjectPlan {
+            Ok(Plan::Project(ProjectPlan {
                 exprs,
                 child: Box::new(filter_plan),
-            })
+            }))
         } else {
-            filter_plan
+            Ok(filter_plan)
         }
     }
 }

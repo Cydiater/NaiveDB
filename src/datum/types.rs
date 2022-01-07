@@ -1,19 +1,6 @@
 use serde::{Deserialize, Serialize};
-use std::convert::TryInto;
 use std::fmt;
 use thiserror::Error;
-
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct CharType {
-    pub width: usize,
-    pub nullable: bool,
-}
-
-impl CharType {
-    pub fn new(width: usize, nullable: bool) -> Self {
-        Self { width, nullable }
-    }
-}
 
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct IntType {
@@ -51,7 +38,6 @@ impl BoolType {
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum DataType {
     Int(IntType),
-    Char(CharType),
     VarChar(VarCharType),
     Bool(BoolType),
 }
@@ -63,7 +49,6 @@ impl fmt::Display for DataType {
             "{}",
             match self {
                 Self::Int(_) => "int".to_string(),
-                Self::Char(char_type) => format!("char({})", char_type.width),
                 Self::VarChar(_) => "varchar".to_string(),
                 Self::Bool(_) => "bool".to_string(),
             }
@@ -81,14 +66,10 @@ impl DataType {
     pub fn new_varchar(nullable: bool) -> Self {
         Self::VarChar(VarCharType::new(nullable))
     }
-    pub fn new_char(width: usize, nullable: bool) -> Self {
-        Self::Char(CharType::new(width, nullable))
-    }
     pub fn width_of_value(&self) -> Option<usize> {
         match self {
             Self::Bool(_) => Some(2),
             Self::Int(_) => Some(5),
-            Self::Char(char_type) => Some(char_type.width + 1),
             _ => None,
         }
     }
@@ -97,14 +78,12 @@ impl DataType {
             Self::Bool(bool_type) => bool_type.nullable,
             Self::Int(int_type) => int_type.nullable,
             Self::VarChar(varchar_type) => varchar_type.nullable,
-            Self::Char(char_type) => char_type.nullable,
         }
     }
     pub fn is_inlined(&self) -> bool {
         match self {
             Self::Bool(_) => true,
             Self::Int(_) => true,
-            Self::Char(_) => true,
             Self::VarChar(_) => false,
         }
     }
@@ -112,11 +91,6 @@ impl DataType {
         let mask = if self.nullable() { 128u8 } else { 0u8 };
         match self {
             Self::Int(_) => [mask, 0, 0, 0, 0],
-            Self::Char(char_type) => {
-                let mut b = vec![1u8 | mask];
-                b.extend_from_slice(&(char_type.width as u32).to_le_bytes());
-                b.as_slice().try_into().unwrap()
-            }
             Self::VarChar(_) => [2u8 | mask, 0, 0, 0, 0],
             Self::Bool(_) => [3u8 | mask, 0, 0, 0, 0],
         }
@@ -126,10 +100,6 @@ impl DataType {
         let nullable = bytes[0] & 128 != 0;
         match type_id {
             0 => Ok(Self::Int(IntType::new(nullable))),
-            1 => Ok(Self::Char(CharType::new(
-                u32::from_le_bytes(bytes[1..5].try_into().unwrap()) as usize,
-                nullable,
-            ))),
             2 => Ok(Self::VarChar(VarCharType::new(nullable))),
             3 => Ok(Self::Bool(BoolType::new(nullable))),
             _ => Err(DataTypeError::UndefinedDataType),

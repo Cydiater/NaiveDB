@@ -1,6 +1,6 @@
 use crate::expr::ExprImpl;
 use crate::parser::ast::ExprNode;
-use crate::planner::{Plan, Planner};
+use crate::planner::{Plan, PlanError, Planner};
 use crate::table::SchemaRef;
 use itertools::Itertools;
 
@@ -11,7 +11,11 @@ pub struct ValuesPlan {
 }
 
 impl Planner {
-    pub fn plan_values(&self, values: Vec<Vec<ExprNode>>, schema: SchemaRef) -> Plan {
+    pub fn plan_values(
+        &self,
+        values: Vec<Vec<ExprNode>>,
+        schema: SchemaRef,
+    ) -> Result<Plan, PlanError> {
         let values = values
             .into_iter()
             .map(|nodes| {
@@ -30,6 +34,6 @@ impl Planner {
                     .collect_vec()
             })
             .collect_vec();
-        Plan::Values(ValuesPlan { values, schema })
+        Ok(Plan::Values(ValuesPlan { values, schema }))
     }
 }
