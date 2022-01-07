@@ -38,7 +38,7 @@ impl BinaryOp {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct BinaryExpr {
     lhs: Box<ExprImpl>,
     rhs: Box<ExprImpl>,

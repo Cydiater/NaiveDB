@@ -181,7 +181,7 @@ impl Drop for BPTIndex {
 pub struct BPTIndex {
     page: PageRef,
     bpm: BufferPoolManagerRef,
-    exprs: Vec<ExprImpl>,
+    pub exprs: Vec<ExprImpl>,
 }
 
 mod internal;
@@ -259,10 +259,10 @@ impl BPTIndex {
             .copy_from_slice(&(len_of_indexed_column_ids.to_le_bytes()));
         let bytes: Vec<u8> = indexed_columns_ids
             .into_iter()
-            .map(|idx| (idx as u32).to_le_bytes())
-            .flatten()
+            .flat_map(|idx| (idx as u32).to_le_bytes())
             .collect_vec();
-        page.borrow_mut().buffer[8..].copy_from_slice(&bytes);
+        let len = bytes.len();
+        page.borrow_mut().buffer[8..8 + len].copy_from_slice(&bytes);
         page.borrow_mut().is_dirty = true;
         Self { bpm, page, exprs }
     }
@@ -306,8 +306,7 @@ impl BPTIndex {
     }
 
     pub fn get_key_schema(&self) -> Schema {
-        let exprs = self.get_exprs();
-        Schema::from_exprs(&exprs)
+        Schema::from_exprs(&self.exprs)
     }
 
     pub fn set_root(&mut self, key: &[Datum], page_id_lhs: PageID, page_id_rhs: PageID) {
@@ -607,7 +606,7 @@ mod tests {
                 DataType::new_as_int(false),
                 "v1".to_string(),
             ))];
-            let mut index = BPTIndex::new(bpm, &exprs);
+            let mut index = BPTIndex::new(bpm, exprs);
             index.insert(&[Datum::Int(Some(0))], (0, 0)).unwrap();
             index.insert(&[Datum::Int(Some(1))], (1, 0)).unwrap();
             index.insert(&[Datum::Int(Some(2))], (2, 0)).unwrap();
@@ -633,7 +632,7 @@ mod tests {
                 DataType::new_as_int(false),
                 "v1".to_string(),
             ))];
-            let mut index = BPTIndex::new(bpm, &exprs);
+            let mut index = BPTIndex::new(bpm, exprs);
             let mut set: HashSet<u16> = HashSet::new();
             let mut rng = rand::thread_rng();
             for _ in 0..100000 {
@@ -672,7 +671,7 @@ mod tests {
                 DataType::new_as_int(false),
                 "v1".to_string(),
             ))];
-            let mut index = BPTIndex::new(bpm, &exprs);
+            let mut index = BPTIndex::new(bpm, exprs);
             for idx in 0..40000usize {
                 index
                     .insert(&[Datum::Int(Some(idx as i32))], (idx, idx))

@@ -21,7 +21,7 @@ pub trait Expr {
     fn return_type(&self) -> DataType;
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ExprImpl {
     Constant(ConstantExpr),
     ColumnRef(ColumnRefExpr),
@@ -93,7 +93,7 @@ impl ExprImpl {
                         Datum::Int(None),
                         return_type_hint.unwrap(),
                     )),
-                    DataType::VarChar(varchar_type) => ExprImpl::Constant(ConstantExpr::new(
+                    DataType::VarChar(_) => ExprImpl::Constant(ConstantExpr::new(
                         Datum::VarChar(None),
                         return_type_hint.unwrap(),
                     )),

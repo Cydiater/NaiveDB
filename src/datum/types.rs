@@ -76,7 +76,7 @@ impl DataType {
             Self::Date(_) => [5u8 | mask],
         }
     }
-    pub fn from_bytes(bytes: &[u8; 5]) -> Result<Self, DataTypeError> {
+    pub fn from_bytes(bytes: &[u8; 1]) -> Result<Self, DataTypeError> {
         let type_id = bytes[0] & (127);
         let nullable = bytes[0] & 128 != 0;
         match type_id {

@@ -69,7 +69,7 @@ impl Datum {
             Self::Int(v) => {
                 if let Some(v) = v {
                     [vec![1u8], v.to_le_bytes().to_vec()]
-                        .into_iter()
+                        .iter()
                         .flatten()
                         .cloned()
                         .collect_vec()
@@ -84,7 +84,7 @@ impl Datum {
                         (v.len() as u32).to_le_bytes().to_vec(),
                         v.as_bytes().to_vec(),
                     ]
-                    .into_iter()
+                    .iter()
                     .flatten()
                     .cloned()
                     .collect_vec()
@@ -100,7 +100,7 @@ impl Datum {
                         (v.month() as u8).to_le_bytes().to_vec(),
                         (v.day() as u8).to_le_bytes().to_vec(),
                     ]
-                    .into_iter()
+                    .iter()
                     .flatten()
                     .cloned()
                     .collect_vec()

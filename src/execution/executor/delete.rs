@@ -46,7 +46,7 @@ impl Executor for DeleteExecutor {
         let mut indexes_rows = self
             .indexes
             .iter_mut()
-            .map(|index| ExprImpl::batch_eval(&mut index.get_exprs(), Some(&input)))
+            .map(|index| ExprImpl::batch_eval(&mut index.exprs, Some(&input)))
             .collect_vec();
         let mut remove_cnt = 0;
         for idx in input.slot_iter() {

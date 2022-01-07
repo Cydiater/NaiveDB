@@ -240,7 +240,6 @@ impl InternalNode {
 
     /// append to the end, the order should be preserved
     pub fn append(&mut self, key: &[Datum], page_id: PageID) -> Result<(), IndexError> {
-        let schema = self.schema.clone();
         let internal_page = self.internal_page_mut();
         internal_page.append(&page_id, &Datum::bytes_from_tuple(key))?;
         Ok(())
@@ -249,7 +248,6 @@ impl InternalNode {
     /// random insert
     pub fn insert(&mut self, key: &[Datum], page_id: PageID) -> Result<(), IndexError> {
         let idx = (self.index_of(key) + 1) as usize;
-        let schema = self.schema.clone();
         let internal_page = self.internal_page_mut();
         if internal_page.store_stat().1
             < Datum::bytes_from_tuple(key).len() + std::mem::size_of::<PageID>() + 16

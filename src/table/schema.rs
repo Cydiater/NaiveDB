@@ -92,7 +92,7 @@ impl Column {
             .collect_vec()
     }
     pub fn size_in_bytes(&self) -> usize {
-        4 + 4 + self.desc.len() + 5 + self.constraint.size_in_bytes()
+        4 + 4 + self.desc.len() + 1 + self.constraint.size_in_bytes()
     }
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = vec![];
@@ -109,9 +109,9 @@ impl Column {
         let desc_len = u32::from_le_bytes(bytes[4..8].try_into().unwrap()) as usize;
         let desc = String::from_utf8(bytes[8..8 + desc_len].to_vec()).unwrap();
         let data_type =
-            DataType::from_bytes(bytes[8 + desc_len..8 + desc_len + 5].try_into().unwrap())
+            DataType::from_bytes(bytes[8 + desc_len..8 + desc_len + 1].try_into().unwrap())
                 .unwrap();
-        let constraint = ColumnConstraint::from_bytes(&bytes[8 + desc_len + 5..]);
+        let constraint = ColumnConstraint::from_bytes(&bytes[8 + desc_len + 1..]);
         Self {
             offset,
             desc,

@@ -49,7 +49,7 @@ impl Executor for CreateTableExecutor {
                 .create_table(&self.table_name, page_id)?;
             let primary_as_exprs = self.schema.primary_as_exprs();
             if !primary_as_exprs.is_empty() {
-                let index = BPTIndex::new(self.bpm.clone(), &primary_as_exprs);
+                let index = BPTIndex::new(self.bpm.clone(), primary_as_exprs);
                 let page_id = index.get_page_id();
                 self.catalog.borrow_mut().add_index(
                     &self.table_name,
@@ -58,7 +58,7 @@ impl Executor for CreateTableExecutor {
                 )?;
             }
             let unique_exprs = self.schema.unique_as_exprs();
-            for unique_expr in &unique_exprs {
+            for unique_expr in unique_exprs.into_iter() {
                 let index = BPTIndex::new(self.bpm.clone(), unique_expr);
                 let page_id = index.get_page_id();
                 self.catalog.borrow_mut().add_index(

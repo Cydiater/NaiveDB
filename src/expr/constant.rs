@@ -2,7 +2,7 @@ use crate::datum::{DataType, Datum};
 use crate::expr::Expr;
 use crate::table::Slice;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ConstantExpr {
     value: Datum,
     return_type: DataType,

@@ -179,7 +179,6 @@ impl LeafNode {
 
     /// append to the end, the order should be preserved
     pub fn append(&mut self, key: &[Datum], record_id: RecordID) -> Result<(), IndexError> {
-        let schema = self.schema.clone();
         let leaf_page = self.leaf_page_mut();
         leaf_page.append(&record_id, &Datum::bytes_from_tuple(key))?;
         Ok(())
@@ -188,7 +187,6 @@ impl LeafNode {
     /// random insert
     pub fn insert(&mut self, key: &[Datum], record_id: RecordID) -> Result<(), IndexError> {
         let idx = self.lower_bound(key).unwrap_or_else(|| self.len());
-        let schema = self.schema.clone();
         let leaf_page = self.leaf_page_mut();
         leaf_page.move_backward(idx)?;
         leaf_page.insert_at(idx, &record_id, &Datum::bytes_from_tuple(key))?;

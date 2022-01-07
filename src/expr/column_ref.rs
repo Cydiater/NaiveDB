@@ -19,7 +19,7 @@ impl ColumnRefExpr {
         }
     }
     pub fn as_return_type_and_column_name(&self) -> (DataType, String) {
-        (self.return_type, self.column_name)
+        (self.return_type, self.column_name.to_owned())
     }
     pub fn as_idx(&self) -> usize {
         self.idx

@@ -5,6 +5,7 @@ use crate::expr::ExprImpl;
 use crate::index::BPTIndex;
 use crate::storage::BufferPoolManagerRef;
 use crate::table::{Schema, SchemaRef, Slice};
+use itertools::Itertools;
 use std::rc::Rc;
 
 pub struct AddIndexExecutor {
@@ -45,7 +46,7 @@ impl Executor for AddIndexExecutor {
         }
         self.executed = true;
         let table = self.catalog.borrow().find_table(&self.table_name)?;
-        let mut index = BPTIndex::new(self.bpm.clone(), &self.exprs);
+        let mut index = BPTIndex::new(self.bpm.clone(), self.exprs.iter().cloned().collect_vec());
         let slices = table.into_slice();
         let mut indexed_cnt = 0;
         for slice in slices {

@@ -64,16 +64,16 @@ mod tests {
             let values = vec![vec![
                 ExprImpl::Constant(ConstantExpr::new(
                     Datum::Int(Some(1)),
-                    DataType::new_int(false),
+                    DataType::new_as_int(false),
                 )),
                 ExprImpl::Constant(ConstantExpr::new(
                     Datum::VarChar(Some("hello world".to_string())),
-                    DataType::new_varchar(false),
+                    DataType::new_as_varchar(false),
                 )),
             ]];
             let schema = Schema::from_slice(&[
-                (DataType::new_int(false), "v1".to_string()),
-                (DataType::new_varchar(false), "v2".to_string()),
+                (DataType::new_as_int(false), "v1".to_string()),
+                (DataType::new_as_varchar(false), "v2".to_string()),
             ]);
             let mut values_executor = ValuesExecutor::new(values, Rc::new(schema), bpm);
             let res = values_executor.execute().unwrap().unwrap();
