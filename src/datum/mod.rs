@@ -4,6 +4,7 @@ use itertools::Itertools;
 use ordered_float::NotNan;
 use std::convert::{From, TryInto};
 use std::fmt;
+use std::ops::{Add, Div};
 
 pub use types::DataType;
 
@@ -16,6 +17,29 @@ pub enum Datum {
     Bool(Option<bool>),
     Float(Option<NotNan<f32>>),
     Date(Option<NaiveDate>),
+}
+
+impl Add for Datum {
+    type Output = Datum;
+
+    fn add(self, other: Self) -> Self {
+        match (self, other) {
+            (Self::Int(Some(lhs)), Self::Int(Some(rhs))) => (lhs + rhs).into(),
+            _ => todo!(),
+        }
+    }
+}
+
+impl Div<usize> for Datum {
+    type Output = Datum;
+
+    fn div(self, by: usize) -> Self {
+        match self {
+            Self::Int(Some(v)) => (v / (by as i32)).into(),
+            Self::Float(Some(v)) => (v / (by as f32)).into(),
+            _ => todo!(),
+        }
+    }
 }
 
 impl From<i32> for Datum {

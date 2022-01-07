@@ -72,12 +72,12 @@ pub enum NaiveDBError {
 mod tests {
     use crate::datum::Datum;
     use crate::db::NaiveDB;
+    use chrono::NaiveDate;
     use itertools::Itertools;
     use rand::Rng;
     use std::collections::HashSet;
     use std::fs::remove_file;
     use std::str::FromStr;
-    use chrono::NaiveDate;
 
     #[test]
     fn chaos_test() {
@@ -282,7 +282,7 @@ mod tests {
             db.run("drop table rhs;").unwrap();
             db.run("create table rhs (v1 int, v2 float, v3 date);")
                 .unwrap();
-            db.run("insert into rhs values (1, 1.1, 2000:1:1), (2, 2.2, 1926:08:17);")
+            db.run("insert into rhs values (1, 1.1, 2000-1-1), (2, 2.2, 1926-08-17);")
                 .unwrap();
             let table = db
                 .run("select * from lhs, rhs where lhs.v1 = rhs.v1;")

@@ -1,6 +1,7 @@
 use crate::datum::DataType;
 use crate::expr::BinaryOp;
 use chrono::NaiveDate;
+use std::string::ToString;
 
 #[derive(Debug)]
 pub enum Statement {
@@ -14,7 +15,34 @@ pub enum Statement {
     AddIndex(AddIndexStmt),
     DropTable(DropTableStmt),
     Delete(DeleteStmt),
+    LoadFromFile(LoadFromFileStmt),
 }
+
+#[derive(Debug)]
+pub enum AggAction {
+    Sum,
+    Avg,
+    Max,
+    Cnt,
+}
+
+impl ToString for AggAction {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Sum => "sum".to_owned(),
+            Self::Avg => "average".to_owned(),
+            Self::Max => "max".to_owned(),
+            Self::Cnt => "count".to_owned(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum AggTarget {
+    All,
+    Expr(ExprNode),
+}
+
 #[derive(Debug)]
 pub struct DropTableStmt {
     pub table_name: String,
@@ -74,6 +102,10 @@ impl ExprNode {
 pub enum Selectors {
     All,
     Exprs(Vec<ExprNode>),
+    Agg {
+        action: AggAction,
+        target: AggTarget,
+    },
 }
 
 #[derive(Debug)]
@@ -114,6 +146,12 @@ pub struct CreateTableStmt {
 pub struct InsertStmt {
     pub table_name: String,
     pub values: Vec<Vec<ExprNode>>,
+}
+
+#[derive(Debug)]
+pub struct LoadFromFileStmt {
+    pub table_name: String,
+    pub file_name: String,
 }
 
 #[derive(Debug)]

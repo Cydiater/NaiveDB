@@ -66,13 +66,12 @@ impl Executor for FilterExecutor {
                     return Ok(None);
                 }
             }
-            if self.buffer.is_empty() {
-                return Ok(None);
-            }
-            if output.insert(self.buffer.front().unwrap()).is_ok() {
-                self.buffer.pop_front();
-            } else {
-                break;
+            if !self.buffer.is_empty() {
+                if output.insert(self.buffer.front().unwrap()).is_ok() {
+                    self.buffer.pop_front();
+                } else {
+                    break;
+                }
             }
         }
         Ok(Some(output))

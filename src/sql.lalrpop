@@ -13,6 +13,13 @@ pub Tuples = Comma<Tuple>;
 pub WhereExprs = And<Expr>;
 pub Identifiers = Comma<Identifier>;
 
+match {
+	r"[0-9]+\-[0-9]+\-[0-9]+",
+	r"[a-z]+[.]csv",
+} else {
+	_
+}
+
 Comma<T>: Vec<T> = {
     <mut v:(<T> ",")*> <e:T?> => match e {
         None => v,
@@ -83,16 +90,16 @@ ConstantExpr: ConstantExprNode = {
 };
 
 DataType: DataType = {
-    "int" "not" "null" => DataType::new_as_int(false),
-    "int" "null"? => DataType::new_as_int(true),
-    "varchar" "not" "null" => DataType::new_as_varchar(false),
-    "varchar" "null"?  => DataType::new_as_varchar(true),
+    INT NOT NULL => DataType::new_as_int(false),
+    INT NULL? => DataType::new_as_int(true),
+    VARCHAR MaxLength? NOT NULL => DataType::new_as_varchar(false),
+    VARCHAR MaxLength? NULL?  => DataType::new_as_varchar(true),
     "bool" "not" "null" => DataType::new_as_bool(false),
     "bool" "null"? => DataType::new_as_bool(true),
-	"date" "not" "null" => DataType::new_as_date(false),
-	"date" "null"? => DataType::new_as_date(true),
-	"float" "not" "null" => DataType::new_as_float(false),
-	"float" "null"?  => DataType::new_as_float(true),
+	DATE NOT NULL => DataType::new_as_date(false),
+	DATE NULL? => DataType::new_as_date(true),
+	FLOAT NOT NULL => DataType::new_as_float(false),
+	FLOAT NULL?  => DataType::new_as_float(true),
 }
 
 Field: Field = {
@@ -102,13 +109,13 @@ Field: Field = {
     UniqueField,
 }
 
-UniqueField: Field = "unique" "(" <column_names: Identifiers> ")"
+UniqueField: Field = UNIQUE "(" <column_names: Identifiers> ")"
     => Field::Unique(UniqueField { column_names });
 
-PrimaryField: Field = "primary" "key" "(" <column_names: Identifiers> ")" 
+PrimaryField: Field = PRIMARY KEY "(" <column_names: Identifiers> ")" 
     => Field::Primary(PrimaryField { column_names });
 
-ForeignField: Field = "foreign" "key" "(" <column_names: Identifiers> ")" "references" <ref_table_name: Identifier> "(" <ref_column_names: Identifiers> ")"
+ForeignField: Field = FOREIGN KEY "(" <column_names: Identifiers> ")" REFERENCES <ref_table_name: Identifier> "(" <ref_column_names: Identifiers> ")"
     => Field::Foreign(ForeignField { column_names, ref_column_names, ref_table_name });
 
 NormalField: Field = <field_name:Identifier> <field_data_type:DataType> 
@@ -125,6 +132,7 @@ pub Statement: Statement = {
     AddIndexStmt,
     DropTableStmt,
     DeleteStmt,
+	LoadFromFileStmt,
 }
 
 DropTableStmt: Statement = "drop" "table" <table_name: Identifier> ";" => Statement::DropTable(DropTableStmt { table_name });
@@ -134,9 +142,26 @@ WhereClauses: Vec<ExprNode> = "where" <exprs: WhereExprs> => exprs;
 Selectors: Selectors = {
     "*" => Selectors::All,
     <exprs: Exprs> => Selectors::Exprs(exprs),
-}
+	<action: AggAction> "(" <target: AggTarget> ")" => Selectors::Agg {
+		target,
+		action,
+	},
+};
 
-AddIndexStmt: Statement = "alter" "table" <table_name: Identifier> "add" "index" "("<exprs: Exprs> ")" ";" 
+
+AggAction: AggAction = {
+	SUM => AggAction::Sum,
+	AVG => AggAction::Avg,
+	MAX => AggAction::Max,
+	CNT => AggAction::Cnt,
+};
+
+AggTarget: AggTarget = {
+	"*" => AggTarget::All,
+	<expr: Expr> => AggTarget::Expr(expr),
+};
+
+AddIndexStmt: Statement = ALTER "table" <table_name: Identifier> "add" "index" "("<exprs: Exprs> ")" ";" 
     => Statement::AddIndex(AddIndexStmt { table_name, exprs });
 
 SelectStmt: Statement = 
@@ -173,9 +198,41 @@ ShowDatabasesStmt: Statement = "show" "databases" ";" => Statement::ShowDatabase
 
 UseDatabaseStmt: Statement = "use" <database_name: Identifier> ";" => Statement::UseDatabase(UseDatabaseStmt { database_name });
 
-CreateTableStmt: Statement = "create" "table" <table_name: Identifier> "(" <fields: Fields> ")" ";" => Statement::CreateTable(CreateTableStmt { table_name, fields });
+CreateTableStmt: Statement = 
+	CREATE TABLE 
+		<table_name: Identifier> 
+	"(" 
+		<fields: Fields> 
+	")" 
 
-InsertStmt: Statement = "insert" "into" <table_name: Identifier> "values" <values: Tuples> ";" => Statement::Insert(InsertStmt { table_name, values });
+	";" 
+		=> 
+	Statement::CreateTable(CreateTableStmt { 
+		table_name, 
+	fields });
+
+InsertStmt: Statement = 
+	"insert" "into" 
+		<table_name: Identifier> 
+	"values" 
+		<values: Tuples> 
+	";"
+		=> 
+	Statement::Insert(InsertStmt { 
+		table_name, values 
+	});
+
+LoadFromFileStmt: Statement = 
+	"load" "data" "infile"
+		<file_name: CsvPath>
+	"into" "table"
+		<table_name: Identifier>
+	";"
+		=>
+	Statement::LoadFromFile(LoadFromFileStmt {
+		table_name,
+		file_name,
+	});
 
 Identifier: String = {
     r"[a-zA-Z_][a-zA-Z_0-9]*" => String::from_str(<>).unwrap(),
@@ -183,13 +240,110 @@ Identifier: String = {
 
 Tuple: Vec<ExprNode> = "(" <exprs: Exprs> ")" => exprs;
 
-Real: f64 = <s:r"[+-]?([0-9]*[.])?[0-9]+"> => f64::from_str(s).unwrap();
+Real: f64 = <s:r#"[+-]?([0-9]*[.])?[0-9]+"#> => f64::from_str(s).unwrap();
 
-Str: String = r#"'[a-zA-Z_0-9]+'"# => {
+Str: String = r#"'[a-zA-Z_0-9\s]+'"# => {
     let quoted = String::from_str(<>).unwrap();
     let len = quoted.len();
     quoted[1..len - 1].into()
 };
 
-Date: NaiveDate = <year: Real> ":" <month: Real> ":" <day: Real>
-	=> NaiveDate::from_ymd(year as i32, month as u32, day as u32);
+CsvPath: String = r"[a-z]+[.]csv" => String::from_str(<>).unwrap();
+
+Date: NaiveDate = r"[0-9]+\-[0-9]+\-[0-9]+"
+	=> NaiveDate::from_str(<>).unwrap();
+
+CREATE = {
+	"create",
+	"CREATE",
+};
+
+TABLE = {
+	"table",
+	"TABLE",
+};
+
+UNIQUE = {
+	"unique",
+	"UNIQUE",
+};
+
+PRIMARY = {
+	"primary",
+	"PRIMARY",
+};
+
+FOREIGN = {
+	"foreign",
+	"FOREIGN",
+};
+
+KEY = {
+	"key",
+	"KEY",
+};
+
+REFERENCES = {
+	"references",
+	"REFERENCES",
+};
+
+INT = {
+	"int",
+	"INT",
+};
+
+VARCHAR = {
+	"varchar",
+	"VARCHAR",
+};
+
+FLOAT = {
+	"float",
+	"FLOAT",
+};
+
+NOT = {
+	"not",
+	"NOT",
+};
+
+NULL = {
+	"null",
+	"NULL",
+};
+
+DATE = {
+	"date",
+	"DATE",
+};
+
+ALTER = {
+	"alter",
+	"ALTER",
+};
+
+SUM = {
+	"sum",
+	"SUM",
+};
+
+CNT = {
+	"cnt",
+	"count",
+	"CNT",
+	"COUNT",
+};
+
+AVG = {
+	"avg",
+	"AVG",
+};
+
+MAX = {
+	"max",
+	"MAX",
+	"Max",
+};
+
+MaxLength = "(" Real ")";
