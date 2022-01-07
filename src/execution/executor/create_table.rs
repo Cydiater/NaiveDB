@@ -35,7 +35,7 @@ impl CreateTableExecutor {
 impl Executor for CreateTableExecutor {
     fn schema(&self) -> SchemaRef {
         Rc::new(Schema::from_slice(&[(
-            DataType::new_varchar(false),
+            DataType::new_as_varchar(false),
             "table".to_string(),
         )]))
     }

@@ -33,7 +33,7 @@ impl DeleteExecutor {
 impl Executor for DeleteExecutor {
     fn schema(&self) -> SchemaRef {
         Rc::new(Schema::from_slice(&[(
-            DataType::new_int(false),
+            DataType::new_as_int(false),
             "Number Of Deleted Tuple".to_string(),
         )]))
     }

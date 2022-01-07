@@ -88,7 +88,7 @@ impl InternalNode {
                 },
                 leftmost: Some(page_id_lhs),
             });
-            let bytes = Datum::to_bytes_with_schema(key, schema.as_ref());
+            let bytes = Datum::bytes_from_tuple(key);
             slotted.append(&page_id_rhs, &bytes).unwrap();
         }
         page.borrow_mut().is_dirty = true;
@@ -138,7 +138,7 @@ impl InternalNode {
 
     pub fn key_at(&self, idx: usize) -> Vec<Datum> {
         let internal_page = self.internal_page();
-        Datum::from_bytes_and_schema(self.schema.as_ref(), internal_page.data_at(idx))
+        Datum::tuple_from_bytes_with_schema(internal_page.data_at(idx), self.schema.as_ref())
     }
 
     pub fn index_of(&self, key: &[Datum]) -> isize {
@@ -168,7 +168,7 @@ impl InternalNode {
         let internal_page = self.internal_page_mut();
         let key_page_id_set = internal_page
             .key_data_iter()
-            .map(|(k, d)| (Datum::from_bytes_and_schema(schema.as_ref(), d), *k))
+            .map(|(k, d)| (Datum::tuple_from_bytes_with_schema(d, schema.as_ref()), *k))
             .collect_vec();
         let meta = *internal_page.meta();
         internal_page.reset(&meta);
@@ -176,7 +176,7 @@ impl InternalNode {
         let len_lhs = len / 2;
         for (key, page_id) in key_page_id_set.iter().take(len_lhs) {
             internal_page
-                .append(page_id, &Datum::to_bytes_with_schema(key, schema.as_ref()))
+                .append(page_id, &Datum::bytes_from_tuple(key))
                 .unwrap();
         }
         let mut rhs = InternalNode::new(bpm.clone(), schema.clone(), None);
@@ -242,7 +242,7 @@ impl InternalNode {
     pub fn append(&mut self, key: &[Datum], page_id: PageID) -> Result<(), IndexError> {
         let schema = self.schema.clone();
         let internal_page = self.internal_page_mut();
-        internal_page.append(&page_id, &Datum::to_bytes_with_schema(key, schema.as_ref()))?;
+        internal_page.append(&page_id, &Datum::bytes_from_tuple(key))?;
         Ok(())
     }
 
@@ -252,12 +252,12 @@ impl InternalNode {
         let schema = self.schema.clone();
         let internal_page = self.internal_page_mut();
         if internal_page.store_stat().1
-            < Datum::to_bytes_with_schema(key, &schema).len() + std::mem::size_of::<PageID>() + 16
+            < Datum::bytes_from_tuple(key).len() + std::mem::size_of::<PageID>() + 16
         {
             return Err(IndexError::NodeOutOfSpace);
         }
         internal_page.move_backward(idx)?;
-        internal_page.insert_at(idx, &page_id, &Datum::to_bytes_with_schema(key, &schema))?;
+        internal_page.insert_at(idx, &page_id, &Datum::bytes_from_tuple(key))?;
         Ok(())
     }
 
@@ -297,7 +297,7 @@ mod tests {
             let bpm = BufferPoolManager::new_random_shared(10);
             let filename = bpm.borrow().filename();
             let key_schema = Rc::new(Schema::from_slice(&[(
-                DataType::new_int(false),
+                DataType::new_as_int(false),
                 "v1".to_string(),
             )]));
             let dummy_page_id = 10;

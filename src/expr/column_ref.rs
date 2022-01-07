@@ -2,9 +2,8 @@ use crate::datum::{DataType, Datum};
 use crate::expr::Expr;
 use crate::table::Slice;
 use itertools::Itertools;
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ColumnRefExpr {
     idx: usize,
     return_type: DataType,
@@ -19,7 +18,10 @@ impl ColumnRefExpr {
             column_name,
         }
     }
-    pub fn idx(&self) -> usize {
+    pub fn as_return_type_and_column_name(&self) -> (DataType, String) {
+        (self.return_type, self.column_name)
+    }
+    pub fn as_idx(&self) -> usize {
         self.idx
     }
 }
@@ -37,8 +39,5 @@ impl Expr for ColumnRefExpr {
     }
     fn return_type(&self) -> DataType {
         self.return_type
-    }
-    fn name(&self) -> String {
-        self.column_name.clone()
     }
 }

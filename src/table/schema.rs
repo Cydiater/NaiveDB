@@ -179,7 +179,13 @@ impl Schema {
     pub fn from_exprs(exprs: &[ExprImpl]) -> Self {
         let type_and_names = exprs
             .iter()
-            .map(|e| (e.return_type(), e.name()))
+            .map(|e| {
+                if let ExprImpl::ColumnRef(cr) = e {
+                    cr.as_return_type_and_column_name()
+                } else {
+                    unreachable!()
+                }
+            })
             .collect_vec();
         Self::from_slice(&type_and_names)
     }
@@ -191,6 +197,9 @@ impl Schema {
     }
     pub fn type_at(&self, idx: usize) -> DataType {
         self.columns[idx].data_type
+    }
+    pub fn column_name_at(&self, idx: usize) -> String {
+        self.columns[idx].desc.to_owned()
     }
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = vec![];
@@ -282,8 +291,8 @@ mod tests {
     #[test]
     fn test_to_from_bytes() {
         let type_and_names = vec![
-            (DataType::new_int(false), "v1".to_string()),
-            (DataType::new_varchar(false), "v3".to_string()),
+            (DataType::new_as_int(false), "v1".to_string()),
+            (DataType::new_as_varchar(false), "v3".to_string()),
         ];
         let mut schema = Schema::from_slice(type_and_names.as_slice());
         schema.set_primary("v1").unwrap();

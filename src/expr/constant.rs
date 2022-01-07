@@ -1,9 +1,8 @@
 use crate::datum::{DataType, Datum};
 use crate::expr::Expr;
 use crate::table::Slice;
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct ConstantExpr {
     value: Datum,
     return_type: DataType,
@@ -28,8 +27,5 @@ impl Expr for ConstantExpr {
     }
     fn return_type(&self) -> DataType {
         self.return_type
-    }
-    fn name(&self) -> String {
-        String::from("constant")
     }
 }

@@ -81,12 +81,16 @@ ConstantExpr: ConstantExprNode = {
 };
 
 DataType: DataType = {
-    "int" "not" "null" => DataType::new_int(false),
-    "int" "null" => DataType::new_int(true),
-    "varchar" "not" "null" => DataType::new_varchar(false),
-    "varchar" "null" => DataType::new_varchar(true),
-    "bool" "not" "null" => DataType::new_bool(false),
-    "bool" "null" => DataType::new_bool(true),
+    "int" "not" "null" => DataType::new_as_int(false),
+    "int" "null" => DataType::new_as_int(true),
+    "varchar" "not" "null" => DataType::new_as_varchar(false),
+    "varchar" "null"?  => DataType::new_as_varchar(true),
+    "bool" "not" "null" => DataType::new_as_bool(false),
+    "bool" "null"? => DataType::new_as_bool(true),
+	"date" "not" "null" => DataType::new_as_date(false),
+	"date" "null"? => DataType::new_as_date(true),
+	"float" "not" "null" => DataType::new_as_float(false),
+	"float" "null"?  => DataType::new_as_float(true),
 }
 
 Field: Field = {

@@ -237,7 +237,7 @@ mod tests {
         let filename = {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
-            let schema = Schema::from_slice(&[(DataType::new_int(false), "v1".to_string())]);
+            let schema = Schema::from_slice(&[(DataType::new_as_int(false), "v1".to_string())]);
             let mut table = Table::new(Rc::new(schema), bpm);
             // insert
             for idx in 0..1000 {
@@ -262,7 +262,7 @@ mod tests {
         let (filename, page_id) = {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
-            let schema = Schema::from_slice(&[(DataType::new_varchar(false), "v1".to_string())]);
+            let schema = Schema::from_slice(&[(DataType::new_as_varchar(false), "v1".to_string())]);
             let table = Table::new(Rc::new(schema), bpm);
             (filename, table.get_page_id())
         };

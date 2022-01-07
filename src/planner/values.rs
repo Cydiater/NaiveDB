@@ -27,7 +27,7 @@ impl Planner {
                             &node,
                             self.catalog.clone(),
                             &schema,
-                            Some(&col.data_type),
+                            Some(col.data_type),
                         )
                         .unwrap()
                     })

@@ -89,7 +89,7 @@ impl LeafNode {
 
     pub fn key_at(&self, idx: usize) -> Vec<Datum> {
         let leaf_page = self.leaf_page();
-        Datum::from_bytes_and_schema(self.schema.as_ref(), leaf_page.data_at(idx))
+        Datum::tuple_from_bytes_with_schema(leaf_page.data_at(idx), self.schema.as_ref())
     }
 
     pub fn record_id_at(&self, idx: usize) -> RecordID {
@@ -148,7 +148,7 @@ impl LeafNode {
             .map(|(record_id, bytes)| {
                 (
                     *record_id,
-                    Datum::from_bytes_and_schema(schema.as_ref(), bytes),
+                    Datum::tuple_from_bytes_with_schema(bytes, schema.as_ref()),
                 )
             })
             .collect_vec();
@@ -160,7 +160,7 @@ impl LeafNode {
             leaf_page
                 .insert(
                     &tuple_and_record_id.0,
-                    &Datum::to_bytes_with_schema(&tuple_and_record_id.1, schema.as_ref()),
+                    &Datum::bytes_from_tuple(&tuple_and_record_id.1),
                 )
                 .unwrap();
         }
@@ -181,10 +181,7 @@ impl LeafNode {
     pub fn append(&mut self, key: &[Datum], record_id: RecordID) -> Result<(), IndexError> {
         let schema = self.schema.clone();
         let leaf_page = self.leaf_page_mut();
-        leaf_page.append(
-            &record_id,
-            &Datum::to_bytes_with_schema(key, schema.as_ref()),
-        )?;
+        leaf_page.append(&record_id, &Datum::bytes_from_tuple(key))?;
         Ok(())
     }
 
@@ -194,11 +191,7 @@ impl LeafNode {
         let schema = self.schema.clone();
         let leaf_page = self.leaf_page_mut();
         leaf_page.move_backward(idx)?;
-        leaf_page.insert_at(
-            idx,
-            &record_id,
-            &Datum::to_bytes_with_schema(key, schema.as_ref()),
-        )?;
+        leaf_page.insert_at(idx, &record_id, &Datum::bytes_from_tuple(key))?;
         Ok(())
     }
 
@@ -239,7 +232,7 @@ mod tests {
             let bpm = BufferPoolManager::new_random_shared(10);
             let filename = bpm.borrow().filename();
             let schema = Rc::new(Schema::from_slice(&[(
-                DataType::new_int(false),
+                DataType::new_as_int(false),
                 "v1".to_string(),
             )]));
             let dummy_record_id = (0, 0);

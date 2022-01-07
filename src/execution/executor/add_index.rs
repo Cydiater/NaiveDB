@@ -35,7 +35,7 @@ impl AddIndexExecutor {
 impl Executor for AddIndexExecutor {
     fn schema(&self) -> SchemaRef {
         Rc::new(Schema::from_slice(&[(
-            DataType::new_int(false),
+            DataType::new_as_int(false),
             "Number Of Indexed Tuple".to_string(),
         )]))
     }

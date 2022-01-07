@@ -26,10 +26,10 @@ impl DescExecutor {
 impl Executor for DescExecutor {
     fn schema(&self) -> SchemaRef {
         Rc::new(Schema::from_slice(&[
-            (DataType::new_varchar(false), "Field".into()),
-            (DataType::new_varchar(false), "Type".into()),
-            (DataType::new_varchar(false), "Nullable".into()),
-            (DataType::new_varchar(false), "Key".into()),
+            (DataType::new_as_varchar(false), "Field".into()),
+            (DataType::new_as_varchar(false), "Type".into()),
+            (DataType::new_as_varchar(false), "Nullable".into()),
+            (DataType::new_as_varchar(false), "Key".into()),
         ]))
     }
     fn execute(&mut self) -> Result<Option<Slice>, ExecutionError> {
