@@ -461,6 +461,7 @@ name = "naive_db"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "csv",
  "env_logger",
  "itertools 0.8.2",
  "lalrpop",

@@ -118,18 +118,23 @@ impl Planner {
         ));
         let join_plan = self.plan_nested_loop_join(scan_plans, schema.clone());
         let filter_plan = self.plan_filter(&schema, &overall, join_plan);
-        // Project
-        if let Selectors::Exprs(exprs) = stmt.selectors {
-            let exprs = exprs
-                .into_iter()
-                .map(|node| ExprImpl::from_ast(&node, self.catalog.clone(), &schema, None).unwrap())
-                .collect_vec();
-            Ok(Plan::Project(ProjectPlan {
-                exprs,
-                child: Box::new(filter_plan),
-            }))
-        } else {
-            Ok(filter_plan)
+        match stmt.selectors {
+            Selectors::Exprs(exprs) => {
+                let exprs = exprs
+                    .into_iter()
+                    .map(|node| {
+                        ExprImpl::from_ast(&node, self.catalog.clone(), &schema, None).unwrap()
+                    })
+                    .collect_vec();
+                Ok(Plan::Project(ProjectPlan {
+                    exprs,
+                    child: Box::new(filter_plan),
+                }))
+            }
+            Selectors::All => Ok(filter_plan),
+            Selectors::Agg { action, target } => {
+                Ok(self.plan_agg(&schema, action, target, filter_plan).unwrap())
+            }
         }
     }
 }

@@ -4,6 +4,7 @@ use log::info;
 use thiserror::Error;
 
 pub use add_index::AddIndexPlan;
+pub use agg::AggPlan;
 pub use create_database::CreateDatabasePlan;
 pub use create_table::CreateTablePlan;
 pub use delete::DeletePlan;
@@ -11,6 +12,7 @@ pub use desc::DescPlan;
 pub use drop_table::DropTablePlan;
 pub use filter::FilterPlan;
 pub use insert::InsertPlan;
+pub use load_from_file::LoadFromFilePlan;
 pub use nested_loop_join::NestedLoopJoinPlan;
 pub use scan::{IndexScanPlan, SeqScanPlan};
 pub use select::ProjectPlan;
@@ -18,6 +20,7 @@ pub use use_database::UseDatabasePlan;
 pub use values::ValuesPlan;
 
 mod add_index;
+mod agg;
 mod create_database;
 mod create_table;
 mod delete;
@@ -25,6 +28,7 @@ mod desc;
 mod drop_table;
 mod filter;
 mod insert;
+mod load_from_file;
 mod nested_loop_join;
 mod scan;
 mod select;
@@ -48,6 +52,8 @@ pub enum Plan {
     DropTable(DropTablePlan),
     Delete(DeletePlan),
     NestedLoopJoin(NestedLoopJoinPlan),
+    LoadFromFile(LoadFromFilePlan),
+    Agg(AggPlan),
 }
 
 pub struct Planner {
@@ -71,6 +77,7 @@ impl Planner {
             Statement::AddIndex(stmt) => self.plan_add_index(stmt),
             Statement::DropTable(stmt) => self.plan_drop_table(stmt),
             Statement::Delete(stmt) => self.plan_delete(stmt),
+            Statement::LoadFromFile(stmt) => self.plan_load_from_file(stmt),
         }
     }
 }

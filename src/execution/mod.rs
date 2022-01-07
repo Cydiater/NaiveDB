@@ -149,6 +149,20 @@ impl Engine {
                     plan.schema,
                 )))
             }
+            Plan::LoadFromFile(plan) => Ok(ExecutorImpl::LoadFromFile(LoadFromFileExecutor::new(
+                plan.schema.clone(),
+                plan.file_name,
+                self.bpm.clone(),
+            ))),
+            Plan::Agg(plan) => {
+                let child = self.build(*plan.child)?;
+                Ok(ExecutorImpl::Agg(AggExecutor::new(
+                    plan.action,
+                    plan.expr,
+                    child,
+                    self.bpm.clone(),
+                )))
+            }
         }
     }
     pub fn new(catalog: CatalogManagerRef, bpm: BufferPoolManagerRef) -> Self {
