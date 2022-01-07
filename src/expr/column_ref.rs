@@ -8,15 +8,15 @@ use serde::{Deserialize, Serialize};
 pub struct ColumnRefExpr {
     idx: usize,
     return_type: DataType,
-    desc: String,
+    column_name: String,
 }
 
 impl ColumnRefExpr {
-    pub fn new(idx: usize, return_type: DataType, desc: String) -> Self {
+    pub fn new(idx: usize, return_type: DataType, column_name: String) -> Self {
         Self {
             idx,
             return_type,
-            desc,
+            column_name,
         }
     }
     pub fn idx(&self) -> usize {
@@ -39,6 +39,6 @@ impl Expr for ColumnRefExpr {
         self.return_type
     }
     fn name(&self) -> String {
-        self.desc.clone()
+        self.column_name.clone()
     }
 }

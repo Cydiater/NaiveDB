@@ -63,7 +63,14 @@ BinaryExpr: BinaryExprNode = {
 }
 
 ColumnRefExpr: ColumnRefExprNode = {
-    <column_name: Identifier> => ColumnRefExprNode { column_name },
+    <column_name: Identifier> => ColumnRefExprNode { 
+		table_name: None,
+		column_name 
+	},
+	<table_name: Identifier> "." <column_name: Identifier> => ColumnRefExprNode {
+		table_name: Some(table_name),
+		column_name,
+	},
 }
 
 ConstantExpr: ConstantExprNode = {
@@ -76,8 +83,6 @@ ConstantExpr: ConstantExprNode = {
 DataType: DataType = {
     "int" "not" "null" => DataType::new_int(false),
     "int" "null" => DataType::new_int(true),
-    "char" "(" <width:Num> ")" "not" "null" => DataType::new_char(width as usize, false),
-    "char" "(" <width:Num> ")" "null" => DataType::new_char(width as usize, true),
     "varchar" "not" "null" => DataType::new_varchar(false),
     "varchar" "null" => DataType::new_varchar(true),
     "bool" "not" "null" => DataType::new_bool(false),
@@ -128,11 +133,31 @@ Selectors: Selectors = {
 AddIndexStmt: Statement = "alter" "table" <table_name: Identifier> "add" "index" "("<exprs: Exprs> ")" ";" 
     => Statement::AddIndex(AddIndexStmt { table_name, exprs });
 
-SelectStmt: Statement = "select" <selectors: Selectors> "from" <table_name: Identifier> <where_exprs: WhereClauses?> ";" 
-    => Statement::Select(SelectStmt { table_name, selectors, where_exprs });
+SelectStmt: Statement = 
+	"select" 
+		<selectors: Selectors> 
+	"from" 
+		<table_names: Identifiers> 
+	<where_exprs: WhereClauses?> 
+	";" 
+    => 
+	Statement::Select(SelectStmt { 
+		table_names, 
+		selectors, 
+		where_exprs: where_exprs.unwrap_or_else(|| vec![]),
+	});
 
-DeleteStmt: Statement = "delete" "from" <table_name: Identifier> <where_exprs: WhereClauses?> ";" 
-    => Statement::Delete(DeleteStmt { table_name, where_exprs, });
+DeleteStmt: Statement = 
+	"delete" 
+	"from" 
+	<table_name: Identifier> 
+	<where_exprs: WhereClauses?> 
+	";" 
+    => 
+	Statement::Delete(DeleteStmt { 
+		table_name, 
+		where_exprs: where_exprs.unwrap_or_else(|| vec![]),
+	});
 
 DescStmt: Statement = "desc" <table_name: Identifier> ";" => Statement::Desc(DescStmt { table_name });
 

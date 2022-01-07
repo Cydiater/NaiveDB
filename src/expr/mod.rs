@@ -1,7 +1,7 @@
 use crate::catalog::{CatalogError, CatalogManagerRef};
 use crate::datum::{DataType, Datum};
 use crate::parser::ast::{ConstantValue, ExprNode};
-use crate::table::Slice;
+use crate::table::{Schema, Slice};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -66,7 +66,7 @@ impl ExprImpl {
     pub fn from_ast(
         node: &ExprNode,
         catalog: CatalogManagerRef,
-        table_name: Option<String>,
+        schema: &Schema,
         data_type_hint: Option<&DataType>,
     ) -> Result<Self, ExprError> {
         match node {
@@ -88,10 +88,6 @@ impl ExprImpl {
                         Datum::Int(None),
                         DataType::Int(*int_type),
                     )),
-                    DataType::Char(char_type) => ExprImpl::Constant(ConstantExpr::new(
-                        Datum::Char(None),
-                        DataType::Char(*char_type),
-                    )),
                     DataType::VarChar(varchar_type) => ExprImpl::Constant(ConstantExpr::new(
                         Datum::VarChar(None),
                         DataType::VarChar(*varchar_type),
@@ -103,9 +99,6 @@ impl ExprImpl {
                 },
             }),
             ExprNode::ColumnRef(node) => {
-                let table_name = table_name.unwrap();
-                let table = catalog.borrow().find_table(&table_name)?;
-                let schema = table.schema.clone();
                 let idx = schema.index_of(&node.column_name).unwrap();
                 let return_type = schema.type_at(idx);
                 Ok(ExprImpl::ColumnRef(ColumnRefExpr::new(
@@ -115,13 +108,9 @@ impl ExprImpl {
                 )))
             }
             ExprNode::Binary(node) => {
-                let lhs = Self::from_ast(
-                    node.lhs.as_ref(),
-                    catalog.clone(),
-                    table_name.clone(),
-                    data_type_hint,
-                )?;
-                let rhs = Self::from_ast(node.rhs.as_ref(), catalog, table_name, data_type_hint)?;
+                let lhs =
+                    Self::from_ast(node.lhs.as_ref(), catalog.clone(), schema, data_type_hint)?;
+                let rhs = Self::from_ast(node.rhs.as_ref(), catalog, schema, data_type_hint)?;
                 Ok(ExprImpl::Binary(BinaryExpr::new(
                     Box::new(lhs),
                     Box::new(rhs),

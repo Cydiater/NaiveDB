@@ -1,5 +1,5 @@
 use crate::parser::ast::{CreateTableStmt, Field};
-use crate::planner::{Plan, Planner};
+use crate::planner::{Plan, PlanError, Planner};
 use crate::table::Schema;
 use itertools::Itertools;
 
@@ -10,7 +10,7 @@ pub struct CreateTablePlan {
 }
 
 impl Planner {
-    pub fn plan_create_table(&self, stmt: CreateTableStmt) -> Plan {
+    pub fn plan_create_table(&self, stmt: CreateTableStmt) -> Result<Plan, PlanError> {
         let slice = stmt
             .fields
             .iter()
@@ -63,9 +63,9 @@ impl Planner {
                 schema.set_unique(unique_set);
             }
         }
-        Plan::CreateTable(CreateTablePlan {
+        Ok(Plan::CreateTable(CreateTablePlan {
             table_name: stmt.table_name,
             schema,
-        })
+        }))
     }
 }

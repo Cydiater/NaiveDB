@@ -133,6 +133,18 @@ impl Engine {
                     self.bpm.clone(),
                 )))
             }
+            Plan::NestedLoopJoin(plan) => {
+                let children = plan
+                    .children
+                    .into_iter()
+                    .map(|c| self.build(c).unwrap())
+                    .collect_vec();
+                Ok(ExecutorImpl::NestedLoopJoin(NestedLoopJoinExecutor::new(
+                    self.bpm.clone(),
+                    children,
+                    plan.schema,
+                )))
+            }
         }
     }
     pub fn new(catalog: CatalogManagerRef, bpm: BufferPoolManagerRef) -> Self {

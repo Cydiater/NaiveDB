@@ -1,7 +1,6 @@
 use crate::table::Schema;
-use pad::PadStr;
 use serde::{Deserialize, Serialize};
-use std::convert::TryInto;
+use std::convert::{From, TryInto};
 use std::fmt;
 
 pub use types::DataType;
@@ -11,16 +10,26 @@ mod types;
 #[derive(Debug, PartialEq, PartialOrd, Ord, Eq, Clone, Serialize, Deserialize)]
 pub enum Datum {
     Int(Option<i32>),
-    Char(Option<String>),
     VarChar(Option<String>),
     Bool(Option<bool>),
+}
+
+impl From<i32> for Datum {
+    fn from(i: i32) -> Datum {
+        Datum::Int(Some(i))
+    }
+}
+
+impl From<&str> for Datum {
+    fn from(s: &str) -> Datum {
+        Datum::VarChar(Some(s.to_owned()))
+    }
 }
 
 impl Datum {
     pub fn size_of_bytes(&self, data_type: &DataType) -> usize {
         match (self, data_type) {
             (Self::Int(_), DataType::Int(_)) => 5,
-            (Self::Char(_), DataType::Char(t)) => t.width + 1,
             (Self::VarChar(_), DataType::VarChar(_)) => 9,
             _ => todo!(),
         }
@@ -28,7 +37,6 @@ impl Datum {
     pub fn is_inlined(&self) -> bool {
         match self {
             Self::Int(_) => true,
-            Self::Char(_) => true,
             Self::Bool(_) => true,
             Self::VarChar(_) => false,
         }
@@ -42,15 +50,6 @@ impl Datum {
                     bytes
                 } else {
                     vec![0u8; 5]
-                }
-            }
-            (Self::Char(v), DataType::Char(t)) => {
-                if let Some(v) = v {
-                    let mut bytes = vec![1];
-                    bytes.extend_from_slice(v.with_exact_width(t.width).as_bytes());
-                    bytes
-                } else {
-                    vec![0u8; t.width + 1]
                 }
             }
             (Self::VarChar(v), DataType::VarChar(_)) => {
@@ -131,18 +130,6 @@ impl Datum {
                     Datum::Int(Some(i32::from_le_bytes(bytes[1..5].try_into().unwrap())))
                 }
             }
-            DataType::Char(char_type) => {
-                if bytes[0] == 0 {
-                    Datum::Char(None)
-                } else {
-                    Datum::Char(Some(
-                        String::from_utf8(bytes[1..char_type.width + 1].try_into().unwrap())
-                            .unwrap()
-                            .trim_end()
-                            .to_string(),
-                    ))
-                }
-            }
             DataType::VarChar(_) => {
                 if bytes[0] == 0 {
                     Datum::VarChar(None)
@@ -171,7 +158,6 @@ impl fmt::Display for Datum {
             "{}",
             match self {
                 Self::Int(Some(d)) => d.to_string(),
-                Self::Char(Some(s)) => s.to_string(),
                 Self::VarChar(Some(s)) => s.to_string(),
                 Self::Bool(Some(s)) => s.to_string(),
                 _ => String::from("NULL"),
@@ -192,14 +178,9 @@ mod tests {
         let schema = Schema::from_slice(&[
             (DataType::new_int(false), "v1".to_string()),
             (DataType::new_varchar(false), "v2".to_string()),
-            (DataType::new_char(20, false), "v3".to_string()),
         ]);
         let schema = Rc::new(schema);
-        let datums = vec![
-            Datum::Int(Some(1)),
-            Datum::VarChar(Some("foo".to_string())),
-            Datum::Char(Some("bar".to_string())),
-        ];
+        let datums = vec![Datum::Int(Some(1)), Datum::VarChar(Some("foo".to_string()))];
         let bytes = Datum::to_bytes_with_schema(&datums, schema.as_ref());
         let datums_to_check = Datum::from_bytes_and_schema(schema.as_ref(), bytes.as_slice());
         assert_eq!(datums, datums_to_check);

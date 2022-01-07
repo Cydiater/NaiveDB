@@ -1,6 +1,7 @@
-use crate::catalog::CatalogManagerRef;
+use crate::catalog::{CatalogError, CatalogManagerRef};
 use crate::parser::ast::Statement;
 use log::info;
+use thiserror::Error;
 
 pub use add_index::AddIndexPlan;
 pub use create_database::CreateDatabasePlan;
@@ -10,6 +11,7 @@ pub use desc::DescPlan;
 pub use drop_table::DropTablePlan;
 pub use filter::FilterPlan;
 pub use insert::InsertPlan;
+pub use nested_loop_join::NestedLoopJoinPlan;
 pub use scan::{IndexScanPlan, SeqScanPlan};
 pub use select::ProjectPlan;
 pub use use_database::UseDatabasePlan;
@@ -23,6 +25,7 @@ mod desc;
 mod drop_table;
 mod filter;
 mod insert;
+mod nested_loop_join;
 mod scan;
 mod select;
 mod use_database;
@@ -44,6 +47,7 @@ pub enum Plan {
     IndexScan(IndexScanPlan),
     DropTable(DropTablePlan),
     Delete(DeletePlan),
+    NestedLoopJoin(NestedLoopJoinPlan),
 }
 
 pub struct Planner {
@@ -54,11 +58,11 @@ impl Planner {
     pub fn new(catalog: CatalogManagerRef) -> Self {
         Self { catalog }
     }
-    pub fn plan(&self, stmt: Statement) -> Plan {
+    pub fn plan(&self, stmt: Statement) -> Result<Plan, PlanError> {
         info!("plan with statement {:#?}", stmt);
         match stmt {
             Statement::CreateDatabase(stmt) => self.plan_create_database(stmt),
-            Statement::ShowDatabases => Plan::ShowDatabases,
+            Statement::ShowDatabases => Ok(Plan::ShowDatabases),
             Statement::UseDatabase(stmt) => self.plan_use_database(stmt),
             Statement::CreateTable(stmt) => self.plan_create_table(stmt),
             Statement::Insert(stmt) => self.plan_insert(stmt),
@@ -69,6 +73,12 @@ impl Planner {
             Statement::Delete(stmt) => self.plan_delete(stmt),
         }
     }
+}
+
+#[derive(Error, Debug)]
+pub enum PlanError {
+    #[error("CatalogError: {0}")]
+    Catalog(#[from] CatalogError),
 }
 
 #[cfg(test)]
@@ -89,7 +99,7 @@ mod tests {
             let stmt = Statement::CreateDatabase(CreateDatabaseStmt {
                 database_name: "sample_database".to_string(),
             });
-            let plan = planner.plan(stmt);
+            let plan = planner.plan(stmt).unwrap();
             if let Plan::CreateDatabase(plan) = plan {
                 assert_eq!(plan.database_name, "sample_database");
             } else {

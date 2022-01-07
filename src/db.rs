@@ -1,7 +1,7 @@
 use crate::catalog::CatalogManager;
 use crate::execution::{Engine, ExecutionError};
 use crate::parser::parse;
-use crate::planner::Planner;
+use crate::planner::{PlanError, Planner};
 use crate::storage::{BufferPoolManager, BufferPoolManagerRef};
 use crate::table::Table;
 use std::cell::RefCell;
@@ -52,7 +52,7 @@ impl NaiveDB {
     }
     pub fn run(&mut self, sql: &str) -> Result<Table, NaiveDBError> {
         let stmt = parse(sql)?;
-        let plan = self.planner.plan(stmt);
+        let plan = self.planner.plan(stmt)?;
         let table = self.engine.execute(plan)?;
         Ok(table)
     }
@@ -64,6 +64,8 @@ pub enum NaiveDBError {
     Parse(String),
     #[error("ExecutionError: {0}")]
     Execution(#[from] ExecutionError),
+    #[error("PlanError: {0}")]
+    Plan(#[from] PlanError),
 }
 
 #[cfg(test)]
@@ -223,6 +225,58 @@ mod tests {
                 .unwrap();
             db.run("insert into t values (1), (2), (3);").unwrap();
             assert!(db.run("insert into t values (1);").is_err());
+            filename
+        };
+        remove_file(filename).unwrap();
+    }
+
+    #[test]
+    fn test_with_two_table() {
+        let filename = {
+            let mut db = NaiveDB::new_random();
+            let filename = db.filename();
+            db.run("create database d;").unwrap();
+            db.run("use d;").unwrap();
+            db.run("create table lhs (v1 int not null);").unwrap();
+            db.run("create table rhs (v2 varchar not null);").unwrap();
+            db.run("insert into lhs values (1), (2), (3);").unwrap();
+            db.run("insert into rhs values ('foo'), ('bar');").unwrap();
+            let table = db.run("select * from lhs, rhs;").unwrap();
+            let tuples = table
+                .iter()
+                .flat_map(|s| s.tuple_iter().collect_vec())
+                .collect_vec();
+            assert_eq!(
+                tuples,
+                vec![
+                    vec![1.into(), "foo".into()],
+                    vec![1.into(), "bar".into()],
+                    vec![2.into(), "foo".into()],
+                    vec![2.into(), "bar".into()],
+                    vec![3.into(), "foo".into()],
+                    vec![3.into(), "bar".into()],
+                ]
+            );
+            let table = db.run("select * from lhs, rhs where lhs.v1 = 1;").unwrap();
+            let tuples = table
+                .iter()
+                .flat_map(|s| s.tuple_iter().collect_vec())
+                .collect_vec();
+            assert_eq!(
+                tuples,
+                vec![vec![1.into(), "foo".into()], vec![1.into(), "bar".into()],]
+            );
+            db.run("drop table rhs;").unwrap();
+            db.run("create table rhs (v1 int not null);").unwrap();
+            db.run("insert into rhs values (2), (4), (5);").unwrap();
+            let table = db
+                .run("select * from lhs, rhs where lhs.v1 = rhs.v1;")
+                .unwrap();
+            let tuples = table
+                .iter()
+                .flat_map(|s| s.tuple_iter().collect_vec())
+                .collect_vec();
+            assert_eq!(tuples, vec![vec![2.into(), 2.into()],]);
             filename
         };
         remove_file(filename).unwrap();

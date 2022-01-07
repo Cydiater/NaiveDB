@@ -230,11 +230,11 @@ mod tests {
             let filename = bpm.borrow().filename();
             let schema = Schema::from_slice(&[
                 (DataType::new_int(false), "v1".to_string()),
-                (DataType::new_char(20, false), "v2".to_string()),
+                (DataType::new_varchar(false), "v2".to_string()),
             ]);
-            let tuple1 = vec![Datum::Int(Some(20)), Datum::Char(Some("hello".to_string()))];
-            let tuple2 = vec![Datum::Int(Some(30)), Datum::Char(Some("world".to_string()))];
-            let tuple3 = vec![Datum::Int(Some(40)), Datum::Char(Some("foo".to_string()))];
+            let tuple1 = vec![20.into(), "hello".into()];
+            let tuple2 = vec![30.into(), "world".into()];
+            let tuple3 = vec![40.into(), "foo".into()];
             let page_id = {
                 let mut slice = Slice::new(bpm.clone(), Rc::new(schema));
                 slice.insert(tuple1.as_slice()).unwrap();
@@ -246,7 +246,7 @@ mod tests {
             // refetch
             let schema = Schema::from_slice(&[
                 (DataType::new_int(false), "v1".to_string()),
-                (DataType::new_char(20, false), "v2".to_string()),
+                (DataType::new_varchar(false), "v2".to_string()),
             ]);
             let mut slice = Slice::open(bpm, Rc::new(schema), page_id);
             slice.insert(tuple3.as_slice()).unwrap();
