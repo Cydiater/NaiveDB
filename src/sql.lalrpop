@@ -2,6 +2,7 @@ use std::str::FromStr;
 use crate::datum::DataType;
 use crate::expr::BinaryOp;
 use crate::parser::ast::*;
+use chrono::NaiveDate;
 
 grammar;
 
@@ -74,19 +75,24 @@ ColumnRefExpr: ColumnRefExprNode = {
 }
 
 ConstantExpr: ConstantExprNode = {
-    <num: Num> => ConstantExprNode { value: ConstantValue::Int(num) },
+    <num: Real> => ConstantExprNode { value: ConstantValue::Real(num) },
     <str: Str> => ConstantExprNode { value: ConstantValue::String(str) },
+	<date: Date> => ConstantExprNode { value: ConstantValue::Date(date) },
     "null" => ConstantExprNode { value: ConstantValue::Null },
     "NULL" => ConstantExprNode { value: ConstantValue::Null }
 };
 
 DataType: DataType = {
-    "int" "not" "null" => DataType::new_int(false),
-    "int" "null" => DataType::new_int(true),
-    "varchar" "not" "null" => DataType::new_varchar(false),
-    "varchar" "null" => DataType::new_varchar(true),
-    "bool" "not" "null" => DataType::new_bool(false),
-    "bool" "null" => DataType::new_bool(true),
+    "int" "not" "null" => DataType::new_as_int(false),
+    "int" "null"? => DataType::new_as_int(true),
+    "varchar" "not" "null" => DataType::new_as_varchar(false),
+    "varchar" "null"?  => DataType::new_as_varchar(true),
+    "bool" "not" "null" => DataType::new_as_bool(false),
+    "bool" "null"? => DataType::new_as_bool(true),
+	"date" "not" "null" => DataType::new_as_date(false),
+	"date" "null"? => DataType::new_as_date(true),
+	"float" "not" "null" => DataType::new_as_float(false),
+	"float" "null"?  => DataType::new_as_float(true),
 }
 
 Field: Field = {
@@ -177,10 +183,13 @@ Identifier: String = {
 
 Tuple: Vec<ExprNode> = "(" <exprs: Exprs> ")" => exprs;
 
-Num: i32 = <s:r"[0-9]+"> => i32::from_str(s).unwrap();
+Real: f64 = <s:r"[+-]?([0-9]*[.])?[0-9]+"> => f64::from_str(s).unwrap();
 
 Str: String = r#"'[a-zA-Z_0-9]+'"# => {
     let quoted = String::from_str(<>).unwrap();
     let len = quoted.len();
     quoted[1..len - 1].into()
 };
+
+Date: NaiveDate = <year: Real> ":" <month: Real> ":" <day: Real>
+	=> NaiveDate::from_ymd(year as i32, month as u32, day as u32);

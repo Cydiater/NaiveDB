@@ -2,9 +2,8 @@ use crate::datum::{DataType, Datum};
 use crate::expr::{Expr, ExprImpl};
 use crate::table::Slice;
 use itertools::Itertools;
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum BinaryOp {
     Equal,
     LessThan,
@@ -39,7 +38,7 @@ impl BinaryOp {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct BinaryExpr {
     lhs: Box<ExprImpl>,
     rhs: Box<ExprImpl>,
@@ -100,11 +99,8 @@ impl Expr for BinaryExpr {
     fn return_type(&self) -> DataType {
         match self.op {
             BinaryOp::Equal | BinaryOp::LessThan | BinaryOp::GreaterThan => {
-                DataType::new_bool(false)
+                DataType::new_as_bool(false)
             }
         }
-    }
-    fn name(&self) -> String {
-        self.desc.clone()
     }
 }

@@ -90,12 +90,14 @@ impl CatalogManager {
     }
     pub fn find_indexes_by_table(&self, table_name: &str) -> Result<Vec<BPTIndex>, CatalogError> {
         if let Some(table_catalog) = &self.table_catalog {
+            let page_id_of_table = table_catalog.page_id_of(table_name).unwrap();
+            let table = Table::open(page_id_of_table, self.bpm.clone());
             Ok(table_catalog
                 .prefix_with(&format!("{}:", table_name))
                 .into_iter()
                 .map(|name| {
                     let page_id = table_catalog.page_id_of(name).unwrap();
-                    BPTIndex::open(self.bpm.clone(), page_id)
+                    BPTIndex::open(self.bpm.clone(), page_id, table.schema.as_ref())
                 })
                 .collect_vec())
         } else {
@@ -143,7 +145,7 @@ mod tests {
             // create a table
             let table = Table::new(
                 Rc::new(Schema::from_slice(&[(
-                    DataType::new_int(false),
+                    DataType::new_as_int(false),
                     "v1".to_string(),
                 )])),
                 bpm,

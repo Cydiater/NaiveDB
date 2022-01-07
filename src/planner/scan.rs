@@ -28,7 +28,7 @@ impl Planner {
         with_record_id: bool,
     ) -> Plan {
         let table = self.catalog.borrow().find_table(table_name).unwrap();
-        let indexes = self
+        let mut indexes = self
             .catalog
             .borrow()
             .find_indexes_by_table(table_name)
@@ -36,12 +36,20 @@ impl Planner {
         let where_exprs = where_exprs
             .iter()
             .map(|node| {
-                ExprImpl::from_ast(node, self.catalog.clone(), &table.schema, None).unwrap()
+                let return_type_hint = if let Some(column_name) = node.ref_what_column() {
+                    let schema = &self.catalog.borrow().find_table(table_name).unwrap().schema;
+                    let idx = schema.index_of(&column_name).unwrap();
+                    Some(schema.type_at(idx))
+                } else {
+                    None
+                };
+                ExprImpl::from_ast(node, self.catalog.clone(), &table.schema, return_type_hint)
+                    .unwrap()
             })
             .collect_vec();
         let mut index_scan = None;
-        for index in indexes {
-            let index_exprs = index.get_exprs();
+        for index in indexes.iter_mut() {
+            let index_exprs = &mut index.exprs;
             let mut begin: Vec<Option<Datum>> = vec![None; index_exprs.len()];
             let mut end: Vec<Option<Datum>> = vec![None; index_exprs.len()];
             for (idx, index_expr) in index_exprs.iter().enumerate() {

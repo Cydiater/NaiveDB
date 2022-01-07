@@ -101,11 +101,13 @@ impl Engine {
                 plan.exprs,
             ))),
             Plan::IndexScan(plan) => {
-                let index = BPTIndex::open(self.bpm.clone(), plan.index_page_id);
+                let table = Table::open(plan.table_page_id, self.bpm.clone());
+                let index =
+                    BPTIndex::open(self.bpm.clone(), plan.index_page_id, table.schema.as_ref());
                 let begin_datums = plan.begin_datums.unwrap_or_else(|| index.first_key());
                 let end_datums = plan.end_datums.unwrap_or_else(|| index.last_key());
                 Ok(ExecutorImpl::IndexScan(IndexScanExecutor::new(
-                    Table::open(plan.table_page_id, self.bpm.clone()),
+                    table,
                     index,
                     begin_datums,
                     end_datums,
@@ -124,7 +126,9 @@ impl Engine {
                 let indexes = plan
                     .index_page_ids
                     .iter()
-                    .map(|page_id| BPTIndex::open(self.bpm.clone(), *page_id))
+                    .map(|page_id| {
+                        BPTIndex::open(self.bpm.clone(), *page_id, table.schema.as_ref())
+                    })
                     .collect_vec();
                 Ok(ExecutorImpl::Delete(DeleteExecutor::new(
                     Box::new(child),

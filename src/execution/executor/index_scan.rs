@@ -42,8 +42,8 @@ impl Executor for IndexScanExecutor {
             self.table.schema.clone()
         } else {
             let mut type_and_names = self.table.schema.to_vec();
-            type_and_names.push((DataType::new_int(false), "_page_id".to_string()));
-            type_and_names.push((DataType::new_int(false), "_idx".to_string()));
+            type_and_names.push((DataType::new_as_int(false), "_page_id".to_string()));
+            type_and_names.push((DataType::new_as_int(false), "_idx".to_string()));
             Rc::new(Schema::from_slice(&type_and_names))
         }
     }

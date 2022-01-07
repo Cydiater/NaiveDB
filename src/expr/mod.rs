@@ -3,7 +3,7 @@ use crate::datum::{DataType, Datum};
 use crate::parser::ast::{ConstantValue, ExprNode};
 use crate::table::{Schema, Slice};
 use itertools::Itertools;
-use serde::{Deserialize, Serialize};
+use std::convert::TryInto;
 use thiserror::Error;
 
 pub use binary::{BinaryExpr, BinaryOp};
@@ -17,10 +17,9 @@ mod constant;
 pub trait Expr {
     fn eval(&self, slice: Option<&Slice>) -> Vec<Datum>;
     fn return_type(&self) -> DataType;
-    fn name(&self) -> String;
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ExprImpl {
     Constant(ConstantExpr),
     ColumnRef(ColumnRefExpr),
@@ -56,45 +55,57 @@ impl ExprImpl {
             ExprImpl::Binary(expr) => expr.return_type(),
         }
     }
-    pub fn name(&self) -> String {
-        match self {
-            ExprImpl::Constant(expr) => expr.name(),
-            ExprImpl::ColumnRef(expr) => expr.name(),
-            ExprImpl::Binary(expr) => expr.name(),
-        }
-    }
     pub fn from_ast(
         node: &ExprNode,
         catalog: CatalogManagerRef,
         schema: &Schema,
-        data_type_hint: Option<&DataType>,
+        return_type_hint: Option<DataType>,
     ) -> Result<Self, ExprError> {
         match node {
             ExprNode::Constant(node) => Ok(match &node.value {
-                ConstantValue::Int(value) => ExprImpl::Constant(ConstantExpr::new(
-                    Datum::Int(Some(*value)),
-                    DataType::new_int(false),
-                )),
+                ConstantValue::Real(value) => match return_type_hint.unwrap() {
+                    DataType::Int(_) => ExprImpl::Constant(ConstantExpr::new(
+                        Datum::Int(Some(*value as i32)),
+                        return_type_hint.unwrap(),
+                    )),
+                    DataType::Float(_) => ExprImpl::Constant(ConstantExpr::new(
+                        Datum::Float(Some((*value as f32).try_into().unwrap())),
+                        return_type_hint.unwrap(),
+                    )),
+                    _ => unreachable!(),
+                },
                 ConstantValue::String(value) => ExprImpl::Constant(ConstantExpr::new(
-                    Datum::VarChar(Some(value.clone())),
-                    DataType::new_varchar(false),
+                    value.as_str().into(),
+                    return_type_hint.unwrap(),
                 )),
                 ConstantValue::Bool(value) => ExprImpl::Constant(ConstantExpr::new(
                     Datum::Bool(Some(*value)),
-                    DataType::new_bool(false),
+                    return_type_hint.unwrap(),
                 )),
-                ConstantValue::Null => match data_type_hint.unwrap() {
-                    DataType::Int(int_type) => ExprImpl::Constant(ConstantExpr::new(
+                ConstantValue::Date(value) => ExprImpl::Constant(ConstantExpr::new(
+                    Datum::Date(Some(*value)),
+                    return_type_hint.unwrap(),
+                )),
+                ConstantValue::Null => match return_type_hint.unwrap() {
+                    DataType::Int(_) => ExprImpl::Constant(ConstantExpr::new(
                         Datum::Int(None),
-                        DataType::Int(*int_type),
+                        return_type_hint.unwrap(),
                     )),
-                    DataType::VarChar(varchar_type) => ExprImpl::Constant(ConstantExpr::new(
+                    DataType::VarChar(_) => ExprImpl::Constant(ConstantExpr::new(
                         Datum::VarChar(None),
-                        DataType::VarChar(*varchar_type),
+                        return_type_hint.unwrap(),
                     )),
-                    DataType::Bool(bool_type) => ExprImpl::Constant(ConstantExpr::new(
+                    DataType::Bool(_) => ExprImpl::Constant(ConstantExpr::new(
                         Datum::Bool(None),
-                        DataType::Bool(*bool_type),
+                        return_type_hint.unwrap(),
+                    )),
+                    DataType::Date(_) => ExprImpl::Constant(ConstantExpr::new(
+                        Datum::Bool(None),
+                        return_type_hint.unwrap(),
+                    )),
+                    DataType::Float(_) => ExprImpl::Constant(ConstantExpr::new(
+                        Datum::Float(None),
+                        return_type_hint.unwrap(),
                     )),
                 },
             }),
@@ -109,8 +120,8 @@ impl ExprImpl {
             }
             ExprNode::Binary(node) => {
                 let lhs =
-                    Self::from_ast(node.lhs.as_ref(), catalog.clone(), schema, data_type_hint)?;
-                let rhs = Self::from_ast(node.rhs.as_ref(), catalog, schema, data_type_hint)?;
+                    Self::from_ast(node.lhs.as_ref(), catalog.clone(), schema, return_type_hint)?;
+                let rhs = Self::from_ast(node.rhs.as_ref(), catalog, schema, return_type_hint)?;
                 Ok(ExprImpl::Binary(BinaryExpr::new(
                     Box::new(lhs),
                     Box::new(rhs),
@@ -127,28 +138,4 @@ pub enum ExprError {
     TableNameNotFound,
     #[error("CatalogError: {0}")]
     CatalogError(#[from] CatalogError),
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_serde() {
-        let expr = ExprImpl::Binary(BinaryExpr::new(
-            Box::new(ExprImpl::ColumnRef(ColumnRefExpr::new(
-                0,
-                DataType::new_int(false),
-                "v1".to_string(),
-            ))),
-            Box::new(ExprImpl::Constant(ConstantExpr::new(
-                Datum::Int(Some(1)),
-                DataType::new_int(false),
-            ))),
-            BinaryOp::Equal,
-        ));
-        let serialized = serde_json::to_string(&expr).unwrap();
-        let deserialized: ExprImpl = serde_json::from_str(&serialized).unwrap();
-        assert!(matches!(deserialized, ExprImpl::Binary(_)));
-    }
 }

@@ -76,7 +76,10 @@ impl<'page> Iterator for TupleIter<'page> {
     type Item = Vec<Datum>;
     fn next(&mut self) -> Option<Self::Item> {
         if let Some((_, data)) = self.key_data_iter.next() {
-            Some(Datum::from_bytes_and_schema(self.schema.as_ref(), data))
+            Some(Datum::tuple_from_bytes_with_schema(
+                data,
+                self.schema.as_ref(),
+            ))
         } else {
             None
         }
@@ -96,7 +99,7 @@ impl Slice {
         header: &str,
         message: &str,
     ) -> Result<Self, TableError> {
-        let schema = Schema::from_slice(&[(DataType::new_varchar(false), header.to_owned())]);
+        let schema = Schema::from_slice(&[(DataType::new_as_varchar(false), header.to_owned())]);
         let mut slice = Self::new(bpm, Rc::new(schema));
         slice.insert(&[Datum::VarChar(Some(message.to_owned()))])?;
         Ok(slice)
@@ -107,7 +110,7 @@ impl Slice {
         header: &str,
         cnt: usize,
     ) -> Result<Self, TableError> {
-        let schema = Schema::from_slice(&[(DataType::new_int(false), header.to_owned())]);
+        let schema = Schema::from_slice(&[(DataType::new_as_int(false), header.to_owned())]);
         let mut slice = Self::new(bpm, Rc::new(schema));
         slice.insert(&[Datum::Int(Some(cnt as i32))])?;
         Ok(slice)
@@ -154,10 +157,8 @@ impl Slice {
 
     pub fn insert(&mut self, tuple: &[Datum]) -> Result<(usize, usize), TableError> {
         let page_id = self.page_id();
-        let schema = self.schema.clone();
         let slice_page = self.slice_page_mut();
-        let slot_id =
-            slice_page.insert(&(), &Datum::to_bytes_with_schema(tuple, schema.as_ref()))?;
+        let slot_id = slice_page.insert(&(), &Datum::bytes_from_tuple(tuple))?;
         Ok((page_id, slot_id))
     }
 
@@ -169,9 +170,9 @@ impl Slice {
 
     pub fn tuple_at(&self, idx: usize) -> Result<Vec<Datum>, TableError> {
         let slice_page = self.slice_page();
-        Ok(Datum::from_bytes_and_schema(
-            self.schema.as_ref(),
+        Ok(Datum::tuple_from_bytes_with_schema(
             slice_page.data_at(idx),
+            self.schema.as_ref(),
         ))
     }
 
@@ -229,8 +230,8 @@ mod tests {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
             let schema = Schema::from_slice(&[
-                (DataType::new_int(false), "v1".to_string()),
-                (DataType::new_varchar(false), "v2".to_string()),
+                (DataType::new_as_int(false), "v1".to_string()),
+                (DataType::new_as_varchar(false), "v2".to_string()),
             ]);
             let tuple1 = vec![20.into(), "hello".into()];
             let tuple2 = vec![30.into(), "world".into()];
@@ -245,8 +246,8 @@ mod tests {
             };
             // refetch
             let schema = Schema::from_slice(&[
-                (DataType::new_int(false), "v1".to_string()),
-                (DataType::new_varchar(false), "v2".to_string()),
+                (DataType::new_as_int(false), "v1".to_string()),
+                (DataType::new_as_varchar(false), "v2".to_string()),
             ]);
             let mut slice = Slice::open(bpm, Rc::new(schema), page_id);
             slice.insert(tuple3.as_slice()).unwrap();
@@ -263,7 +264,7 @@ mod tests {
         let filename = {
             let bpm = BufferPoolManager::new_random_shared(100);
             let filename = bpm.borrow().filename();
-            let schema = Schema::from_slice(&[(DataType::new_int(false), "v1".to_string())]);
+            let schema = Schema::from_slice(&[(DataType::new_as_int(false), "v1".to_string())]);
             let mut slice = Slice::new(bpm, Rc::new(schema));
             slice.insert(&[Datum::Int(Some(1))]).unwrap();
             slice.insert(&[Datum::Int(Some(2))]).unwrap();
@@ -281,8 +282,8 @@ mod tests {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
             let schema = Rc::new(Schema::from_slice(&[
-                (DataType::new_int(false), "v1".to_string()),
-                (DataType::new_varchar(false), "v2".to_string()),
+                (DataType::new_as_int(false), "v1".to_string()),
+                (DataType::new_as_varchar(false), "v2".to_string()),
             ]));
             let mut slice = Slice::new(bpm, schema);
             let tuple1 = vec![

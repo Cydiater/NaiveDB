@@ -1,7 +1,8 @@
 use crate::datum::Datum;
-use crate::expr::ExprImpl;
+use crate::expr::{ColumnRefExpr, ExprImpl};
 use crate::storage::{BufferPoolManagerRef, PageID, PageRef, SlottedPageError, PAGE_SIZE};
 use crate::table::{Schema, SchemaRef};
+use itertools::Itertools;
 use std::convert::TryInto;
 use std::ops::Range;
 use std::rc::Rc;
@@ -170,7 +171,7 @@ impl Drop for BPTIndex {
 ///
 /// Index Format:
 ///
-///     | page_id_of_root | len_of_exprs | json_of_exprs
+///     | page_id_of_root | len_of_indexed_column | column_idx[0] | ... |
 ///
 /// IndexSchema here is used as the key schema, the page layout of index page is mostly same as
 /// Slice.
@@ -180,6 +181,7 @@ impl Drop for BPTIndex {
 pub struct BPTIndex {
     page: PageRef,
     bpm: BufferPoolManagerRef,
+    pub exprs: Vec<ExprImpl>,
 }
 
 mod internal;
@@ -225,6 +227,7 @@ impl Iterator for IndexIter {
 
 impl BPTIndex {
     const PAGE_ID_OF_ROOT: Range<usize> = 0..4;
+    const LEN_OF_INDEXED_COLUMN_IDS: Range<usize> = 4..8;
 
     pub fn get_page_id(&self) -> PageID {
         self.page.borrow().page_id.unwrap()
@@ -234,32 +237,59 @@ impl BPTIndex {
         todo!()
     }
 
-    pub fn new(bpm: BufferPoolManagerRef, exprs: &[ExprImpl]) -> Self {
+    pub fn new(bpm: BufferPoolManagerRef, exprs: Vec<ExprImpl>) -> Self {
         let page = bpm.borrow_mut().alloc().unwrap();
-        let schema = Rc::new(Schema::from_exprs(exprs));
+        let schema = Rc::new(Schema::from_exprs(&exprs));
         let leaf_node = LeafNode::new(bpm.clone(), schema);
         let page_id_of_root = leaf_node.page_id();
         // set page_id_of_root
         page.borrow_mut().buffer[0..4].copy_from_slice(&(page_id_of_root as u32).to_le_bytes());
-        // set exprs
-        let serialized = serde_json::to_string(&exprs).unwrap();
-        let len = serialized.len();
-        page.borrow_mut().buffer[4..8].copy_from_slice(&(len as u32).to_le_bytes());
-        page.borrow_mut().buffer[8..8 + len].copy_from_slice(serialized.as_bytes());
+        let indexed_columns_ids = exprs
+            .iter()
+            .map(|e| {
+                if let ExprImpl::ColumnRef(cf) = e {
+                    cf.as_idx()
+                } else {
+                    unreachable!()
+                }
+            })
+            .collect_vec();
+        let len_of_indexed_column_ids = indexed_columns_ids.len() as u32;
+        page.borrow_mut().buffer[Self::LEN_OF_INDEXED_COLUMN_IDS]
+            .copy_from_slice(&(len_of_indexed_column_ids.to_le_bytes()));
+        let bytes: Vec<u8> = indexed_columns_ids
+            .into_iter()
+            .flat_map(|idx| (idx as u32).to_le_bytes())
+            .collect_vec();
+        let len = bytes.len();
+        page.borrow_mut().buffer[8..8 + len].copy_from_slice(&bytes);
         page.borrow_mut().is_dirty = true;
-        Self { bpm, page }
+        Self { bpm, page, exprs }
     }
 
-    pub fn open(bpm: BufferPoolManagerRef, page_id: PageID) -> Self {
+    pub fn open(bpm: BufferPoolManagerRef, page_id: PageID, table_schema: &Schema) -> Self {
         let page = bpm.borrow_mut().fetch(page_id).unwrap();
-        Self { bpm, page }
-    }
-
-    pub fn get_exprs(&self) -> Vec<ExprImpl> {
-        let buffer = &self.page.borrow().buffer;
-        let len = u32::from_le_bytes(buffer[4..8].try_into().unwrap()) as usize;
-        let serialized = String::from_utf8(buffer[8..8 + len].to_vec()).unwrap();
-        serde_json::from_str(&serialized).unwrap()
+        let len_of_indexed_column_ids = u32::from_le_bytes(
+            page.borrow().buffer[Self::LEN_OF_INDEXED_COLUMN_IDS]
+                .try_into()
+                .unwrap(),
+        ) as usize;
+        let exprs = (0..len_of_indexed_column_ids)
+            .into_iter()
+            .map(|idx| {
+                let start = 8 + 4 * idx;
+                let end = start + 4;
+                let column_idx =
+                    u32::from_le_bytes(page.borrow().buffer[start..end].try_into().unwrap())
+                        as usize;
+                ExprImpl::ColumnRef(ColumnRefExpr::new(
+                    column_idx,
+                    table_schema.type_at(column_idx),
+                    table_schema.column_name_at(column_idx),
+                ))
+            })
+            .collect_vec();
+        Self { bpm, page, exprs }
     }
 
     pub fn get_page_id_of_root(&self) -> PageID {
@@ -276,8 +306,7 @@ impl BPTIndex {
     }
 
     pub fn get_key_schema(&self) -> Schema {
-        let exprs = self.get_exprs();
-        Schema::from_exprs(&exprs)
+        Schema::from_exprs(&self.exprs)
     }
 
     pub fn set_root(&mut self, key: &[Datum], page_id_lhs: PageID, page_id_rhs: PageID) {
@@ -574,10 +603,10 @@ mod tests {
             let filename = bpm.borrow().filename();
             let exprs = vec![ExprImpl::ColumnRef(ColumnRefExpr::new(
                 0,
-                DataType::new_int(false),
+                DataType::new_as_int(false),
                 "v1".to_string(),
             ))];
-            let mut index = BPTIndex::new(bpm, &exprs);
+            let mut index = BPTIndex::new(bpm, exprs);
             index.insert(&[Datum::Int(Some(0))], (0, 0)).unwrap();
             index.insert(&[Datum::Int(Some(1))], (1, 0)).unwrap();
             index.insert(&[Datum::Int(Some(2))], (2, 0)).unwrap();
@@ -600,10 +629,10 @@ mod tests {
             let filename = bpm.borrow().filename();
             let exprs = vec![ExprImpl::ColumnRef(ColumnRefExpr::new(
                 0,
-                DataType::new_int(false),
+                DataType::new_as_int(false),
                 "v1".to_string(),
             ))];
-            let mut index = BPTIndex::new(bpm, &exprs);
+            let mut index = BPTIndex::new(bpm, exprs);
             let mut set: HashSet<u16> = HashSet::new();
             let mut rng = rand::thread_rng();
             for _ in 0..100000 {
@@ -639,10 +668,10 @@ mod tests {
             let filename = bpm.borrow().filename();
             let exprs = vec![ExprImpl::ColumnRef(ColumnRefExpr::new(
                 0,
-                DataType::new_int(false),
+                DataType::new_as_int(false),
                 "v1".to_string(),
             ))];
-            let mut index = BPTIndex::new(bpm, &exprs);
+            let mut index = BPTIndex::new(bpm, exprs);
             for idx in 0..40000usize {
                 index
                     .insert(&[Datum::Int(Some(idx as i32))], (idx, idx))

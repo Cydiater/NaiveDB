@@ -26,12 +26,7 @@ impl ProjectExecutor {
 
 impl Executor for ProjectExecutor {
     fn schema(&self) -> SchemaRef {
-        let type_and_names = self
-            .exprs
-            .iter()
-            .map(|e| (e.return_type(), e.name()))
-            .collect_vec();
-        Rc::new(Schema::from_slice(type_and_names.as_slice()))
+        Rc::new(Schema::from_exprs(&self.exprs))
     }
     fn execute(&mut self) -> Result<Option<Slice>, ExecutionError> {
         let schema = self.schema();
