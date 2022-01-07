@@ -76,6 +76,8 @@ mod tests {
     use rand::Rng;
     use std::collections::HashSet;
     use std::fs::remove_file;
+    use std::str::FromStr;
+    use chrono::NaiveDate;
 
     #[test]
     fn chaos_test() {
@@ -277,6 +279,35 @@ mod tests {
                 .flat_map(|s| s.tuple_iter().collect_vec())
                 .collect_vec();
             assert_eq!(tuples, vec![vec![2.into(), 2.into()],]);
+            db.run("drop table rhs;").unwrap();
+            db.run("create table rhs (v1 int, v2 float, v3 date);")
+                .unwrap();
+            db.run("insert into rhs values (1, 1.1, 2000:1:1), (2, 2.2, 1926:08:17);")
+                .unwrap();
+            let table = db
+                .run("select * from lhs, rhs where lhs.v1 = rhs.v1;")
+                .unwrap();
+            let tuples = table
+                .iter()
+                .flat_map(|s| s.tuple_iter().collect_vec())
+                .collect_vec();
+            assert_eq!(
+                tuples,
+                vec![
+                    vec![
+                        1.into(),
+                        1.into(),
+                        1.1f32.into(),
+                        NaiveDate::from_str("2000-1-1").unwrap().into()
+                    ],
+                    vec![
+                        2.into(),
+                        2.into(),
+                        2.2f32.into(),
+                        NaiveDate::from_str("1926-08-17").unwrap().into()
+                    ],
+                ]
+            );
             filename
         };
         remove_file(filename).unwrap();

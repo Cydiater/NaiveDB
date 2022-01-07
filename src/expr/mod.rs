@@ -2,10 +2,8 @@ use crate::catalog::{CatalogError, CatalogManagerRef};
 use crate::datum::{DataType, Datum};
 use crate::parser::ast::{ConstantValue, ExprNode};
 use crate::table::{Schema, Slice};
-use chrono::NaiveDate;
 use itertools::Itertools;
-use ordered_float::NotNan;
-use std::str::FromStr;
+use std::convert::TryInto;
 use thiserror::Error;
 
 pub use binary::{BinaryExpr, BinaryOp};
@@ -65,27 +63,27 @@ impl ExprImpl {
     ) -> Result<Self, ExprError> {
         match node {
             ExprNode::Constant(node) => Ok(match &node.value {
-                ConstantValue::Int(value) => ExprImpl::Constant(ConstantExpr::new(
-                    Datum::Int(Some(*value)),
-                    DataType::new_as_int(false),
-                )),
-                ConstantValue::String(value) => match return_type_hint.unwrap() {
-                    DataType::VarChar(_) => ExprImpl::Constant(ConstantExpr::new(
-                        value.as_str().into(),
+                ConstantValue::Real(value) => match return_type_hint.unwrap() {
+                    DataType::Int(_) => ExprImpl::Constant(ConstantExpr::new(
+                        Datum::Int(Some(*value as i32)),
                         return_type_hint.unwrap(),
                     )),
                     DataType::Float(_) => ExprImpl::Constant(ConstantExpr::new(
-                        NotNan::<f32>::from_str(value).unwrap().into(),
-                        return_type_hint.unwrap(),
-                    )),
-                    DataType::Date(_) => ExprImpl::Constant(ConstantExpr::new(
-                        NaiveDate::from_str(value).unwrap().into(),
+                        Datum::Float(Some((*value as f32).try_into().unwrap())),
                         return_type_hint.unwrap(),
                     )),
                     _ => unreachable!(),
                 },
+                ConstantValue::String(value) => ExprImpl::Constant(ConstantExpr::new(
+                    value.as_str().into(),
+                    return_type_hint.unwrap(),
+                )),
                 ConstantValue::Bool(value) => ExprImpl::Constant(ConstantExpr::new(
                     Datum::Bool(Some(*value)),
+                    return_type_hint.unwrap(),
+                )),
+                ConstantValue::Date(value) => ExprImpl::Constant(ConstantExpr::new(
+                    Datum::Date(Some(*value)),
                     return_type_hint.unwrap(),
                 )),
                 ConstantValue::Null => match return_type_hint.unwrap() {

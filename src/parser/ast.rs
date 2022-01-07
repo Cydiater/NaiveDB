@@ -1,5 +1,6 @@
 use crate::datum::DataType;
 use crate::expr::BinaryOp;
+use chrono::NaiveDate;
 
 #[derive(Debug)]
 pub enum Statement {
@@ -23,8 +24,9 @@ pub struct DropTableStmt {
 pub enum ConstantValue {
     Null,
     String(String),
-    Int(i32),
+    Real(f64),
     Bool(bool),
+    Date(NaiveDate),
 }
 
 #[derive(Debug)]
@@ -50,6 +52,22 @@ pub enum ExprNode {
     Constant(ConstantExprNode),
     ColumnRef(ColumnRefExprNode),
     Binary(BinaryExprNode),
+}
+
+impl ExprNode {
+    pub fn ref_what_column(&self) -> Option<String> {
+        match self {
+            Self::Constant(_) => None,
+            Self::Binary(b) => {
+                if let Some(n) = b.lhs.ref_what_column() {
+                    Some(n)
+                } else {
+                    b.rhs.ref_what_column()
+                }
+            }
+            Self::ColumnRef(c) => Some(c.column_name.to_owned()),
+        }
+    }
 }
 
 #[derive(Debug)]

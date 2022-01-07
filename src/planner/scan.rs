@@ -36,7 +36,15 @@ impl Planner {
         let where_exprs = where_exprs
             .iter()
             .map(|node| {
-                ExprImpl::from_ast(node, self.catalog.clone(), &table.schema, None).unwrap()
+                let return_type_hint = if let Some(column_name) = node.ref_what_column() {
+                    let schema = &self.catalog.borrow().find_table(table_name).unwrap().schema;
+                    let idx = schema.index_of(&column_name).unwrap();
+                    Some(schema.type_at(idx))
+                } else {
+                    None
+                };
+                ExprImpl::from_ast(node, self.catalog.clone(), &table.schema, return_type_hint)
+                    .unwrap()
             })
             .collect_vec();
         let mut index_scan = None;

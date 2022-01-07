@@ -42,6 +42,12 @@ impl From<NotNan<f32>> for Datum {
     }
 }
 
+impl From<f32> for Datum {
+    fn from(f: f32) -> Datum {
+        Datum::Float(Some(f.try_into().unwrap()))
+    }
+}
+
 impl From<NaiveDate> for Datum {
     fn from(d: NaiveDate) -> Datum {
         Datum::Date(Some(d))
@@ -67,6 +73,17 @@ impl Datum {
     pub fn to_bytes(&self) -> Vec<u8> {
         match self {
             Self::Int(v) => {
+                if let Some(v) = v {
+                    [vec![1u8], v.to_le_bytes().to_vec()]
+                        .iter()
+                        .flatten()
+                        .cloned()
+                        .collect_vec()
+                } else {
+                    vec![0u8; 5]
+                }
+            }
+            Self::Float(v) => {
                 if let Some(v) = v {
                     [vec![1u8], v.to_le_bytes().to_vec()]
                         .iter()
@@ -224,6 +241,8 @@ impl fmt::Display for Datum {
                 Self::Int(Some(d)) => d.to_string(),
                 Self::VarChar(Some(s)) => s.to_string(),
                 Self::Bool(Some(s)) => s.to_string(),
+                Self::Date(Some(d)) => d.to_string(),
+                Self::Float(Some(f)) => f.to_string(),
                 _ => String::from("NULL"),
             }
         )
