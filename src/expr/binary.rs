@@ -2,6 +2,7 @@ use crate::datum::{DataType, Datum};
 use crate::expr::{Expr, ExprImpl};
 use crate::table::Slice;
 use itertools::Itertools;
+use std::fmt;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum BinaryOp {
@@ -34,6 +35,18 @@ impl BinaryOp {
                     Datum::Bool(Some(false))
                 }
             },
+        }
+    }
+}
+
+impl fmt::Display for BinaryExpr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let lhs = self.lhs.to_string();
+        let rhs = self.rhs.to_string();
+        match self.op {
+            BinaryOp::Equal => write!(f, "{} = {}", lhs, rhs),
+            BinaryOp::LessThan => write!(f, "{} < {}", lhs, rhs),
+            BinaryOp::GreaterThan => write!(f, "{} > {}", lhs, rhs),
         }
     }
 }

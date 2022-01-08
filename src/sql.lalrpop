@@ -3,6 +3,7 @@ use crate::datum::DataType;
 use crate::expr::BinaryOp;
 use crate::parser::ast::*;
 use chrono::NaiveDate;
+use itertools::Itertools;
 
 grammar;
 
@@ -12,6 +13,7 @@ pub Exprs = Comma<Expr>;
 pub Tuples = Comma<Tuple>;
 pub WhereExprs = And<Expr>;
 pub Identifiers = Comma<Identifier>;
+pub AggItems = Comma<AggItem>;
 
 match {
 	r"[0-9]+\-[0-9]+\-[0-9]+",
@@ -146,13 +148,32 @@ WhereClauses: Vec<ExprNode> = "where" <exprs: WhereExprs> => exprs;
 
 Selectors: Selectors = {
     "*" => Selectors::All,
-    <exprs: Exprs> => Selectors::Exprs(exprs),
-	<action: AggAction> "(" <target: AggTarget> ")" => Selectors::Agg {
+	<items: AggItems> => {
+		if items.iter().all(|item| {
+			matches!(item.action, AggAction::No)
+		}) {
+			let exprs = items.into_iter().map(|item| if let AggTarget::Expr(expr) = item.target {
+				expr
+			} else {
+				unreachable!()
+			}).collect_vec();
+			Selectors::Exprs(exprs)
+		} else {
+			Selectors::Agg(items)
+		}
+	}
+};
+
+AggItem: AggItem = {
+	<action: AggAction> "(" <target: AggTarget> ")" => AggItem {
 		target,
 		action,
 	},
-};
-
+	<expr: Expr> => AggItem {
+		action: AggAction::No,	
+		target: AggTarget::Expr(expr),
+	}
+}
 
 AggAction: AggAction = {
 	SUM => AggAction::Sum,
@@ -169,18 +190,22 @@ AggTarget: AggTarget = {
 AddIndexStmt: Statement = ALTER "table" <table_name: Identifier> "add" "index" "("<exprs: Exprs> ")" ";" 
     => Statement::AddIndex(AddIndexStmt { table_name, exprs });
 
+GroupByClause: ExprNode = GROUP BY <expr: Expr> => expr;
+
 SelectStmt: Statement = 
 	"select" 
 		<selectors: Selectors> 
 	"from" 
 		<table_names: Identifiers> 
 	<where_exprs: WhereClauses?> 
+	<group_by_expr: GroupByClause?>
 	";" 
     => 
 	Statement::Select(SelectStmt { 
 		table_names, 
 		selectors, 
 		where_exprs: where_exprs.unwrap_or_else(|| vec![]),
+		group_by_expr,
 	});
 
 DeleteStmt: Statement = 
@@ -354,6 +379,16 @@ MAX = {
 LIKE = {
 	"like",
 	"LIKE",
+};
+
+GROUP = {
+	"group",
+	"GROUP",
+};
+
+BY = {
+	"by",
+	"BY",
 };
 
 MaxLength = "(" Real ")";

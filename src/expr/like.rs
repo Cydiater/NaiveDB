@@ -3,11 +3,18 @@ use crate::expr::{Expr, ExprImpl};
 use crate::table::Slice;
 use itertools::Itertools;
 use like::Like;
+use std::fmt;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct LikeExpr {
     child: Box<ExprImpl>,
     pattern: String,
+}
+
+impl fmt::Display for LikeExpr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} like {}", self.child, self.pattern)
+    }
 }
 
 impl LikeExpr {

@@ -146,9 +146,9 @@ impl Planner {
                 }))
             }
             Selectors::All => Ok(filter_plan),
-            Selectors::Agg { action, target } => {
-                Ok(self.plan_agg(&schema, action, target, filter_plan).unwrap())
-            }
+            Selectors::Agg(items) => Ok(self
+                .plan_agg(&schema, items, stmt.group_by_expr, filter_plan)
+                .unwrap()),
         }
     }
 }

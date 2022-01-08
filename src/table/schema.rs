@@ -179,13 +179,7 @@ impl Schema {
     pub fn from_exprs(exprs: &[ExprImpl]) -> Self {
         let type_and_names = exprs
             .iter()
-            .map(|e| {
-                if let ExprImpl::ColumnRef(cr) = e {
-                    cr.as_return_type_and_column_name()
-                } else {
-                    unreachable!()
-                }
-            })
+            .map(|e| (e.return_type(), e.to_string()))
             .collect_vec();
         Self::from_slice(&type_and_names)
     }

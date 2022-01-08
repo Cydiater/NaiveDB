@@ -18,12 +18,13 @@ pub enum Statement {
     LoadFromFile(LoadFromFileStmt),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AggAction {
     Sum,
     Avg,
     Max,
     Cnt,
+    No,
 }
 
 impl ToString for AggAction {
@@ -33,6 +34,7 @@ impl ToString for AggAction {
             Self::Avg => "average".to_owned(),
             Self::Max => "max".to_owned(),
             Self::Cnt => "count".to_owned(),
+            _ => unreachable!(),
         }
     }
 }
@@ -41,6 +43,12 @@ impl ToString for AggAction {
 pub enum AggTarget {
     All,
     Expr(ExprNode),
+}
+
+#[derive(Debug)]
+pub struct AggItem {
+    pub action: AggAction,
+    pub target: AggTarget,
 }
 
 #[derive(Debug)]
@@ -110,10 +118,7 @@ impl ExprNode {
 pub enum Selectors {
     All,
     Exprs(Vec<ExprNode>),
-    Agg {
-        action: AggAction,
-        target: AggTarget,
-    },
+    Agg(Vec<AggItem>),
 }
 
 #[derive(Debug)]
@@ -127,6 +132,7 @@ pub struct SelectStmt {
     pub table_names: Vec<String>,
     pub selectors: Selectors,
     pub where_exprs: Vec<ExprNode>,
+    pub group_by_expr: Option<ExprNode>,
 }
 
 #[derive(Debug)]
