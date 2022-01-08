@@ -52,6 +52,7 @@ And<T>: Vec<T> = {
 
 BooleanExpr: ExprNode = {
     <binary_expr: BinaryExpr> => ExprNode::Binary(binary_expr),
+	<like_expr: LikeExpr> => ExprNode::Like(like_expr),
 }
 
 ValueExpr: ExprNode = {
@@ -69,6 +70,10 @@ BinaryExpr: BinaryExprNode = {
     <lhs: ValueExpr> "<" <rhs: ValueExpr> => BinaryExprNode { lhs: Box::new(lhs), rhs: Box::new(rhs), op: BinaryOp::LessThan },
     <lhs: ValueExpr> ">" <rhs: ValueExpr> => BinaryExprNode { lhs: Box::new(lhs), rhs: Box::new(rhs), op: BinaryOp::GreaterThan },
 }
+
+LikeExpr: LikeExprNode = <child: ValueExpr> LIKE <pattern: Str> 
+	=> LikeExprNode { child: Box::new(child), pattern };
+
 
 ColumnRefExpr: ColumnRefExprNode = {
     <column_name: Identifier> => ColumnRefExprNode { 
@@ -242,7 +247,7 @@ Tuple: Vec<ExprNode> = "(" <exprs: Exprs> ")" => exprs;
 
 Real: f64 = <s:r#"[+-]?([0-9]*[.])?[0-9]+"#> => f64::from_str(s).unwrap();
 
-Str: String = r#"'[a-zA-Z_0-9\s]+'"# => {
+Str: String = r#"'[a-zA-Z_0-9\s%_]+'"# => {
     let quoted = String::from_str(<>).unwrap();
     let len = quoted.len();
     quoted[1..len - 1].into()
@@ -344,6 +349,11 @@ MAX = {
 	"max",
 	"MAX",
 	"Max",
+};
+
+LIKE = {
+	"like",
+	"LIKE",
 };
 
 MaxLength = "(" Real ")";

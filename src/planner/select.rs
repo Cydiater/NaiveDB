@@ -68,6 +68,20 @@ fn pair_table_name_with_filter(
                 }
                 _ => todo!(),
             },
+            ExprNode::Like(expr) => match expr.child.as_ref() {
+                ExprNode::ColumnRef(cf) => {
+                    let table_name = cf
+                        .table_name
+                        .as_ref()
+                        .unwrap_or_else(|| &column_to_table[&cf.column_name]);
+                    let (_, exprs) = table_name_with_exprs
+                        .iter_mut()
+                        .find(|(name, _)| name == table_name)
+                        .unwrap();
+                    exprs.push(ExprNode::Like(expr));
+                }
+                _ => todo!(),
+            },
             _ => todo!(),
         }
     }

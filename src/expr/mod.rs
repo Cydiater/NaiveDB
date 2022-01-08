@@ -6,6 +6,7 @@ use itertools::Itertools;
 use std::convert::TryInto;
 use thiserror::Error;
 
+pub use self::like::LikeExpr;
 pub use binary::{BinaryExpr, BinaryOp};
 pub use column_ref::ColumnRefExpr;
 pub use constant::ConstantExpr;
@@ -13,6 +14,7 @@ pub use constant::ConstantExpr;
 mod binary;
 mod column_ref;
 mod constant;
+mod like;
 
 pub trait Expr {
     fn eval(&self, slice: Option<&Slice>) -> Vec<Datum>;
@@ -24,6 +26,7 @@ pub enum ExprImpl {
     Constant(ConstantExpr),
     ColumnRef(ColumnRefExpr),
     Binary(BinaryExpr),
+    Like(LikeExpr),
 }
 
 impl ExprImpl {
@@ -46,6 +49,7 @@ impl ExprImpl {
             ExprImpl::Constant(expr) => expr.eval(slice),
             ExprImpl::ColumnRef(expr) => expr.eval(slice),
             ExprImpl::Binary(expr) => expr.eval(slice),
+            ExprImpl::Like(expr) => expr.eval(slice),
         }
     }
     pub fn return_type(&self) -> DataType {
@@ -53,6 +57,7 @@ impl ExprImpl {
             ExprImpl::Constant(expr) => expr.return_type(),
             ExprImpl::ColumnRef(expr) => expr.return_type(),
             ExprImpl::Binary(expr) => expr.return_type(),
+            ExprImpl::Like(expr) => expr.return_type(),
         }
     }
     pub fn from_ast(
@@ -126,6 +131,13 @@ impl ExprImpl {
                     Box::new(lhs),
                     Box::new(rhs),
                     node.op.clone(),
+                )))
+            }
+            ExprNode::Like(node) => {
+                let child = Self::from_ast(node.child.as_ref(), catalog, schema, return_type_hint)?;
+                Ok(ExprImpl::Like(LikeExpr::new(
+                    &node.pattern,
+                    Box::new(child),
                 )))
             }
         }

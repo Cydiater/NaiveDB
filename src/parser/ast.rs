@@ -76,10 +76,17 @@ pub struct BinaryExprNode {
 }
 
 #[derive(Debug)]
+pub struct LikeExprNode {
+    pub child: Box<ExprNode>,
+    pub pattern: String,
+}
+
+#[derive(Debug)]
 pub enum ExprNode {
     Constant(ConstantExprNode),
     ColumnRef(ColumnRefExprNode),
     Binary(BinaryExprNode),
+    Like(LikeExprNode),
 }
 
 impl ExprNode {
@@ -94,6 +101,7 @@ impl ExprNode {
                 }
             }
             Self::ColumnRef(c) => Some(c.column_name.to_owned()),
+            Self::Like(c) => c.child.ref_what_column(),
         }
     }
 }
