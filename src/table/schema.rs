@@ -121,7 +121,7 @@ impl Column {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Schema {
     columns: Vec<Column>,
     pub unique: Vec<Vec<usize>>,

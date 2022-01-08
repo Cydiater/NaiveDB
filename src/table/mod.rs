@@ -107,6 +107,17 @@ impl Table {
         page.borrow_mut().is_dirty = true;
         Self { schema, bpm, page }
     }
+    pub fn set_schema(&mut self, schema: SchemaRef) {
+        self.schema = schema;
+        // set schema
+        let offset = 4;
+        let bytes = self.schema.to_bytes();
+        let start = offset;
+        let end = offset + bytes.len();
+        self.page.borrow_mut().buffer[start..end].copy_from_slice(&bytes);
+        // mark dirty
+        self.page.borrow_mut().is_dirty = true;
+    }
     pub fn get_page_id(&self) -> PageID {
         self.page.borrow().page_id.unwrap()
     }

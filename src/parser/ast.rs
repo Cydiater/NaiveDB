@@ -13,6 +13,9 @@ pub enum Statement {
     Desc(DescStmt),
     Select(SelectStmt),
     AddIndex(AddIndexStmt),
+    AddPrimary(AddPrimaryStmt),
+    AddForeign(AddForeignStmt),
+    AddUnique(AddUniqueStmt),
     DropTable(DropTableStmt),
     Delete(DeleteStmt),
     LoadFromFile(LoadFromFileStmt),
@@ -203,4 +206,24 @@ pub enum Field {
 pub struct AddIndexStmt {
     pub table_name: String,
     pub exprs: Vec<ExprNode>,
+}
+
+#[derive(Debug)]
+pub struct AddPrimaryStmt {
+    pub table_name: String,
+    pub column_names: Vec<String>,
+}
+
+#[derive(Debug)]
+pub struct AddUniqueStmt {
+    pub table_name: String,
+    pub column_names: Vec<String>,
+}
+
+#[derive(Debug)]
+pub struct AddForeignStmt {
+    pub table_name: String,
+    pub column_names: Vec<String>,
+    pub ref_table_name: String,
+    pub ref_column_names: Vec<String>,
 }

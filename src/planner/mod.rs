@@ -3,8 +3,8 @@ use crate::parser::ast::Statement;
 use log::info;
 use thiserror::Error;
 
-pub use add_index::AddIndexPlan;
 pub use agg::AggPlan;
+pub use alter::{AddForeignPlan, AddIndexPlan, AddPrimaryPlan, AddUniquePlan};
 pub use create_database::CreateDatabasePlan;
 pub use create_table::CreateTablePlan;
 pub use delete::DeletePlan;
@@ -19,8 +19,8 @@ pub use select::ProjectPlan;
 pub use use_database::UseDatabasePlan;
 pub use values::ValuesPlan;
 
-mod add_index;
 mod agg;
+mod alter;
 mod create_database;
 mod create_table;
 mod delete;
@@ -48,6 +48,9 @@ pub enum Plan {
     Project(ProjectPlan),
     Filter(FilterPlan),
     AddIndex(AddIndexPlan),
+    AddUnique(AddUniquePlan),
+    AddPrimary(AddPrimaryPlan),
+    AddForeign(AddForeignPlan),
     IndexScan(IndexScanPlan),
     DropTable(DropTablePlan),
     Delete(DeletePlan),
@@ -75,6 +78,9 @@ impl Planner {
             Statement::Desc(stmt) => self.plan_desc(stmt),
             Statement::Select(stmt) => self.plan_select(stmt),
             Statement::AddIndex(stmt) => self.plan_add_index(stmt),
+            Statement::AddPrimary(stmt) => self.plan_add_primary(stmt),
+            Statement::AddForeign(stmt) => self.plan_add_foreign(stmt),
+            Statement::AddUnique(stmt) => self.plan_add_unique(stmt),
             Statement::DropTable(stmt) => self.plan_drop_table(stmt),
             Statement::Delete(stmt) => self.plan_delete(stmt),
             Statement::LoadFromFile(stmt) => self.plan_load_from_file(stmt),

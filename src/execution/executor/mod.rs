@@ -1,8 +1,8 @@
 use crate::execution::ExecutionError;
 use crate::table::{SchemaRef, Slice};
 
-pub use add_index::AddIndexExecutor;
 pub use agg::AggExecutor;
+pub use alter::{AddForeignExecutor, AddIndexExecutor, AddPrimaryExecutor, AddUniqueExecutor};
 pub use create_database::CreateDatabaseExecutor;
 pub use create_table::CreateTableExecutor;
 pub use delete::DeleteExecutor;
@@ -19,8 +19,8 @@ pub use show_databases::ShowDatabasesExecutor;
 pub use use_database::UseDatabaseExecutor;
 pub use values::ValuesExecutor;
 
-mod add_index;
 mod agg;
+mod alter;
 mod create_database;
 mod create_table;
 mod delete;
@@ -56,6 +56,9 @@ pub enum ExecutorImpl {
     Project(ProjectExecutor),
     Filter(FilterExecutor),
     AddIndex(AddIndexExecutor),
+    AddPrimary(AddPrimaryExecutor),
+    AddUnique(AddUniqueExecutor),
+    AddForeign(AddForeignExecutor),
     DropTable(DropTableExecutor),
     Delete(DeleteExecutor),
     NestedLoopJoin(NestedLoopJoinExecutor),
@@ -77,6 +80,9 @@ impl ExecutorImpl {
             Self::Project(executor) => executor.execute(),
             Self::Filter(executor) => executor.execute(),
             Self::AddIndex(executor) => executor.execute(),
+            Self::AddPrimary(executor) => executor.execute(),
+            Self::AddForeign(executor) => executor.execute(),
+            Self::AddUnique(executor) => executor.execute(),
             Self::IndexScan(executor) => executor.execute(),
             Self::DropTable(executor) => executor.execute(),
             Self::Delete(executor) => executor.execute(),
@@ -98,6 +104,9 @@ impl ExecutorImpl {
             Self::Project(executor) => executor.schema(),
             Self::Filter(executor) => executor.schema(),
             Self::AddIndex(executor) => executor.schema(),
+            Self::AddPrimary(executor) => executor.schema(),
+            Self::AddForeign(executor) => executor.schema(),
+            Self::AddUnique(executor) => executor.schema(),
             Self::IndexScan(executor) => executor.schema(),
             Self::DropTable(executor) => executor.schema(),
             Self::Delete(executor) => executor.schema(),

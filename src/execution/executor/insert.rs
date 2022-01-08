@@ -29,7 +29,7 @@ impl Executor for InsertExecutor {
         if let Some(input) = input {
             let mut indexes_rows = vec![];
             for index in &mut self.indexes {
-                let rows = ExprImpl::batch_eval(&mut index.exprs, Some(&input));
+                let rows = ExprImpl::batch_eval(&index.exprs, Some(&input));
                 indexes_rows.push(rows);
             }
             for tuple in input.tuple_iter() {

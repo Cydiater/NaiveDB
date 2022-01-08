@@ -100,6 +100,26 @@ impl Engine {
                 plan.table_name,
                 plan.exprs,
             ))),
+            Plan::AddPrimary(plan) => Ok(ExecutorImpl::AddPrimary(AddPrimaryExecutor::new(
+                self.bpm.clone(),
+                self.catalog.clone(),
+                plan.table_name,
+                plan.column_names,
+            ))),
+            Plan::AddUnique(plan) => Ok(ExecutorImpl::AddUnique(AddUniqueExecutor::new(
+                self.bpm.clone(),
+                self.catalog.clone(),
+                plan.table_name,
+                plan.unique_set,
+            ))),
+            Plan::AddForeign(plan) => Ok(ExecutorImpl::AddForeign(AddForeignExecutor::new(
+                self.bpm.clone(),
+                self.catalog.clone(),
+                plan.table_name,
+                plan.column_names,
+                plan.ref_table_name,
+                plan.ref_column_names,
+            ))),
             Plan::IndexScan(plan) => {
                 let table = Table::open(plan.table_page_id, self.bpm.clone());
                 let index =

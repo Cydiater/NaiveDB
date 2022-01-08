@@ -137,14 +137,17 @@ pub Statement: Statement = {
     DescStmt,
     SelectStmt,
     AddIndexStmt,
+	AddPrimaryStmt,
+	AddUniqueStmt,
+	AddForeignStmt,
     DropTableStmt,
     DeleteStmt,
 	LoadFromFileStmt,
 }
 
-DropTableStmt: Statement = "drop" "table" <table_name: Identifier> ";" => Statement::DropTable(DropTableStmt { table_name });
+DropTableStmt: Statement = "drop" TABLE <table_name: Identifier> ";" => Statement::DropTable(DropTableStmt { table_name });
 
-WhereClauses: Vec<ExprNode> = "where" <exprs: WhereExprs> => exprs;
+WhereClauses: Vec<ExprNode> = WHERE <exprs: WhereExprs> => exprs;
 
 Selectors: Selectors = {
     "*" => Selectors::All,
@@ -187,8 +190,37 @@ AggTarget: AggTarget = {
 	<expr: Expr> => AggTarget::Expr(expr),
 };
 
-AddIndexStmt: Statement = ALTER "table" <table_name: Identifier> "add" "index" "("<exprs: Exprs> ")" ";" 
+AddIndexStmt: Statement = ALTER TABLE <table_name: Identifier> ADD INDEX "("<exprs: Exprs> ")" ";" 
     => Statement::AddIndex(AddIndexStmt { table_name, exprs });
+
+AddPrimaryStmt: Statement = ALTER TABLE <table_name: Identifier> ADD PRIMARY KEY "(" <column_names: Identifiers> ")" ";"
+	=> Statement::AddPrimary(AddPrimaryStmt { table_name, column_names });
+
+AddForeignStmt: Statement = 
+	ALTER TABLE 
+		<table_name: Identifier> 
+	ADD FOREIGN KEY "(" <column_names: Identifiers> ")" 
+	REFERENCES
+		<ref_table_name: Identifier> "(" <ref_column_names: Identifiers> ")"
+	";"
+		=> 
+	Statement::AddForeign(AddForeignStmt { 
+		table_name, 
+		column_names, 
+		ref_table_name, 
+		ref_column_names 
+	});
+
+AddUniqueStmt: Statement =
+	ALTER TABLE
+		<table_name: Identifier>
+	ADD UNIQUE "(" <column_names: Identifiers> ")"
+	";"
+		=>
+	Statement::AddUnique(AddUniqueStmt {
+		table_name,
+		column_names,
+	});
 
 GroupByClause: ExprNode = GROUP BY <expr: Expr> => expr;
 
@@ -389,6 +421,21 @@ GROUP = {
 BY = {
 	"by",
 	"BY",
+};
+
+WHERE = {
+	"where",
+	"WHERE",
+};
+
+INDEX = {
+	"index",
+	"INDEX",
+};
+
+ADD = {
+	"add",
+	"ADD",
 };
 
 MaxLength = "(" Real ")";
