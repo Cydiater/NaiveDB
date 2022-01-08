@@ -4,6 +4,7 @@ use crate::parser::ast::{ConstantValue, ExprNode};
 use crate::table::{Schema, Slice};
 use itertools::Itertools;
 use std::convert::TryInto;
+use std::fmt;
 use thiserror::Error;
 
 pub use self::like::LikeExpr;
@@ -27,6 +28,17 @@ pub enum ExprImpl {
     ColumnRef(ColumnRefExpr),
     Binary(BinaryExpr),
     Like(LikeExpr),
+}
+
+impl fmt::Display for ExprImpl {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Constant(expr) => write!(f, "{}", expr.get_value()),
+            Self::Like(expr) => write!(f, "{}", expr),
+            Self::Binary(expr) => write!(f, "{}", expr),
+            Self::ColumnRef(expr) => write!(f, "{}", expr.as_return_type_and_column_name().1),
+        }
+    }
 }
 
 impl ExprImpl {

@@ -157,8 +157,8 @@ impl Engine {
             Plan::Agg(plan) => {
                 let child = self.build(*plan.child)?;
                 Ok(ExecutorImpl::Agg(AggExecutor::new(
-                    plan.action,
-                    plan.expr,
+                    plan.exprs_with_action,
+                    plan.group_by_expr,
                     child,
                     self.bpm.clone(),
                 )))
