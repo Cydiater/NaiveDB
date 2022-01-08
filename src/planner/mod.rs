@@ -9,7 +9,7 @@ pub use create_database::CreateDatabasePlan;
 pub use create_table::CreateTablePlan;
 pub use delete::DeletePlan;
 pub use desc::DescPlan;
-pub use drop_table::DropTablePlan;
+pub use drop::{DropDatabasePlan, DropTablePlan};
 pub use filter::FilterPlan;
 pub use insert::InsertPlan;
 pub use load_from_file::LoadFromFilePlan;
@@ -25,7 +25,7 @@ mod create_database;
 mod create_table;
 mod delete;
 mod desc;
-mod drop_table;
+mod drop;
 mod filter;
 mod insert;
 mod load_from_file;
@@ -39,7 +39,9 @@ mod values;
 pub enum Plan {
     CreateDatabase(CreateDatabasePlan),
     ShowDatabases,
+    ShowTables,
     UseDatabase(UseDatabasePlan),
+    DropDatabase(DropDatabasePlan),
     CreateTable(CreateTablePlan),
     Values(ValuesPlan),
     Insert(InsertPlan),
@@ -72,6 +74,7 @@ impl Planner {
         match stmt {
             Statement::CreateDatabase(stmt) => self.plan_create_database(stmt),
             Statement::ShowDatabases => Ok(Plan::ShowDatabases),
+            Statement::ShowTables => Ok(Plan::ShowTables),
             Statement::UseDatabase(stmt) => self.plan_use_database(stmt),
             Statement::CreateTable(stmt) => self.plan_create_table(stmt),
             Statement::Insert(stmt) => self.plan_insert(stmt),
@@ -82,6 +85,7 @@ impl Planner {
             Statement::AddForeign(stmt) => self.plan_add_foreign(stmt),
             Statement::AddUnique(stmt) => self.plan_add_unique(stmt),
             Statement::DropTable(stmt) => self.plan_drop_table(stmt),
+            Statement::DropDatabase(stmt) => self.plan_drop_database(stmt),
             Statement::Delete(stmt) => self.plan_delete(stmt),
             Statement::LoadFromFile(stmt) => self.plan_load_from_file(stmt),
         }

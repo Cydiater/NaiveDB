@@ -11,22 +11,34 @@ pub struct CatalogManager {
     bpm: BufferPoolManagerRef,
     database_catalog: Catalog,
     table_catalog: Option<Catalog>,
+    current_database: Option<String>,
 }
 
 pub type CatalogManagerRef = Rc<RefCell<CatalogManager>>;
 
 impl CatalogManager {
+    pub fn current_database(&self) -> Option<String> {
+        self.current_database.clone()
+    }
     pub fn new(bpm: BufferPoolManagerRef) -> Self {
         Self {
             bpm: bpm.clone(),
             database_catalog: Catalog::new_for_database(bpm),
             table_catalog: None,
+            current_database: None,
         }
     }
     pub fn new_shared(bpm: BufferPoolManagerRef) -> CatalogManagerRef {
         Rc::new(RefCell::new(Self::new(bpm)))
     }
     pub fn create_database(&mut self, database_name: &str) -> Result<(), CatalogError> {
+        if self
+            .database_catalog
+            .iter()
+            .any(|(name, _)| database_name == name)
+        {
+            return Err(CatalogError::Duplicated);
+        }
         // create table catalog
         let table_catalog = Catalog::new(self.bpm.clone()).unwrap();
         let page_id = table_catalog.page_id();
@@ -50,6 +62,7 @@ impl CatalogManager {
             let table_catalog = Catalog::open(self.bpm.clone(), page_id)?;
             self.table_catalog = Some(table_catalog);
             info!("checkout to database {}", database_name);
+            self.current_database = Some(database_name.to_owned());
             Ok(())
         } else {
             Err(CatalogError::EntryNotFound)
@@ -62,6 +75,14 @@ impl CatalogManager {
         } else {
             Err(CatalogError::NotUsingDatabase)
         }
+    }
+    pub fn remove_database(&mut self, database_name: &str) -> Result<(), CatalogError> {
+        if Some(database_name.to_string()) == self.current_database {
+            self.table_catalog = None;
+            self.current_database = None;
+        }
+        self.database_catalog.remove(database_name)?;
+        Ok(())
     }
     pub fn find_table(&self, table_name: &str) -> Result<Table, CatalogError> {
         if let Some(table_catalog) = &self.table_catalog {
@@ -106,6 +127,17 @@ impl CatalogManager {
     }
     pub fn database_iter(&self) -> CatalogIter {
         self.database_catalog.iter()
+    }
+    pub fn table_names(&self) -> Result<Vec<String>, CatalogError> {
+        let table_catalog = self
+            .table_catalog
+            .as_ref()
+            .ok_or(CatalogError::NotUsingDatabase)?;
+        let table_names = table_catalog
+            .iter()
+            .map(|(name, _)| name.to_string())
+            .collect_vec();
+        Ok(table_names)
     }
     pub fn add_index(
         &mut self,

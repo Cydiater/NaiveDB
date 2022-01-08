@@ -1,32 +1,52 @@
+use crate::datum::DataType;
 use crate::execution::{ExecutionError, Executor, ExecutorImpl};
 use crate::expr::ExprImpl;
 use crate::index::BPTIndex;
-use crate::table::{SchemaRef, Slice, Table};
+use crate::storage::BufferPoolManagerRef;
+use crate::table::{Schema, SchemaRef, Slice, Table};
 use log::info;
+use std::rc::Rc;
 
 pub struct InsertExecutor {
+    bpm: BufferPoolManagerRef,
     table: Table,
     indexes: Vec<BPTIndex>,
     child: Box<ExecutorImpl>,
+    cnt: usize,
+    executed: bool,
 }
 
 impl InsertExecutor {
-    pub fn new(table: Table, indexes: Vec<BPTIndex>, child: Box<ExecutorImpl>) -> Self {
+    pub fn new(
+        table: Table,
+        indexes: Vec<BPTIndex>,
+        child: Box<ExecutorImpl>,
+        bpm: BufferPoolManagerRef,
+    ) -> Self {
         Self {
+            bpm,
             table,
             indexes,
             child,
+            cnt: 0,
+            executed: false,
         }
     }
 }
 
 impl Executor for InsertExecutor {
     fn schema(&self) -> SchemaRef {
-        self.child.schema()
+        Rc::new(Schema::from_slice(&[(
+            DataType::new_as_int(false),
+            "Inserted".to_string(),
+        )]))
     }
     fn execute(&mut self) -> Result<Option<Slice>, ExecutionError> {
-        let input = self.child.execute()?;
-        if let Some(input) = input {
+        if self.executed {
+            return Ok(None);
+        }
+        self.executed = true;
+        while let Some(input) = self.child.execute()? {
             let mut indexes_rows = vec![];
             for index in &mut self.indexes {
                 let rows = ExprImpl::batch_eval(&index.exprs, Some(&input));
@@ -43,10 +63,11 @@ impl Executor for InsertExecutor {
                 for (rows, index) in indexes_rows.iter_mut().zip(&mut self.indexes) {
                     index.insert(&rows.remove(0), record_id)?;
                 }
+                self.cnt += 1;
             }
-            Ok(Some(input))
-        } else {
-            Ok(None)
         }
+        Ok(Some(
+            Slice::new_as_count(self.bpm.clone(), "Inserted", self.cnt).unwrap(),
+        ))
     }
 }

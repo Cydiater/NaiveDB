@@ -60,6 +60,7 @@ impl Engine {
                     table,
                     indexes,
                     Box::new(child),
+                    self.bpm.clone(),
                 )))
             }
             Plan::Desc(plan) => Ok(ExecutorImpl::Desc(DescExecutor::new(
@@ -140,6 +141,11 @@ impl Engine {
                 self.catalog.clone(),
                 self.bpm.clone(),
             ))),
+            Plan::DropDatabase(plan) => Ok(ExecutorImpl::DropDatabase(DropDatabaseExecutor::new(
+                plan.database_name,
+                self.catalog.clone(),
+                self.bpm.clone(),
+            ))),
             Plan::Delete(plan) => {
                 let child = self.build(*plan.child)?;
                 let table = Table::open(plan.table_page_id, self.bpm.clone());
@@ -181,6 +187,15 @@ impl Engine {
                     plan.group_by_expr,
                     child,
                     self.bpm.clone(),
+                )))
+            }
+            Plan::ShowTables => {
+                if self.catalog.borrow().current_database() == None {
+                    return Err(ExecutionError::Catalog(CatalogError::NotUsingDatabase));
+                }
+                Ok(ExecutorImpl::ShowTables(ShowTablesExecutor::new(
+                    self.bpm.clone(),
+                    self.catalog.clone(),
                 )))
             }
         }

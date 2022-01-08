@@ -32,10 +32,7 @@ impl Executor for CreateDatabaseExecutor {
     }
     fn execute(&mut self) -> Result<Option<Slice>, ExecutionError> {
         if !self.executed {
-            self.catalog
-                .borrow_mut()
-                .create_database(&self.db_name)
-                .unwrap();
+            self.catalog.borrow_mut().create_database(&self.db_name)?;
             let res = Slice::new_as_message(self.bpm.clone(), "database", &self.db_name)?;
             self.executed = true;
             Ok(Some(res))

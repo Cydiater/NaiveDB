@@ -12,6 +12,13 @@ pub struct DropTableExecutor {
     bpm: BufferPoolManagerRef,
 }
 
+pub struct DropDatabaseExecutor {
+    database_name: String,
+    executed: bool,
+    bpm: BufferPoolManagerRef,
+    catalog: CatalogManagerRef,
+}
+
 impl DropTableExecutor {
     pub fn new(table_name: String, catalog: CatalogManagerRef, bpm: BufferPoolManagerRef) -> Self {
         Self {
@@ -20,6 +27,42 @@ impl DropTableExecutor {
             catalog,
             bpm,
         }
+    }
+}
+
+impl DropDatabaseExecutor {
+    pub fn new(
+        database_name: String,
+        catalog: CatalogManagerRef,
+        bpm: BufferPoolManagerRef,
+    ) -> Self {
+        Self {
+            database_name,
+            executed: false,
+            bpm,
+            catalog,
+        }
+    }
+}
+
+impl Executor for DropDatabaseExecutor {
+    fn schema(&self) -> SchemaRef {
+        Rc::new(Schema::from_slice(&[(
+            DataType::new_as_varchar(false),
+            "database".to_string(),
+        )]))
+    }
+    fn execute(&mut self) -> Result<Option<Slice>, ExecutionError> {
+        if self.executed {
+            return Ok(None);
+        }
+        self.executed = true;
+        self.catalog
+            .borrow_mut()
+            .remove_database(&self.database_name)?;
+        Ok(Some(
+            Slice::new_as_message(self.bpm.clone(), "database", &self.database_name).unwrap(),
+        ))
     }
 }
 

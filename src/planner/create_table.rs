@@ -30,11 +30,7 @@ impl Planner {
         // foreign field
         for field in &stmt.fields {
             if let Field::Foreign(foreign) = field {
-                let table = self
-                    .catalog
-                    .borrow()
-                    .find_table(&foreign.ref_table_name)
-                    .unwrap();
+                let table = self.catalog.borrow().find_table(&foreign.ref_table_name)?;
                 for (column_name, ref_column_name) in foreign
                     .column_names
                     .iter()

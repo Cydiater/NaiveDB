@@ -7,6 +7,7 @@ use std::string::ToString;
 pub enum Statement {
     CreateDatabase(CreateDatabaseStmt),
     ShowDatabases,
+    ShowTables,
     UseDatabase(UseDatabaseStmt),
     CreateTable(CreateTableStmt),
     Insert(InsertStmt),
@@ -19,6 +20,7 @@ pub enum Statement {
     DropTable(DropTableStmt),
     Delete(DeleteStmt),
     LoadFromFile(LoadFromFileStmt),
+    DropDatabase(DropDatabaseStmt),
 }
 
 #[derive(Debug, Clone)]
@@ -52,6 +54,11 @@ pub enum AggTarget {
 pub struct AggItem {
     pub action: AggAction,
     pub target: AggTarget,
+}
+
+#[derive(Debug)]
+pub struct DropDatabaseStmt {
+    pub database_name: String,
 }
 
 #[derive(Debug)]
