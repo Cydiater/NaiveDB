@@ -424,6 +424,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a60553f9a9e039a333b4e9b20573b9e9b9c0bb3a11e201ccc48ef4283456d673"
 
 [[package]]
+name = "like"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4bec82cf8dc8ea08b48c8b8cb8bd2438a72734b43ed4f198500a31ed67887e28"
+
+[[package]]
 name = "lock_api"
 version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -466,6 +472,7 @@ dependencies = [
  "itertools 0.8.2",
  "lalrpop",
  "lalrpop-util",
+ "like",
  "log",
  "ordered-float",
  "pad",

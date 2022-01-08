@@ -21,3 +21,4 @@ rustyline = "9.0.0"
 uuid = { version = "0.8", features = ["serde", "v4"] }
 ordered-float = "2.10.0"
 csv = "1.1"
+like = "0.3.0"
