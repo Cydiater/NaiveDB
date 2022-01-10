@@ -9,7 +9,7 @@ pub use create_database::CreateDatabasePlan;
 pub use create_table::CreateTablePlan;
 pub use delete::DeletePlan;
 pub use desc::DescPlan;
-pub use drop::{DropDatabasePlan, DropTablePlan};
+pub use drop::{DropDatabasePlan, DropForeignKeyPlan, DropTablePlan};
 pub use filter::FilterPlan;
 pub use insert::InsertPlan;
 pub use load_from_file::LoadFromFilePlan;
@@ -35,6 +35,7 @@ mod select;
 mod use_database;
 mod values;
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum Plan {
     CreateDatabase(CreateDatabasePlan),
@@ -55,6 +56,7 @@ pub enum Plan {
     AddForeign(AddForeignPlan),
     IndexScan(IndexScanPlan),
     DropTable(DropTablePlan),
+    DropForeignKey(DropForeignKeyPlan),
     Delete(DeletePlan),
     NestedLoopJoin(NestedLoopJoinPlan),
     LoadFromFile(LoadFromFilePlan),
@@ -88,6 +90,7 @@ impl Planner {
             Statement::DropDatabase(stmt) => self.plan_drop_database(stmt),
             Statement::Delete(stmt) => self.plan_delete(stmt),
             Statement::LoadFromFile(stmt) => self.plan_load_from_file(stmt),
+            _ => todo!(),
         }
     }
 }

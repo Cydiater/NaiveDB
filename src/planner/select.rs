@@ -13,6 +13,7 @@ pub struct ProjectPlan {
     pub child: Box<Plan>,
 }
 
+#[allow(clippy::type_complexity)]
 fn pair_table_name_with_filter(
     table_names: &[String],
     exprs: Vec<ExprNode>,
@@ -94,7 +95,7 @@ fn pair_table_name_with_filter(
 impl Planner {
     pub fn plan_select(&self, stmt: SelectStmt) -> Result<Plan, PlanError> {
         for table_name in &stmt.table_names {
-            let _ = self.catalog.borrow().find_table(&table_name)?;
+            let _ = self.catalog.borrow().find_table(table_name)?;
         }
         let (table_with_filter_expr, overall) =
             pair_table_name_with_filter(&stmt.table_names, stmt.where_exprs, self.catalog.clone())?;

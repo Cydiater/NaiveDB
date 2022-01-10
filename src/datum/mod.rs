@@ -25,6 +25,7 @@ impl Add for Datum {
     fn add(self, other: Self) -> Self {
         match (self, other) {
             (Self::Int(Some(lhs)), Self::Int(Some(rhs))) => (lhs + rhs).into(),
+            (Self::Float(Some(lhs)), Self::Float(Some(rhs))) => (lhs + rhs).into(),
             _ => todo!(),
         }
     }

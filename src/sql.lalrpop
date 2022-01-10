@@ -310,7 +310,7 @@ Tuple: Vec<ExprNode> = "(" <exprs: Exprs> ")" => exprs;
 
 Real: f64 = <s:r#"[+-]?([0-9]*[.])?[0-9]+"#> => f64::from_str(s).unwrap();
 
-Str: String = r#"'[a-zA-Z_0-9\s%_]+'"# => {
+Str: String = r#"'[a-zA-Z_0-9\s%_#?]+'"# => {
     let quoted = String::from_str(<>).unwrap();
     let len = quoted.len();
     quoted[1..len - 1].into()
