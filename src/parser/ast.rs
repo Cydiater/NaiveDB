@@ -7,15 +7,29 @@ use std::string::ToString;
 pub enum Statement {
     CreateDatabase(CreateDatabaseStmt),
     ShowDatabases,
+    ShowTables,
     UseDatabase(UseDatabaseStmt),
     CreateTable(CreateTableStmt),
     Insert(InsertStmt),
     Desc(DescStmt),
     Select(SelectStmt),
     AddIndex(AddIndexStmt),
+    AddPrimary(AddPrimaryStmt),
+    AddForeign(AddForeignStmt),
+    AddUnique(AddUniqueStmt),
     DropTable(DropTableStmt),
     Delete(DeleteStmt),
     LoadFromFile(LoadFromFileStmt),
+    DropDatabase(DropDatabaseStmt),
+    DropIndex(DropIndexStmt),
+    DropForeignKey(DropForeignKeyStmt),
+}
+
+#[allow(dead_code)]
+#[derive(Debug)]
+pub struct DropForeignKeyStmt {
+    table_name: String,
+    column_names: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -52,8 +66,19 @@ pub struct AggItem {
 }
 
 #[derive(Debug)]
+pub struct DropDatabaseStmt {
+    pub database_name: String,
+}
+
+#[derive(Debug)]
 pub struct DropTableStmt {
     pub table_name: String,
+}
+
+#[derive(Debug)]
+pub struct DropIndexStmt {
+    pub table_name: String,
+    pub column_names: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -203,4 +228,24 @@ pub enum Field {
 pub struct AddIndexStmt {
     pub table_name: String,
     pub exprs: Vec<ExprNode>,
+}
+
+#[derive(Debug)]
+pub struct AddPrimaryStmt {
+    pub table_name: String,
+    pub column_names: Vec<String>,
+}
+
+#[derive(Debug)]
+pub struct AddUniqueStmt {
+    pub table_name: String,
+    pub column_names: Vec<String>,
+}
+
+#[derive(Debug)]
+pub struct AddForeignStmt {
+    pub table_name: String,
+    pub column_names: Vec<String>,
+    pub ref_table_name: String,
+    pub ref_column_names: Vec<String>,
 }

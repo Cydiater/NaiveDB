@@ -42,8 +42,8 @@ impl fmt::Display for ExprImpl {
 }
 
 impl ExprImpl {
-    pub fn batch_eval(exprs: &mut [ExprImpl], slice: Option<&Slice>) -> Vec<Vec<Datum>> {
-        exprs.iter_mut().map(|e| e.eval(slice)).fold(
+    pub fn batch_eval(exprs: &[ExprImpl], slice: Option<&Slice>) -> Vec<Vec<Datum>> {
+        exprs.iter().map(|e| e.eval(slice)).fold(
             vec![vec![]; slice.unwrap().count()],
             |rows, column| {
                 rows.into_iter()

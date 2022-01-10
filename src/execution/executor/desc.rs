@@ -12,6 +12,12 @@ pub struct DescExecutor {
     executed: bool,
 }
 
+pub struct ShowTablesExecutor {
+    bpm: BufferPoolManagerRef,
+    catalog: CatalogManagerRef,
+    executed: bool,
+}
+
 impl DescExecutor {
     pub fn new(table_name: String, bpm: BufferPoolManagerRef, catalog: CatalogManagerRef) -> Self {
         Self {
@@ -20,6 +26,37 @@ impl DescExecutor {
             catalog,
             executed: false,
         }
+    }
+}
+
+impl ShowTablesExecutor {
+    pub fn new(bpm: BufferPoolManagerRef, catalog: CatalogManagerRef) -> Self {
+        Self {
+            bpm,
+            catalog,
+            executed: false,
+        }
+    }
+}
+
+impl Executor for ShowTablesExecutor {
+    fn schema(&self) -> SchemaRef {
+        Rc::new(Schema::from_slice(&[(
+            DataType::new_as_varchar(false),
+            self.catalog.borrow().current_database().unwrap(),
+        )]))
+    }
+    fn execute(&mut self) -> Result<Option<Slice>, ExecutionError> {
+        if self.executed {
+            return Ok(None);
+        }
+        self.executed = true;
+        let mut slice = Slice::new(self.bpm.clone(), self.schema());
+        let table_names = self.catalog.borrow().table_names()?;
+        for table_name in table_names {
+            slice.insert(&[table_name.as_str().into()])?;
+        }
+        Ok(Some(slice))
     }
 }
 

@@ -142,6 +142,8 @@ pub enum CatalogError {
     NotUsingDatabase,
     #[error("Entry Not Found")]
     EntryNotFound,
+    #[error("Duplicated")]
+    Duplicated,
 }
 
 #[cfg(test)]

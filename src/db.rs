@@ -42,7 +42,7 @@ impl NaiveDB {
         }
     }
     pub fn new() -> Self {
-        let bpm = BufferPoolManager::new_shared(4096);
+        let bpm = BufferPoolManager::new_shared(4096 * 256);
         let catalog = CatalogManager::new_shared(bpm.clone());
         Self {
             bpm: bpm.clone(),

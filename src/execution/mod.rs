@@ -60,6 +60,7 @@ impl Engine {
                     table,
                     indexes,
                     Box::new(child),
+                    self.bpm.clone(),
                 )))
             }
             Plan::Desc(plan) => Ok(ExecutorImpl::Desc(DescExecutor::new(
@@ -100,6 +101,26 @@ impl Engine {
                 plan.table_name,
                 plan.exprs,
             ))),
+            Plan::AddPrimary(plan) => Ok(ExecutorImpl::AddPrimary(AddPrimaryExecutor::new(
+                self.bpm.clone(),
+                self.catalog.clone(),
+                plan.table_name,
+                plan.column_names,
+            ))),
+            Plan::AddUnique(plan) => Ok(ExecutorImpl::AddUnique(AddUniqueExecutor::new(
+                self.bpm.clone(),
+                self.catalog.clone(),
+                plan.table_name,
+                plan.unique_set,
+            ))),
+            Plan::AddForeign(plan) => Ok(ExecutorImpl::AddForeign(AddForeignExecutor::new(
+                self.bpm.clone(),
+                self.catalog.clone(),
+                plan.table_name,
+                plan.column_names,
+                plan.ref_table_name,
+                plan.ref_column_names,
+            ))),
             Plan::IndexScan(plan) => {
                 let table = Table::open(plan.table_page_id, self.bpm.clone());
                 let index =
@@ -117,6 +138,11 @@ impl Engine {
             }
             Plan::DropTable(plan) => Ok(ExecutorImpl::DropTable(DropTableExecutor::new(
                 plan.table_name,
+                self.catalog.clone(),
+                self.bpm.clone(),
+            ))),
+            Plan::DropDatabase(plan) => Ok(ExecutorImpl::DropDatabase(DropDatabaseExecutor::new(
+                plan.database_name,
                 self.catalog.clone(),
                 self.bpm.clone(),
             ))),
@@ -163,6 +189,16 @@ impl Engine {
                     self.bpm.clone(),
                 )))
             }
+            Plan::ShowTables => {
+                if self.catalog.borrow().current_database() == None {
+                    return Err(ExecutionError::Catalog(CatalogError::NotUsingDatabase));
+                }
+                Ok(ExecutorImpl::ShowTables(ShowTablesExecutor::new(
+                    self.bpm.clone(),
+                    self.catalog.clone(),
+                )))
+            }
+            _ => todo!(),
         }
     }
     pub fn new(catalog: CatalogManagerRef, bpm: BufferPoolManagerRef) -> Self {

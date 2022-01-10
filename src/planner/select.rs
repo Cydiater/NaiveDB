@@ -1,6 +1,6 @@
 use crate::catalog::CatalogManagerRef;
 use crate::expr::ExprImpl;
-use crate::parser::ast::{ExprNode, SelectStmt, Selectors};
+use crate::parser::ast::{ColumnRefExprNode, ExprNode, SelectStmt, Selectors};
 use crate::planner::{Plan, PlanError, Planner};
 use crate::table::Schema;
 use itertools::Itertools;
@@ -13,11 +13,12 @@ pub struct ProjectPlan {
     pub child: Box<Plan>,
 }
 
+#[allow(clippy::type_complexity)]
 fn pair_table_name_with_filter(
     table_names: &[String],
     exprs: Vec<ExprNode>,
     catalog: CatalogManagerRef,
-) -> (Vec<(String, Vec<ExprNode>)>, Vec<ExprNode>) {
+) -> Result<(Vec<(String, Vec<ExprNode>)>, Vec<ExprNode>), PlanError> {
     let mut overall_exprs = vec![];
     let mut table_name_with_exprs = table_names
         .iter()
@@ -85,16 +86,19 @@ fn pair_table_name_with_filter(
             _ => todo!(),
         }
     }
-    (
+    Ok((
         table_name_with_exprs.into_iter().collect_vec(),
         overall_exprs,
-    )
+    ))
 }
 
 impl Planner {
     pub fn plan_select(&self, stmt: SelectStmt) -> Result<Plan, PlanError> {
+        for table_name in &stmt.table_names {
+            let _ = self.catalog.borrow().find_table(table_name)?;
+        }
         let (table_with_filter_expr, overall) =
-            pair_table_name_with_filter(&stmt.table_names, stmt.where_exprs, self.catalog.clone());
+            pair_table_name_with_filter(&stmt.table_names, stmt.where_exprs, self.catalog.clone())?;
         let scan_plans = table_with_filter_expr
             .into_iter()
             .map(|(table_name, exprs)| {
@@ -137,6 +141,19 @@ impl Planner {
                 let exprs = exprs
                     .into_iter()
                     .map(|node| {
+                        let node = match node {
+                            ExprNode::ColumnRef(cr) => {
+                                if let Some(table_name) = cr.table_name {
+                                    ExprNode::ColumnRef(ColumnRefExprNode {
+                                        table_name: None,
+                                        column_name: format!("{}.{}", table_name, cr.column_name),
+                                    })
+                                } else {
+                                    ExprNode::ColumnRef(cr)
+                                }
+                            }
+                            node => node,
+                        };
                         ExprImpl::from_ast(&node, self.catalog.clone(), &schema, None).unwrap()
                     })
                     .collect_vec();

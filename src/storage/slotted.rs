@@ -285,7 +285,7 @@ where
         let idx = self.find_first_empty_slot();
         if idx * (size_of::<Key>() + 16) >= self.head {
             self.head += size_of::<Key>() + 16;
-            if self.head > self.tail - data.len() {
+            if self.head + data.len() > self.tail {
                 return Err(SlottedPageError::OutOfSpace);
             }
         }

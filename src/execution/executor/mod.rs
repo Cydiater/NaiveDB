@@ -1,13 +1,13 @@
 use crate::execution::ExecutionError;
 use crate::table::{SchemaRef, Slice};
 
-pub use add_index::AddIndexExecutor;
 pub use agg::AggExecutor;
+pub use alter::{AddForeignExecutor, AddIndexExecutor, AddPrimaryExecutor, AddUniqueExecutor};
 pub use create_database::CreateDatabaseExecutor;
 pub use create_table::CreateTableExecutor;
 pub use delete::DeleteExecutor;
-pub use desc::DescExecutor;
-pub use drop_table::DropTableExecutor;
+pub use desc::{DescExecutor, ShowTablesExecutor};
+pub use drop::{DropDatabaseExecutor, DropTableExecutor};
 pub use filter::FilterExecutor;
 pub use index_scan::IndexScanExecutor;
 pub use insert::InsertExecutor;
@@ -19,13 +19,13 @@ pub use show_databases::ShowDatabasesExecutor;
 pub use use_database::UseDatabaseExecutor;
 pub use values::ValuesExecutor;
 
-mod add_index;
 mod agg;
+mod alter;
 mod create_database;
 mod create_table;
 mod delete;
 mod desc;
-mod drop_table;
+mod drop;
 mod filter;
 mod index_scan;
 mod insert;
@@ -51,12 +51,17 @@ pub enum ExecutorImpl {
     Values(ValuesExecutor),
     Insert(InsertExecutor),
     Desc(DescExecutor),
+    ShowTables(ShowTablesExecutor),
     SeqScan(SeqScanExecutor),
     IndexScan(IndexScanExecutor),
     Project(ProjectExecutor),
     Filter(FilterExecutor),
     AddIndex(AddIndexExecutor),
+    AddPrimary(AddPrimaryExecutor),
+    AddUnique(AddUniqueExecutor),
+    AddForeign(AddForeignExecutor),
     DropTable(DropTableExecutor),
+    DropDatabase(DropDatabaseExecutor),
     Delete(DeleteExecutor),
     NestedLoopJoin(NestedLoopJoinExecutor),
     LoadFromFile(LoadFromFileExecutor),
@@ -77,12 +82,17 @@ impl ExecutorImpl {
             Self::Project(executor) => executor.execute(),
             Self::Filter(executor) => executor.execute(),
             Self::AddIndex(executor) => executor.execute(),
+            Self::AddPrimary(executor) => executor.execute(),
+            Self::AddForeign(executor) => executor.execute(),
+            Self::AddUnique(executor) => executor.execute(),
             Self::IndexScan(executor) => executor.execute(),
             Self::DropTable(executor) => executor.execute(),
+            Self::DropDatabase(executor) => executor.execute(),
             Self::Delete(executor) => executor.execute(),
             Self::NestedLoopJoin(executor) => executor.execute(),
             Self::LoadFromFile(executor) => executor.execute(),
             Self::Agg(executor) => executor.execute(),
+            Self::ShowTables(executor) => executor.execute(),
         }
     }
     pub fn schema(&self) -> SchemaRef {
@@ -98,12 +108,17 @@ impl ExecutorImpl {
             Self::Project(executor) => executor.schema(),
             Self::Filter(executor) => executor.schema(),
             Self::AddIndex(executor) => executor.schema(),
+            Self::AddPrimary(executor) => executor.schema(),
+            Self::AddForeign(executor) => executor.schema(),
+            Self::AddUnique(executor) => executor.schema(),
             Self::IndexScan(executor) => executor.schema(),
             Self::DropTable(executor) => executor.schema(),
+            Self::DropDatabase(executor) => executor.schema(),
             Self::Delete(executor) => executor.schema(),
             Self::NestedLoopJoin(executor) => executor.schema(),
             Self::LoadFromFile(executor) => executor.schema(),
             Self::Agg(executor) => executor.schema(),
+            Self::ShowTables(executor) => executor.schema(),
         }
     }
 }

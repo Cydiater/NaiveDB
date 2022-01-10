@@ -43,7 +43,7 @@ Semicolon<T>: Vec<T> = {
 };
 
 And<T>: Vec<T> = {
-    <mut v:(<T> "and")*> <e:T?> => match e {
+    <mut v:(<T> AND)*> <e:T?> => match e {
         None => v,
         Some(stmt) => {
             v.push(stmt);
@@ -137,14 +137,23 @@ pub Statement: Statement = {
     DescStmt,
     SelectStmt,
     AddIndexStmt,
+	AddPrimaryStmt,
+	AddUniqueStmt,
+	AddForeignStmt,
     DropTableStmt,
+	DropDatabaseStmt,
     DeleteStmt,
 	LoadFromFileStmt,
+	ShowTables,
 }
 
-DropTableStmt: Statement = "drop" "table" <table_name: Identifier> ";" => Statement::DropTable(DropTableStmt { table_name });
+DropTableStmt: Statement = DROP TABLE <table_name: Identifier> ";" => Statement::DropTable(DropTableStmt { table_name });
 
-WhereClauses: Vec<ExprNode> = "where" <exprs: WhereExprs> => exprs;
+ShowTables: Statement = SHOW TABLES ";" => Statement::ShowTables;
+
+DropDatabaseStmt: Statement = DROP DATABASE <database_name: Identifier> ";" => Statement::DropDatabase(DropDatabaseStmt { database_name });
+
+WhereClauses: Vec<ExprNode> = WHERE <exprs: WhereExprs> => exprs;
 
 Selectors: Selectors = {
     "*" => Selectors::All,
@@ -187,15 +196,44 @@ AggTarget: AggTarget = {
 	<expr: Expr> => AggTarget::Expr(expr),
 };
 
-AddIndexStmt: Statement = ALTER "table" <table_name: Identifier> "add" "index" "("<exprs: Exprs> ")" ";" 
+AddIndexStmt: Statement = ALTER TABLE <table_name: Identifier> ADD INDEX "("<exprs: Exprs> ")" ";" 
     => Statement::AddIndex(AddIndexStmt { table_name, exprs });
+
+AddPrimaryStmt: Statement = ALTER TABLE <table_name: Identifier> ADD PRIMARY KEY "(" <column_names: Identifiers> ")" ";"
+	=> Statement::AddPrimary(AddPrimaryStmt { table_name, column_names });
+
+AddForeignStmt: Statement = 
+	ALTER TABLE 
+		<table_name: Identifier> 
+	ADD FOREIGN KEY "(" <column_names: Identifiers> ")" 
+	REFERENCES
+		<ref_table_name: Identifier> "(" <ref_column_names: Identifiers> ")"
+	";"
+		=> 
+	Statement::AddForeign(AddForeignStmt { 
+		table_name, 
+		column_names, 
+		ref_table_name, 
+		ref_column_names 
+	});
+
+AddUniqueStmt: Statement =
+	ALTER TABLE
+		<table_name: Identifier>
+	ADD UNIQUE "(" <column_names: Identifiers> ")"
+	";"
+		=>
+	Statement::AddUnique(AddUniqueStmt {
+		table_name,
+		column_names,
+	});
 
 GroupByClause: ExprNode = GROUP BY <expr: Expr> => expr;
 
 SelectStmt: Statement = 
-	"select" 
+	SELECT 
 		<selectors: Selectors> 
-	"from" 
+	FROM 
 		<table_names: Identifiers> 
 	<where_exprs: WhereClauses?> 
 	<group_by_expr: GroupByClause?>
@@ -209,8 +247,8 @@ SelectStmt: Statement =
 	});
 
 DeleteStmt: Statement = 
-	"delete" 
-	"from" 
+	DELETE
+	FROM 
 	<table_name: Identifier> 
 	<where_exprs: WhereClauses?> 
 	";" 
@@ -222,11 +260,11 @@ DeleteStmt: Statement =
 
 DescStmt: Statement = "desc" <table_name: Identifier> ";" => Statement::Desc(DescStmt { table_name });
 
-CreateDatabaseStmt: Statement = "create" "database" <database_name: Identifier> ";" => Statement::CreateDatabase(CreateDatabaseStmt { database_name });
+CreateDatabaseStmt: Statement = CREATE DATABASE <database_name: Identifier> ";" => Statement::CreateDatabase(CreateDatabaseStmt { database_name });
 
-ShowDatabasesStmt: Statement = "show" "databases" ";" => Statement::ShowDatabases;
+ShowDatabasesStmt: Statement = SHOW DATABASES ";" => Statement::ShowDatabases;
 
-UseDatabaseStmt: Statement = "use" <database_name: Identifier> ";" => Statement::UseDatabase(UseDatabaseStmt { database_name });
+UseDatabaseStmt: Statement = USE <database_name: Identifier> ";" => Statement::UseDatabase(UseDatabaseStmt { database_name });
 
 CreateTableStmt: Statement = 
 	CREATE TABLE 
@@ -242,9 +280,9 @@ CreateTableStmt: Statement =
 	fields });
 
 InsertStmt: Statement = 
-	"insert" "into" 
+	INSERT INTO
 		<table_name: Identifier> 
-	"values" 
+	VALUES
 		<values: Tuples> 
 	";"
 		=> 
@@ -272,7 +310,7 @@ Tuple: Vec<ExprNode> = "(" <exprs: Exprs> ")" => exprs;
 
 Real: f64 = <s:r#"[+-]?([0-9]*[.])?[0-9]+"#> => f64::from_str(s).unwrap();
 
-Str: String = r#"'[a-zA-Z_0-9\s%_]+'"# => {
+Str: String = r#"'[a-zA-Z_0-9\s%_#?]+'"# => {
     let quoted = String::from_str(<>).unwrap();
     let len = quoted.len();
     quoted[1..len - 1].into()
@@ -389,6 +427,86 @@ GROUP = {
 BY = {
 	"by",
 	"BY",
+};
+
+WHERE = {
+	"where",
+	"WHERE",
+};
+
+INDEX = {
+	"index",
+	"INDEX",
+};
+
+ADD = {
+	"add",
+	"ADD",
+};
+
+DATABASE = {
+	"database",
+	"DATABASE",
+};
+
+DATABASES = {
+	"databases",
+	"DATABASES",
+};
+
+SHOW = {
+	"show",
+	"SHOW",
+};
+
+DROP = {
+	"drop",
+	"DROP",
+};
+
+TABLES = {
+	"tables",
+	"TABLES",
+};
+
+USE = {
+	"use",
+	"USE",
+};
+
+SELECT = {
+	"select",
+	"SELECT",
+};
+
+FROM = {
+	"from",
+	"FROM",
+};
+
+DELETE = {
+	"delete",
+	"DELETE",
+};
+
+AND = {
+	"and",
+	"AND",
+};
+
+INSERT = {
+	"insert",
+	"INSERT",
+};
+
+INTO = {
+	"into",
+	"INTO",
+};
+
+VALUES = {
+	"values",
+	"VALUES",
 };
 
 MaxLength = "(" Real ")";
