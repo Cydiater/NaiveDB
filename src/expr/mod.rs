@@ -79,31 +79,31 @@ impl ExprImpl {
         return_type_hint: Option<DataType>,
     ) -> Result<Self, ExprError> {
         match node {
-            ExprNode::Constant(node) => Ok(match &node.value {
+            ExprNode::Constant(node) => match &node.value {
                 ConstantValue::Real(value) => match return_type_hint.unwrap() {
-                    DataType::Int(_) => ExprImpl::Constant(ConstantExpr::new(
+                    DataType::Int(_) => Ok(ExprImpl::Constant(ConstantExpr::new(
                         Datum::Int(Some(*value as i32)),
                         return_type_hint.unwrap(),
-                    )),
-                    DataType::Float(_) => ExprImpl::Constant(ConstantExpr::new(
+                    ))),
+                    DataType::Float(_) => Ok(ExprImpl::Constant(ConstantExpr::new(
                         Datum::Float(Some((*value as f32).try_into().unwrap())),
                         return_type_hint.unwrap(),
-                    )),
-                    _ => unreachable!(),
+                    ))),
+                    _ => Err(ExprError::NotMatch),
                 },
-                ConstantValue::String(value) => ExprImpl::Constant(ConstantExpr::new(
+                ConstantValue::String(value) => Ok(ExprImpl::Constant(ConstantExpr::new(
                     value.as_str().into(),
                     return_type_hint.unwrap(),
-                )),
-                ConstantValue::Bool(value) => ExprImpl::Constant(ConstantExpr::new(
+                ))),
+                ConstantValue::Bool(value) => Ok(ExprImpl::Constant(ConstantExpr::new(
                     Datum::Bool(Some(*value)),
                     return_type_hint.unwrap(),
-                )),
-                ConstantValue::Date(value) => ExprImpl::Constant(ConstantExpr::new(
+                ))),
+                ConstantValue::Date(value) => Ok(ExprImpl::Constant(ConstantExpr::new(
                     Datum::Date(Some(*value)),
                     return_type_hint.unwrap(),
-                )),
-                ConstantValue::Null => match return_type_hint.unwrap() {
+                ))),
+                ConstantValue::Null => Ok(match return_type_hint.unwrap() {
                     DataType::Int(_) => ExprImpl::Constant(ConstantExpr::new(
                         Datum::Int(None),
                         return_type_hint.unwrap(),
@@ -124,8 +124,8 @@ impl ExprImpl {
                         Datum::Float(None),
                         return_type_hint.unwrap(),
                     )),
-                },
-            }),
+                }),
+            },
             ExprNode::ColumnRef(node) => {
                 let idx = schema
                     .index_by_column_name(&node.column_name)
@@ -166,4 +166,6 @@ pub enum ExprError {
     CatalogError(#[from] CatalogError),
     #[error("SchemaError: {0}")]
     SchemaError(#[from] SchemaError),
+    #[error("Not Match")]
+    NotMatch,
 }

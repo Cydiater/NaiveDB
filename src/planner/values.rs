@@ -1,8 +1,7 @@
 use crate::expr::ExprImpl;
 use crate::parser::ast::ExprNode;
 use crate::planner::{Plan, PlanError, Planner};
-use crate::table::SchemaRef;
-use itertools::Itertools;
+use crate::table::{SchemaError, SchemaRef};
 
 #[derive(Debug)]
 pub struct ValuesPlan {
@@ -19,21 +18,25 @@ impl Planner {
         let values = values
             .into_iter()
             .map(|nodes| {
-                nodes
-                    .into_iter()
-                    .zip(schema.columns.iter())
-                    .map(|(node, col)| {
-                        ExprImpl::from_ast(
-                            &node,
-                            self.catalog.clone(),
-                            &schema,
-                            Some(col.data_type),
-                        )
-                        .unwrap()
-                    })
-                    .collect_vec()
+                if nodes.len() != schema.columns.len() {
+                    Err(PlanError::Schema(SchemaError::NotMatch))
+                } else {
+                    nodes
+                        .into_iter()
+                        .zip(schema.columns.iter())
+                        .map(|(node, col)| {
+                            ExprImpl::from_ast(
+                                &node,
+                                self.catalog.clone(),
+                                &schema,
+                                Some(col.data_type),
+                            )
+                            .map_err(|e| e.into())
+                        })
+                        .collect::<Result<_, PlanError>>()
+                }
             })
-            .collect_vec();
+            .collect::<Result<_, _>>()?;
         Ok(Plan::Values(ValuesPlan { values, schema }))
     }
 }

@@ -1,4 +1,4 @@
-use crate::catalog::CatalogManagerRef;
+use crate::catalog::{CatalogError, CatalogManagerRef};
 use crate::datum::DataType;
 use crate::execution::{ExecutionError, Executor};
 use crate::index::BPTIndex;
@@ -44,6 +44,14 @@ impl Executor for CreateTableExecutor {
             info!("create table, schema = {:?}", self.schema);
             let mut table = Table::new(self.schema.clone(), self.bpm.clone());
             let page_id = table.page_id();
+            if self
+                .catalog
+                .borrow_mut()
+                .find_table(&self.table_name)
+                .is_ok()
+            {
+                return Err(ExecutionError::Catalog(CatalogError::Duplicated).into());
+            }
             self.catalog
                 .borrow_mut()
                 .create_table(&self.table_name, page_id)?;

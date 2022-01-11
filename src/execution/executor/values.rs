@@ -1,7 +1,7 @@
 use crate::execution::{ExecutionError, Executor};
 use crate::expr::ExprImpl;
 use crate::storage::BufferPoolManagerRef;
-use crate::table::{SchemaRef, Slice};
+use crate::table::{SchemaError, SchemaRef, Slice};
 use itertools::Itertools;
 use log::info;
 
@@ -31,6 +31,9 @@ impl Executor for ValuesExecutor {
         if !self.executed {
             let mut slice = Slice::new(self.bpm.clone(), self.schema.clone());
             for tuple in self.values.iter_mut() {
+                if tuple.len() != self.schema.columns.len() {
+                    return Err(ExecutionError::Schema(SchemaError::NotMatch));
+                }
                 let datums = tuple
                     .iter_mut()
                     .map(|e| e.eval(None).remove(0))

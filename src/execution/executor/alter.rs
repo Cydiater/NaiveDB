@@ -132,7 +132,7 @@ impl Executor for AddPrimaryExecutor {
             let rows = ExprImpl::batch_eval(&exprs, Some(&slice));
             for (idx, row) in rows.iter().enumerate() {
                 let record_id = (slice.page_id(), idx);
-                index.insert(row, record_id).unwrap();
+                index.insert(row, record_id)?;
             }
         }
         let page_id = index.get_page_id();

@@ -85,6 +85,22 @@ impl Executor for DescExecutor {
                 ])
                 .unwrap();
             });
+            for foreign in &table.schema.foreign {
+                let mut msg = "Foreign(".to_string();
+                for f in &foreign.1 {
+                    msg += &table.schema.columns[f.0].desc;
+                    msg += ", ";
+                }
+                msg.pop();
+                msg.pop();
+                msg += ")";
+                desc.insert(&[
+                    msg.as_str().into(),
+                    "N/A".into(),
+                    "N/A".into(),
+                    "N/A".into(),
+                ])?;
+            }
             for unique in &table.schema.unique {
                 let mut msg = "Unique(".to_string();
                 for u in unique {
