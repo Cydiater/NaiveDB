@@ -201,7 +201,7 @@ mod tests {
             );
             // attach in catalog
             catalog_manager
-                .create_table("sample_table", table.get_page_id())
+                .create_table("sample_table", table.page_id())
                 .unwrap();
             // find this table
             assert!(catalog_manager.find_table("sample_table").is_ok());

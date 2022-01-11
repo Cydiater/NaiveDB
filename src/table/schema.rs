@@ -246,6 +246,8 @@ pub enum SchemaError {
     ColumnNotFound,
     #[error("Duplicated Primary")]
     DuplicatedPrimary,
+    #[error("Primary Not Found")]
+    PrimaryNotFound,
 }
 
 #[cfg(test)]

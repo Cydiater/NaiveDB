@@ -42,8 +42,8 @@ impl Executor for CreateTableExecutor {
     fn execute(&mut self) -> Result<Option<Slice>, ExecutionError> {
         if !self.executed {
             info!("create table, schema = {:?}", self.schema);
-            let table = Table::new(self.schema.clone(), self.bpm.clone());
-            let page_id = table.get_page_id();
+            let mut table = Table::new(self.schema.clone(), self.bpm.clone());
+            let page_id = table.page_id();
             self.catalog
                 .borrow_mut()
                 .create_table(&self.table_name, page_id)?;
@@ -56,9 +56,10 @@ impl Executor for CreateTableExecutor {
                     Rc::new(index.get_key_schema()),
                     page_id,
                 )?;
+                table.meta_mut().page_id_of_primary_index = Some(index.get_page_id());
             }
             for unique in &table.schema.unique {
-                let exprs = table.schema.project_by(&unique);
+                let exprs = table.schema.project_by(unique);
                 let index = BPTIndex::new(self.bpm.clone(), exprs);
                 let page_id = index.get_page_id();
                 self.catalog.borrow_mut().add_index(

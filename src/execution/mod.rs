@@ -71,10 +71,10 @@ impl Engine {
             Plan::SeqScan(plan) => {
                 let table = self.catalog.borrow_mut().find_table(&plan.table_name)?;
                 let schema = table.schema.clone();
-                let page_id = table.get_page_id_of_first_slice();
+                let page_id = table.meta().page_id_of_first_slice;
                 Ok(ExecutorImpl::SeqScan(SeqScanExecutor::new(
                     self.bpm.clone(),
-                    page_id,
+                    Some(page_id),
                     schema,
                     plan.with_record_id,
                 )))

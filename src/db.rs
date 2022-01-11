@@ -42,7 +42,7 @@ impl NaiveDB {
         }
     }
     pub fn new() -> Self {
-        let bpm = BufferPoolManager::new_shared(4096 * 256);
+        let bpm = BufferPoolManager::new_shared(64 * 1024);
         let catalog = CatalogManager::new_shared(bpm.clone());
         Self {
             bpm: bpm.clone(),
@@ -308,6 +308,21 @@ mod tests {
                     ],
                 ]
             );
+            db.run("drop table lhs;").unwrap();
+            db.run("drop table rhs;").unwrap();
+            db.run("create table t1 (v1 int not null, primary key (v1));")
+                .unwrap();
+            db.run("create table t2 (v1 int not null, foreign key (v1) references t1(v1));")
+                .unwrap();
+            db.run("insert into t1 values (1), (2), (3);").unwrap();
+            db.run("insert into t2 values (1), (3);").unwrap();
+            assert!(db.run("insert into t2 values (4);").is_err());
+            assert!(db.run("insert into t2 values (2);").is_ok());
+            db.run("insert into t1 values (4), (5), (6);").unwrap();
+            assert!(db.run("insert into t2 values (4);").is_ok());
+            assert!(db.run("delete from t1 where v1 = 4;").is_err());
+            assert!(db.run("delete from t2 where v1 = 4;").is_ok());
+            assert!(db.run("delete from t1 where v1 = 4;").is_ok());
             filename
         };
         remove_file(filename).unwrap();

@@ -43,6 +43,15 @@ impl Div<usize> for Datum {
     }
 }
 
+impl From<Datum> for i32 {
+    fn from(d: Datum) -> i32 {
+        match d {
+            Datum::Int(Some(i)) => i,
+            _ => unreachable!(),
+        }
+    }
+}
+
 impl From<i32> for Datum {
     fn from(i: i32) -> Datum {
         Datum::Int(Some(i))

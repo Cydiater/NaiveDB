@@ -118,7 +118,7 @@ impl Executor for AddPrimaryExecutor {
             .iter()
             .map(|column_name| {
                 schema
-                    .index_by_column_name(&column_name)
+                    .index_by_column_name(column_name)
                     .ok_or(SchemaError::ColumnNotFound)
             })
             .collect::<Result<_, _>>()?;
@@ -126,6 +126,7 @@ impl Executor for AddPrimaryExecutor {
         table.set_schema(Rc::new(schema));
         let exprs = table.schema.project_by_primary();
         let mut index = BPTIndex::new(self.bpm.clone(), exprs.iter().cloned().collect_vec());
+        table.meta_mut().page_id_of_primary_index = Some(index.get_page_id());
         let slices = table.into_slice();
         for slice in slices {
             let rows = ExprImpl::batch_eval(&exprs, Some(&slice));
@@ -216,7 +217,7 @@ impl Executor for AddForeignExecutor {
                 Ok((src_idx, dst_idx))
             })
             .collect::<Result<Vec<(_, _)>, SchemaError>>()?;
-        schema.foreign.push((ref_table.get_page_id(), src_and_dst));
+        schema.foreign.push((ref_table.page_id(), src_and_dst));
         table.set_schema(Rc::new(schema));
         Ok(Some(
             Slice::new_as_message(self.bpm.clone(), "Add Foreign", "Ok").unwrap(),

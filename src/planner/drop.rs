@@ -52,7 +52,7 @@ impl Planner {
             .map(|column_name| {
                 table
                     .schema
-                    .index_by_column_name(&column_name)
+                    .index_by_column_name(column_name)
                     .ok_or(SchemaError::ColumnNotFound)
             })
             .collect::<Result<Vec<_>, _>>()?;

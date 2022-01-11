@@ -48,11 +48,11 @@ impl Planner {
                         .ok_or(SchemaError::ColumnNotFound)?;
                     let ref_idx = ref_table
                         .schema
-                        .index_by_column_name(&ref_column_name)
+                        .index_by_column_name(ref_column_name)
                         .ok_or(SchemaError::ColumnNotFound)?;
                     vec.push((idx, ref_idx))
                 }
-                schema.foreign.push((ref_table.get_page_id(), vec));
+                schema.foreign.push((ref_table.page_id(), vec));
             }
         }
         // unique field

@@ -170,6 +170,17 @@ impl Slice {
         Ok(())
     }
 
+    pub fn set_ref_cnt_at(&mut self, idx: usize, cnt: usize) -> Result<(), TableError> {
+        let slice_page = self.slice_page_mut();
+        *slice_page.key_mut_at(idx) = cnt;
+        Ok(())
+    }
+
+    pub fn ref_cnt_at(&self, idx: usize) -> Result<usize, TableError> {
+        let slice_page = self.slice_page();
+        Ok(*slice_page.key_at(idx))
+    }
+
     pub fn tuple_at(&self, idx: usize) -> Result<Vec<Datum>, TableError> {
         let slice_page = self.slice_page();
         Ok(Datum::tuple_from_bytes_with_schema(

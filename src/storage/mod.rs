@@ -11,7 +11,7 @@ pub use buffer::{BufferPoolManager, BufferPoolManagerRef};
 pub use page::{Page, PageRef};
 pub use slotted::{KeyDataIter, SlotIndexIter, SlottedPage, SlottedPageError};
 
-pub const PAGE_SIZE: usize = 4096;
+pub const PAGE_SIZE: usize = 16384;
 pub const DEFAULT_DB_FILE: &str = "naive.db";
 pub const PAGE_ID_OF_ROOT_DATABASE_CATALOG: usize = 1;
 pub const PAGE_ID_OF_METADATA: usize = 0;

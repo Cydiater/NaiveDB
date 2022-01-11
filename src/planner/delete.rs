@@ -32,7 +32,7 @@ impl Planner {
                 .borrow()
                 .find_table(&stmt.table_name)
                 .unwrap()
-                .get_page_id(),
+                .page_id(),
         }))
     }
 }

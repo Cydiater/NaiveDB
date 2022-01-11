@@ -19,6 +19,8 @@ use crate::db::NaiveDB;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
+use std::time::Instant;
+
 #[macro_use]
 extern crate lalrpop_util;
 lalrpop_mod!(#[allow(clippy::all)] pub sql);
@@ -32,9 +34,11 @@ fn main() {
         match readline {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());
+                let start = Instant::now();
                 match db.run(line.as_str()) {
                     Ok(res) => {
-                        print!("{}", res);
+                        println!("{}", res);
+                        println!("Elapsed Time: {:?}", start.elapsed())
                     }
                     Err(err) => {
                         println!("Error: {}", err);

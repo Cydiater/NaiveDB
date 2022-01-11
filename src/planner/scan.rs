@@ -87,7 +87,7 @@ impl Planner {
                         .borrow()
                         .find_table(table_name)
                         .unwrap()
-                        .get_page_id(),
+                        .page_id(),
                     index_page_id: index.get_page_id(),
                     with_record_id,
                 }));
