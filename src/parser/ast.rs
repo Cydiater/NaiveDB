@@ -24,6 +24,7 @@ pub enum Statement {
     DropIndex(DropIndexStmt),
     DropPrimary(DropPrimaryStmt),
     DropForeign(DropForeignStmt),
+    Update(UpdateStmt),
 }
 
 #[derive(Debug)]
@@ -68,6 +69,13 @@ pub struct AggItem {
 #[derive(Debug)]
 pub struct DropDatabaseStmt {
     pub database_name: String,
+}
+
+#[derive(Debug)]
+pub struct UpdateStmt {
+    pub table_name: String,
+    pub set_exprs: Vec<ExprNode>,
+    pub where_exprs: Vec<ExprNode>,
 }
 
 #[derive(Debug)]

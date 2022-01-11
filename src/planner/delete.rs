@@ -1,4 +1,4 @@
-use crate::parser::ast::DeleteStmt;
+use crate::parser::ast::ExprNode;
 use crate::planner::{Plan, PlanError, Planner};
 use crate::storage::PageID;
 use itertools::Itertools;
@@ -11,14 +11,18 @@ pub struct DeletePlan {
 }
 
 impl Planner {
-    pub fn plan_delete(&self, stmt: DeleteStmt) -> Result<Plan, PlanError> {
-        let plan = self.plan_scan(&stmt.table_name, &stmt.where_exprs, true);
-        let table = self.catalog.borrow().find_table(&stmt.table_name).unwrap();
-        let plan = self.plan_filter(table.schema.as_ref(), &stmt.where_exprs, plan);
+    pub fn plan_delete(
+        &self,
+        table_name: &str,
+        where_exprs: &[ExprNode],
+    ) -> Result<Plan, PlanError> {
+        let plan = self.plan_scan(table_name, where_exprs, true);
+        let table = self.catalog.borrow().find_table(table_name)?;
+        let plan = self.plan_filter(table.schema.as_ref(), where_exprs, plan);
         let indexes = self
             .catalog
             .borrow()
-            .find_indexes_by_table(&stmt.table_name)
+            .find_indexes_by_table(table_name)
             .unwrap();
         let index_page_ids = indexes
             .into_iter()
@@ -30,7 +34,7 @@ impl Planner {
             table_page_id: self
                 .catalog
                 .borrow()
-                .find_table(&stmt.table_name)
+                .find_table(table_name)
                 .unwrap()
                 .page_id(),
         }))

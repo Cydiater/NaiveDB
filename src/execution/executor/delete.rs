@@ -1,18 +1,17 @@
-use crate::datum::{DataType, Datum};
+use crate::datum::Datum;
 use crate::execution::{ExecutionError, Executor, ExecutorImpl};
 use crate::expr::ExprImpl;
 use crate::index::{BPTIndex, IndexError};
 use crate::storage::BufferPoolManagerRef;
-use crate::table::{Schema, SchemaError, SchemaRef, Slice, Table};
+use crate::table::{SchemaError, SchemaRef, Slice, Table};
 use itertools::Itertools;
-use std::rc::Rc;
 
 pub struct DeleteExecutor {
     child: Box<ExecutorImpl>,
     indexes: Vec<BPTIndex>,
     table: Table,
     bpm: BufferPoolManagerRef,
-    executed: bool,
+    buffer: Vec<Vec<Datum>>,
 }
 
 impl DeleteExecutor {
@@ -27,24 +26,16 @@ impl DeleteExecutor {
             indexes,
             table,
             bpm,
-            executed: false,
+            buffer: vec![],
         }
     }
 }
 
 impl Executor for DeleteExecutor {
     fn schema(&self) -> SchemaRef {
-        Rc::new(Schema::from_type_and_names(&[(
-            DataType::new_as_int(false),
-            "Number Of Deleted Tuple".to_string(),
-        )]))
+        self.table.schema.clone()
     }
     fn execute(&mut self) -> Result<Option<Slice>, ExecutionError> {
-        if self.executed {
-            return Ok(None);
-        }
-        self.executed = true;
-        let mut remove_cnt = 0;
         while let Some(input) = self.child.execute()? {
             // stage-1: validate
             for (page_id, src_and_dst) in &self.table.schema.foreign {
@@ -81,14 +72,24 @@ impl Executor for DeleteExecutor {
                 let page_id: i32 = tuple.pop().unwrap().into();
                 let record_id = (page_id as usize, idx as usize);
                 self.table.remove(record_id)?;
-                remove_cnt += 1;
                 for (rows, index) in indexes_rows.iter_mut().zip(&mut self.indexes) {
                     index.remove(&rows.remove(0))?;
                 }
+                self.buffer.push(tuple);
             }
         }
-        let mut msg = Slice::new(self.bpm.clone(), self.schema());
-        msg.insert(&[Datum::Int(Some(remove_cnt as i32))])?;
-        Ok(Some(msg))
+        let mut output = Slice::new(self.bpm.clone(), self.schema());
+        while !self.buffer.is_empty() {
+            if output.insert(self.buffer.last().unwrap()).is_ok() {
+                self.buffer.pop();
+            } else {
+                break;
+            }
+        }
+        if output.count() > 0 {
+            Ok(Some(output))
+        } else {
+            Ok(None)
+        }
     }
 }

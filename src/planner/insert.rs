@@ -8,12 +8,15 @@ pub struct InsertPlan {
 }
 
 impl Planner {
-    pub fn plan_insert(&self, stmt: InsertStmt) -> Result<Plan, PlanError> {
+    pub fn plan_insert_from_values(&self, stmt: InsertStmt) -> Result<Plan, PlanError> {
         let table = self.catalog.borrow().find_table(&stmt.table_name)?;
-        let child = Box::new(self.plan_values(stmt.values, table.schema.clone())?);
+        let child = self.plan_values(stmt.values, table.schema.clone())?;
+        self.plan_insert(&stmt.table_name, child)
+    }
+    pub fn plan_insert(&self, table_name: &str, child: Plan) -> Result<Plan, PlanError> {
         Ok(Plan::Insert(InsertPlan {
-            table_name: stmt.table_name,
-            child,
+            table_name: table_name.to_owned(),
+            child: Box::new(child),
         }))
     }
 }

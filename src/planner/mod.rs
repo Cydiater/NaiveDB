@@ -17,6 +17,7 @@ pub use load_from_file::LoadFromFilePlan;
 pub use nested_loop_join::NestedLoopJoinPlan;
 pub use scan::{IndexScanPlan, SeqScanPlan};
 pub use select::ProjectPlan;
+pub use update::UpdatePlan;
 pub use use_database::UseDatabasePlan;
 pub use values::ValuesPlan;
 
@@ -33,10 +34,10 @@ mod load_from_file;
 mod nested_loop_join;
 mod scan;
 mod select;
+mod update;
 mod use_database;
 mod values;
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub enum Plan {
     CreateDatabase(CreateDatabasePlan),
@@ -64,6 +65,7 @@ pub enum Plan {
     NestedLoopJoin(NestedLoopJoinPlan),
     LoadFromFile(LoadFromFilePlan),
     Agg(AggPlan),
+    Update(UpdatePlan),
 }
 
 pub struct Planner {
@@ -82,7 +84,7 @@ impl Planner {
             Statement::ShowTables => Ok(Plan::ShowTables),
             Statement::UseDatabase(stmt) => self.plan_use_database(stmt),
             Statement::CreateTable(stmt) => self.plan_create_table(stmt),
-            Statement::Insert(stmt) => self.plan_insert(stmt),
+            Statement::Insert(stmt) => self.plan_insert_from_values(stmt),
             Statement::Desc(stmt) => self.plan_desc(stmt),
             Statement::Select(stmt) => self.plan_select(stmt),
             Statement::AddIndex(stmt) => self.plan_add_index(stmt),
@@ -94,8 +96,9 @@ impl Planner {
             Statement::DropPrimary(stmt) => self.plan_drop_primary(stmt),
             Statement::DropForeign(stmt) => self.plan_drop_foreign(stmt),
             Statement::DropIndex(stmt) => self.plan_drop_index(stmt),
-            Statement::Delete(stmt) => self.plan_delete(stmt),
+            Statement::Delete(stmt) => self.plan_delete(&stmt.table_name, &stmt.where_exprs),
             Statement::LoadFromFile(stmt) => self.plan_load_from_file(stmt),
+            Statement::Update(stmt) => self.plan_update(stmt),
         }
     }
 }

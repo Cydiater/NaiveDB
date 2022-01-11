@@ -19,6 +19,7 @@ pub use nested_loop_join::NestedLoopJoinExecutor;
 pub use project::ProjectExecutor;
 pub use seq_scan::SeqScanExecutor;
 pub use show_databases::ShowDatabasesExecutor;
+pub use update::UpdateExecutor;
 pub use use_database::UseDatabaseExecutor;
 pub use values::ValuesExecutor;
 
@@ -37,6 +38,7 @@ mod nested_loop_join;
 mod project;
 mod seq_scan;
 mod show_databases;
+mod update;
 mod use_database;
 mod values;
 
@@ -72,6 +74,7 @@ pub enum ExecutorImpl {
     NestedLoopJoin(NestedLoopJoinExecutor),
     LoadFromFile(LoadFromFileExecutor),
     Agg(AggExecutor),
+    Update(UpdateExecutor),
 }
 
 impl ExecutorImpl {
@@ -102,6 +105,7 @@ impl ExecutorImpl {
             Self::LoadFromFile(executor) => executor.execute(),
             Self::Agg(executor) => executor.execute(),
             Self::ShowTables(executor) => executor.execute(),
+            Self::Update(executor) => executor.execute(),
         }
     }
     pub fn schema(&self) -> SchemaRef {
@@ -131,6 +135,7 @@ impl ExecutorImpl {
             Self::LoadFromFile(executor) => executor.schema(),
             Self::Agg(executor) => executor.schema(),
             Self::ShowTables(executor) => executor.schema(),
+            Self::Update(executor) => executor.schema(),
         }
     }
 }
