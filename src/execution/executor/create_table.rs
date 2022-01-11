@@ -34,7 +34,7 @@ impl CreateTableExecutor {
 
 impl Executor for CreateTableExecutor {
     fn schema(&self) -> SchemaRef {
-        Rc::new(Schema::from_slice(&[(
+        Rc::new(Schema::from_type_and_names(&[(
             DataType::new_as_varchar(false),
             "table".to_string(),
         )]))
@@ -42,12 +42,12 @@ impl Executor for CreateTableExecutor {
     fn execute(&mut self) -> Result<Option<Slice>, ExecutionError> {
         if !self.executed {
             info!("create table, schema = {:?}", self.schema);
-            let table = Table::new(self.schema.clone(), self.bpm.clone());
-            let page_id = table.get_page_id();
+            let mut table = Table::new(self.schema.clone(), self.bpm.clone());
+            let page_id = table.page_id();
             self.catalog
                 .borrow_mut()
                 .create_table(&self.table_name, page_id)?;
-            let primary_as_exprs = self.schema.primary_as_exprs();
+            let primary_as_exprs = self.schema.project_by_primary();
             if !primary_as_exprs.is_empty() {
                 let index = BPTIndex::new(self.bpm.clone(), primary_as_exprs);
                 let page_id = index.get_page_id();
@@ -56,10 +56,11 @@ impl Executor for CreateTableExecutor {
                     Rc::new(index.get_key_schema()),
                     page_id,
                 )?;
+                table.meta_mut().page_id_of_primary_index = Some(index.get_page_id());
             }
-            let unique_exprs = self.schema.unique_as_exprs();
-            for unique_expr in unique_exprs.into_iter() {
-                let index = BPTIndex::new(self.bpm.clone(), unique_expr);
+            for unique in &table.schema.unique {
+                let exprs = table.schema.project_by(unique);
+                let index = BPTIndex::new(self.bpm.clone(), exprs);
                 let page_id = index.get_page_id();
                 self.catalog.borrow_mut().add_index(
                     &self.table_name,

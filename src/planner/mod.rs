@@ -1,5 +1,6 @@
 use crate::catalog::{CatalogError, CatalogManagerRef};
 use crate::parser::ast::Statement;
+use crate::table::SchemaError;
 use log::info;
 use thiserror::Error;
 
@@ -9,7 +10,7 @@ pub use create_database::CreateDatabasePlan;
 pub use create_table::CreateTablePlan;
 pub use delete::DeletePlan;
 pub use desc::DescPlan;
-pub use drop::{DropDatabasePlan, DropForeignKeyPlan, DropTablePlan};
+pub use drop::{DropDatabasePlan, DropForeignPlan, DropIndexPlan, DropPrimaryPlan, DropTablePlan};
 pub use filter::FilterPlan;
 pub use insert::InsertPlan;
 pub use load_from_file::LoadFromFilePlan;
@@ -56,7 +57,9 @@ pub enum Plan {
     AddForeign(AddForeignPlan),
     IndexScan(IndexScanPlan),
     DropTable(DropTablePlan),
-    DropForeignKey(DropForeignKeyPlan),
+    DropForeign(DropForeignPlan),
+    DropIndex(DropIndexPlan),
+    DropPrimary(DropPrimaryPlan),
     Delete(DeletePlan),
     NestedLoopJoin(NestedLoopJoinPlan),
     LoadFromFile(LoadFromFilePlan),
@@ -88,9 +91,11 @@ impl Planner {
             Statement::AddUnique(stmt) => self.plan_add_unique(stmt),
             Statement::DropTable(stmt) => self.plan_drop_table(stmt),
             Statement::DropDatabase(stmt) => self.plan_drop_database(stmt),
+            Statement::DropPrimary(stmt) => self.plan_drop_primary(stmt),
+            Statement::DropForeign(stmt) => self.plan_drop_foreign(stmt),
+            Statement::DropIndex(stmt) => self.plan_drop_index(stmt),
             Statement::Delete(stmt) => self.plan_delete(stmt),
             Statement::LoadFromFile(stmt) => self.plan_load_from_file(stmt),
-            _ => todo!(),
         }
     }
 }
@@ -99,6 +104,8 @@ impl Planner {
 pub enum PlanError {
     #[error("CatalogError: {0}")]
     Catalog(#[from] CatalogError),
+    #[error("SchemaError: {0}")]
+    Schema(#[from] SchemaError),
 }
 
 #[cfg(test)]

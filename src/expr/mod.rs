@@ -1,7 +1,7 @@
 use crate::catalog::{CatalogError, CatalogManagerRef};
 use crate::datum::{DataType, Datum};
 use crate::parser::ast::{ConstantValue, ExprNode};
-use crate::table::{Schema, Slice};
+use crate::table::{Schema, SchemaError, Slice};
 use itertools::Itertools;
 use std::convert::TryInto;
 use std::fmt;
@@ -127,8 +127,10 @@ impl ExprImpl {
                 },
             }),
             ExprNode::ColumnRef(node) => {
-                let idx = schema.index_of(&node.column_name).unwrap();
-                let return_type = schema.type_at(idx);
+                let idx = schema
+                    .index_by_column_name(&node.column_name)
+                    .ok_or(SchemaError::ColumnNotFound)?;
+                let return_type = schema.columns[idx].data_type;
                 Ok(ExprImpl::ColumnRef(ColumnRefExpr::new(
                     idx,
                     return_type,
@@ -162,4 +164,6 @@ pub enum ExprError {
     TableNameNotFound,
     #[error("CatalogError: {0}")]
     CatalogError(#[from] CatalogError),
+    #[error("SchemaError: {0}")]
+    SchemaError(#[from] SchemaError),
 }

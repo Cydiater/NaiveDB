@@ -66,7 +66,7 @@ impl DataType {
             Self::VarChar(_) => false,
         }
     }
-    pub fn as_bytes(&self) -> [u8; 1] {
+    pub fn to_bytes(self) -> [u8; 1] {
         let mask = if self.nullable() { 128u8 } else { 0u8 };
         match self {
             Self::Int(_) => [mask],

@@ -1,3 +1,4 @@
+use crate::catalog::CatalogError;
 use crate::expr::ExprImpl;
 use crate::parser::ast::{AddForeignStmt, AddIndexStmt, AddPrimaryStmt, AddUniqueStmt};
 use crate::planner::{Plan, PlanError, Planner};
@@ -50,8 +51,13 @@ impl Planner {
         let unique_set = stmt
             .column_names
             .iter()
-            .map(|column_name| table.schema.index_of(column_name).unwrap())
-            .collect_vec();
+            .map(|column_name| {
+                table
+                    .schema
+                    .index_by_column_name(column_name)
+                    .ok_or(CatalogError::EntryNotFound)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         Ok(Plan::AddUnique(AddUniquePlan {
             table_name: stmt.table_name,
             unique_set,

@@ -71,7 +71,7 @@ mod tests {
                     DataType::new_as_varchar(false),
                 )),
             ]];
-            let schema = Schema::from_slice(&[
+            let schema = Schema::from_type_and_names(&[
                 (DataType::new_as_int(false), "v1".to_string()),
                 (DataType::new_as_varchar(false), "v2".to_string()),
             ]);

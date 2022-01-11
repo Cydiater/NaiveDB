@@ -139,6 +139,16 @@ impl CatalogManager {
             .collect_vec();
         Ok(table_names)
     }
+    pub fn drop_index(&mut self, table_name: &str, schema: SchemaRef) -> Result<(), CatalogError> {
+        if let Some(table_catalog) = self.table_catalog.as_mut() {
+            let columns = schema.columns.iter().map(|c| c.desc.clone()).collect_vec();
+            let key = table_name.to_owned() + ":" + &columns.join(":");
+            table_catalog.remove(&key)?;
+            Ok(())
+        } else {
+            Err(CatalogError::NotUsingDatabase)
+        }
+    }
     pub fn add_index(
         &mut self,
         table_name: &str,
@@ -146,8 +156,15 @@ impl CatalogManager {
         page_id: PageID,
     ) -> Result<(), CatalogError> {
         if let Some(table_catalog) = self.table_catalog.as_mut() {
-            let columns = schema.iter().map(|c| c.desc.clone()).collect_vec();
+            let columns = schema.columns.iter().map(|c| c.desc.clone()).collect_vec();
             let key = table_name.to_owned() + ":" + &columns.join(":");
+            if table_catalog
+                .iter()
+                .map(|(name, _)| name)
+                .any(|name| name == key)
+            {
+                return Err(CatalogError::Duplicated);
+            }
             table_catalog.insert(page_id, &key)?;
             Ok(())
         } else {
@@ -176,7 +193,7 @@ mod tests {
             catalog_manager.use_database("sample_db").unwrap();
             // create a table
             let table = Table::new(
-                Rc::new(Schema::from_slice(&[(
+                Rc::new(Schema::from_type_and_names(&[(
                     DataType::new_as_int(false),
                     "v1".to_string(),
                 )])),
@@ -184,7 +201,7 @@ mod tests {
             );
             // attach in catalog
             catalog_manager
-                .create_table("sample_table", table.get_page_id())
+                .create_table("sample_table", table.page_id())
                 .unwrap();
             // find this table
             assert!(catalog_manager.find_table("sample_table").is_ok());

@@ -25,7 +25,7 @@ impl CreateDatabaseExecutor {
 
 impl Executor for CreateDatabaseExecutor {
     fn schema(&self) -> SchemaRef {
-        Rc::new(Schema::from_slice(&[(
+        Rc::new(Schema::from_type_and_names(&[(
             DataType::new_as_varchar(false),
             "database".to_string(),
         )]))

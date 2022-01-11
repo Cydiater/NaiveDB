@@ -25,13 +25,13 @@ use thiserror::Error;
 #[allow(dead_code)]
 pub struct SlottedPage<Meta: Sized, Key: Sized>
 where
-    [(); PAGE_SIZE - size_of::<Meta>() - 48]:,
+    [(); PAGE_SIZE - size_of::<Meta>() - 144]:,
 {
     meta: Meta,
     head: usize,
     tail: usize,
-    bitmap: [u8; 32],
-    bytes: [u8; PAGE_SIZE - size_of::<Meta>() - 48],
+    bitmap: [u8; 128],
+    bytes: [u8; PAGE_SIZE - size_of::<Meta>() - 144],
 }
 
 pub struct KeyDataIter<'page, Key> {
@@ -72,12 +72,12 @@ impl<'page, Key: 'page + Sized> Iterator for KeyDataIter<'page, Key> {
 
 pub struct SlotIndexIter<'page> {
     idx: usize,
-    bitmap: &'page [u8; 32],
+    bitmap: &'page [u8; 128],
     capacity: usize,
 }
 
 impl<'page> SlotIndexIter<'page> {
-    pub fn new(bitmap: &'page [u8; 32], capacity: usize) -> Self {
+    pub fn new(bitmap: &'page [u8; 128], capacity: usize) -> Self {
         Self {
             idx: 0,
             bitmap,
@@ -113,7 +113,7 @@ impl<'page> Iterator for SlotIndexIter<'page> {
 #[allow(dead_code)]
 impl<Meta: Sized + Copy, Key: Sized + Copy + PartialEq> SlottedPage<Meta, Key>
 where
-    [(); PAGE_SIZE - size_of::<Meta>() - 48]:,
+    [(); PAGE_SIZE - size_of::<Meta>() - 144]:,
 {
     pub fn capacity(&self) -> usize {
         self.head / (size_of::<Key>() + 16)
@@ -164,7 +164,7 @@ where
         Ok((start, end))
     }
     fn find_first_empty_slot(&self) -> usize {
-        for idx in 0..32 {
+        for idx in 0..128 {
             if self.bitmap[idx] != 255 {
                 for bit_idx in 0..8 {
                     if ((self.bitmap[idx] >> bit_idx) & 1) == 0 {
@@ -204,6 +204,9 @@ where
     }
     pub fn key_at(&self, idx: usize) -> &Key {
         unsafe { &*self.key_ptr_at(idx) }
+    }
+    pub fn key_mut_at(&mut self, idx: usize) -> &mut Key {
+        unsafe { &mut *self.key_mut_ptr_at(idx) }
     }
     pub fn data_at(&self, idx: usize) -> &[u8] {
         let data_range = self.data_range_ptr_at(idx);

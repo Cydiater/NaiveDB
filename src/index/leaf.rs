@@ -229,7 +229,7 @@ mod tests {
         let filename = {
             let bpm = BufferPoolManager::new_random_shared(10);
             let filename = bpm.borrow().filename();
-            let schema = Rc::new(Schema::from_slice(&[(
+            let schema = Rc::new(Schema::from_type_and_names(&[(
                 DataType::new_as_int(false),
                 "v1".to_string(),
             )]));

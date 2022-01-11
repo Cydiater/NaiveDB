@@ -41,14 +41,16 @@ impl Executor for LoadFromFileExecutor {
                 let record = record.unwrap();
                 let tuple: Vec<Datum> = record
                     .iter()
-                    .zip(self.schema.iter())
-                    .map(|(data, col)| match col.data_type {
+                    .zip(&self.schema.columns)
+                    .map(|(data, col)| {
+                        match col.data_type {
                         DataType::Int(_) => data.parse::<i32>().unwrap().into(),
                         DataType::Date(_) => NaiveDate::from_str(data).unwrap().into(),
                         DataType::Float(_) => f32::from_str(data).unwrap().into(),
                         DataType::VarChar(_) => data.into(),
                         DataType::Bool(_) => bool::from_str(data).unwrap().into(),
-                    })
+
+                    }})
                     .collect_vec();
                 self.buffer.push_back(tuple);
             }

@@ -1,9 +1,11 @@
 use crate::datum::{DataType, Datum};
 use crate::index::RecordID;
-use crate::storage::{BufferPoolManagerRef, PageID, PageRef, SlottedPageError, StorageError};
+use crate::storage::{
+    BufferPoolManagerRef, PageID, PageRef, SlottedPage, SlottedPageError, StorageError,
+};
 use itertools::Itertools;
 use prettytable::{Cell, Row, Table as PrintTable};
-use std::convert::TryInto;
+
 use std::fmt;
 use std::rc::Rc;
 use thiserror::Error;
@@ -11,14 +13,16 @@ use thiserror::Error;
 mod schema;
 mod slice;
 
-pub use schema::{Column, ColumnConstraint, Schema, SchemaRef};
+pub use schema::{Column, Schema, SchemaError, SchemaRef};
 pub use slice::{Slice, SlotIter, TupleIter};
 
-///
-/// Table Format:
-///
-///     | page_id_of_first_slice | Schema |
-///
+#[derive(Copy, Clone)]
+pub struct TableMeta {
+    pub page_id_of_first_slice: PageID,
+    pub page_id_of_primary_index: Option<PageID>,
+}
+
+type TablePage = SlottedPage<TableMeta, ()>;
 
 pub struct Table {
     pub schema: SchemaRef,
@@ -38,6 +42,7 @@ impl fmt::Display for Table {
         let mut table = PrintTable::new();
         let header = self
             .schema
+            .columns
             .iter()
             .map(|c| Cell::new(c.desc.as_str()))
             .collect_vec();
@@ -79,13 +84,28 @@ impl Iterator for TableIter {
 }
 
 impl Table {
+    fn table_page(&self) -> &TablePage {
+        unsafe { &*(self.page.borrow().buffer.as_ptr() as *const TablePage) }
+    }
+    fn table_page_mut(&mut self) -> &mut TablePage {
+        self.page.borrow_mut().is_dirty = true;
+        unsafe { &mut *(self.page.borrow_mut().buffer.as_mut_ptr() as *mut TablePage) }
+    }
+    pub fn meta(&self) -> &TableMeta {
+        self.table_page().meta()
+    }
+    pub fn meta_mut(&mut self) -> &mut TableMeta {
+        self.table_page_mut().meta_mut()
+    }
     /// open a table with page_id
     pub fn open(page_id: PageID, bpm: BufferPoolManagerRef) -> Self {
         // fetch page from bpm
         let page = bpm.borrow_mut().fetch(page_id).unwrap();
-        // reconstruct schema
-        let schema = Rc::new(Schema::from_bytes(&page.borrow().buffer[4..]));
-        Self { schema, bpm, page }
+        unsafe {
+            let table_page = &*(page.borrow().buffer.as_ptr() as *const TablePage);
+            let schema = Rc::new(Schema::from_bytes(table_page.data_at(0)));
+            Self { schema, bpm, page }
+        }
     }
     /// create a table
     pub fn new(schema: SchemaRef, bpm: BufferPoolManagerRef) -> Self {
@@ -93,79 +113,51 @@ impl Table {
         let page = bpm.borrow_mut().alloc().unwrap();
         // alloc slice page
         let slice = Slice::new(bpm.clone(), schema.clone());
-        let page_id_of_root_slice = slice.page_id();
-        // set page_id_of_first_slice
-        page.borrow_mut().buffer[0..4]
-            .copy_from_slice(&(page_id_of_root_slice as u32).to_le_bytes());
-        // set schema
-        let offset = 4;
-        let bytes = schema.to_bytes();
-        let start = offset;
-        let end = offset + bytes.len();
-        page.borrow_mut().buffer[start..end].copy_from_slice(&bytes);
-        // mark dirty
+        unsafe {
+            let table_page = &mut *(page.borrow_mut().buffer.as_mut_ptr() as *mut TablePage);
+            table_page.reset(&TableMeta {
+                page_id_of_first_slice: slice.page_id(),
+                page_id_of_primary_index: None,
+            });
+            table_page.append(&(), &schema.to_bytes()).unwrap();
+        }
         page.borrow_mut().is_dirty = true;
         Self { schema, bpm, page }
     }
     pub fn set_schema(&mut self, schema: SchemaRef) {
+        let table_page_mut = self.table_page_mut();
+        table_page_mut.remove_at(0).unwrap();
+        table_page_mut.append(&(), &schema.to_bytes()).unwrap();
         self.schema = schema;
-        // set schema
-        let offset = 4;
-        let bytes = self.schema.to_bytes();
-        let start = offset;
-        let end = offset + bytes.len();
-        self.page.borrow_mut().buffer[start..end].copy_from_slice(&bytes);
-        // mark dirty
         self.page.borrow_mut().is_dirty = true;
     }
-    pub fn get_page_id(&self) -> PageID {
+    pub fn page_id(&self) -> PageID {
         self.page.borrow().page_id.unwrap()
     }
-    pub fn get_page_id_of_first_slice(&self) -> Option<PageID> {
-        let page_id =
-            u32::from_le_bytes(self.page.borrow().buffer[0..4].try_into().unwrap()) as usize;
-        if page_id == 0 {
-            None
-        } else {
-            Some(page_id)
-        }
-    }
-    pub fn set_page_id_of_first_slice(&self, page_id: PageID) {
-        self.page.borrow_mut().buffer[0..4].copy_from_slice(&(page_id as u32).to_le_bytes());
-        self.page.borrow_mut().is_dirty = true;
-    }
     pub fn insert(&mut self, datums: Vec<Datum>) -> Result<RecordID, TableError> {
-        let page_id_of_first_slice = self.get_page_id_of_first_slice();
-        let mut slice = if let Some(page_id_of_first_slice) = page_id_of_first_slice {
-            Slice::open(
-                self.bpm.clone(),
-                self.schema.clone(),
-                page_id_of_first_slice,
-            )
-        } else {
-            Slice::new(self.bpm.clone(), self.schema.clone())
-        };
+        let page_id_of_first_slice = self.meta().page_id_of_first_slice;
+        let mut slice = Slice::open(
+            self.bpm.clone(),
+            self.schema.clone(),
+            page_id_of_first_slice,
+        );
         if let Ok(record_id) = slice.insert(&datums) {
             Ok(record_id)
         } else {
             let mut new_slice = Slice::new(self.bpm.clone(), self.schema.clone());
-            self.set_page_id_of_first_slice(new_slice.page_id());
+            self.meta_mut().page_id_of_first_slice = new_slice.page_id();
             new_slice.meta_mut()?.next_page_id = Some(slice.page_id());
             let record_id = new_slice.insert(&datums)?;
             Ok(record_id)
         }
     }
     pub fn iter(&self) -> TableIter {
-        let page_id_of_first_slice = self.get_page_id_of_first_slice();
-        let slice = if let Some(page_id_of_first_slice) = page_id_of_first_slice {
-            Slice::open(
-                self.bpm.clone(),
-                self.schema.clone(),
-                page_id_of_first_slice,
-            )
-        } else {
-            Slice::new(self.bpm.clone(), self.schema.clone())
-        };
+        let page_id_of_first_slice = self.meta().page_id_of_first_slice;
+        let slice = Slice::open(
+            self.bpm.clone(),
+            self.schema.clone(),
+            page_id_of_first_slice,
+        );
         TableIter {
             slice: Some(slice),
             bpm: self.bpm.clone(),
@@ -175,6 +167,14 @@ impl Table {
     pub fn tuple_at(&self, record_id: RecordID) -> Option<Vec<Datum>> {
         let slice = Slice::open(self.bpm.clone(), self.schema.clone(), record_id.0);
         Some(slice.tuple_at(record_id.1).unwrap())
+    }
+    pub fn set_ref_cnt_of(&mut self, record_id: RecordID, cnt: usize) -> Result<(), TableError> {
+        let mut slice = Slice::open(self.bpm.clone(), self.schema.clone(), record_id.0);
+        slice.set_ref_cnt_at(record_id.1, cnt)
+    }
+    pub fn ref_cnt_of(&self, record_id: RecordID) -> Result<usize, TableError> {
+        let slice = Slice::open(self.bpm.clone(), self.schema.clone(), record_id.0);
+        slice.ref_cnt_at(record_id.1)
     }
     pub fn from_slice(slices: Vec<Slice>, schema: SchemaRef, bpm: BufferPoolManagerRef) -> Self {
         let mut table = Table::new(schema, bpm);
@@ -187,7 +187,7 @@ impl Table {
     }
     pub fn into_slice(self) -> Vec<Slice> {
         let mut slices = vec![];
-        let mut page_id = self.get_page_id_of_first_slice();
+        let mut page_id = Some(self.meta().page_id_of_first_slice);
         while page_id.is_some() {
             let slice = Slice::open(self.bpm.clone(), self.schema.clone(), page_id.unwrap());
             let next_page_id = slice.meta().unwrap().next_page_id;
@@ -198,6 +198,9 @@ impl Table {
     }
     pub fn remove(&mut self, record_id: RecordID) -> Result<(), TableError> {
         let mut slice = Slice::open(self.bpm.clone(), self.schema.clone(), record_id.0);
+        if slice.ref_cnt_at(record_id.1)? > 0 {
+            return Err(TableError::RemovingReferedTuple);
+        }
         slice.remove_at(record_id.1)
     }
     pub fn erase(self) {
@@ -233,6 +236,8 @@ pub enum TableError {
     AlreadyDeleted,
     #[error("SlicePage: {0}")]
     SlicePage(#[from] SlottedPageError),
+    #[error("Removing Refered Tuple")]
+    RemovingReferedTuple,
 }
 
 #[cfg(test)]
@@ -248,7 +253,8 @@ mod tests {
         let filename = {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
-            let schema = Schema::from_slice(&[(DataType::new_as_int(false), "v1".to_string())]);
+            let schema =
+                Schema::from_type_and_names(&[(DataType::new_as_int(false), "v1".to_string())]);
             let mut table = Table::new(Rc::new(schema), bpm);
             // insert
             for idx in 0..1000 {
@@ -273,9 +279,10 @@ mod tests {
         let (filename, page_id) = {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
-            let schema = Schema::from_slice(&[(DataType::new_as_varchar(false), "v1".to_string())]);
+            let schema =
+                Schema::from_type_and_names(&[(DataType::new_as_varchar(false), "v1".to_string())]);
             let table = Table::new(Rc::new(schema), bpm);
-            (filename, table.get_page_id())
+            (filename, table.page_id())
         };
         let filename = {
             let bpm = Rc::new(RefCell::new(BufferPoolManager::new_with_name(
@@ -283,7 +290,7 @@ mod tests {
                 filename.clone(),
             )));
             let table = Table::open(page_id, bpm);
-            assert_eq!(table.schema.len(), 1);
+            assert_eq!(table.schema.columns.len(), 1);
             filename
         };
         remove_file(filename).unwrap();

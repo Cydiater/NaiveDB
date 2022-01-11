@@ -43,6 +43,15 @@ impl Div<usize> for Datum {
     }
 }
 
+impl From<Datum> for i32 {
+    fn from(d: Datum) -> i32 {
+        match d {
+            Datum::Int(Some(i)) => i,
+            _ => unreachable!(),
+        }
+    }
+}
+
 impl From<i32> for Datum {
     fn from(i: i32) -> Datum {
         Datum::Int(Some(i))
@@ -185,7 +194,7 @@ impl Datum {
     pub fn tuple_from_bytes_with_schema(bytes: &[u8], schema: &Schema) -> Vec<Datum> {
         let base_offset = bytes.len();
         let mut datums = vec![];
-        for col in schema.iter() {
+        for col in schema.columns.iter() {
             let offset = base_offset - col.offset;
             let datum = if col.data_type.is_inlined() {
                 let start = offset;
@@ -283,7 +292,7 @@ mod tests {
 
     #[test]
     fn test_from_to_bytes_with_schema() {
-        let schema = Schema::from_slice(&[
+        let schema = Schema::from_type_and_names(&[
             (DataType::new_as_int(false), "v1".to_string()),
             (DataType::new_as_varchar(false), "v2".to_string()),
         ]);

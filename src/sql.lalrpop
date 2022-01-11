@@ -142,12 +142,48 @@ pub Statement: Statement = {
 	AddForeignStmt,
     DropTableStmt,
 	DropDatabaseStmt,
+	DropIndexStmt,
+	DropPrimaryStmt,
+	DropForeignStmt,
     DeleteStmt,
 	LoadFromFileStmt,
 	ShowTables,
 }
 
 DropTableStmt: Statement = DROP TABLE <table_name: Identifier> ";" => Statement::DropTable(DropTableStmt { table_name });
+
+DropIndexStmt: Statement = 
+	ALTER TABLE 
+		<table_name: Identifier> 
+	DROP INDEX "(" 
+		<exprs: Exprs> 
+	")" ";" 
+	=> 
+	Statement::DropIndex( DropIndexStmt { 
+		table_name, 
+		exprs, 
+	});
+
+DropForeignStmt: Statement = 
+	ALTER TABLE
+		<table_name: Identifier>
+	DROP FOREIGN KEY "("
+		<column_names: Identifiers>
+	")" ";"
+	=>
+	Statement::DropForeign( DropForeignStmt {
+		table_name,
+		column_names,
+	});
+
+DropPrimaryStmt: Statement =
+	ALTER TABLE
+		<table_name: Identifier>
+	DROP PRIMARY KEY ";"
+	=>
+	Statement::DropPrimary( DropPrimaryStmt {
+		table_name,
+	});
 
 ShowTables: Statement = SHOW TABLES ";" => Statement::ShowTables;
 

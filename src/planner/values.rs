@@ -21,7 +21,7 @@ impl Planner {
             .map(|nodes| {
                 nodes
                     .into_iter()
-                    .zip(schema.iter())
+                    .zip(schema.columns.iter())
                     .map(|(node, col)| {
                         ExprImpl::from_ast(
                             &node,

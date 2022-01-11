@@ -38,8 +38,11 @@ impl Planner {
             .map(|node| {
                 let return_type_hint = if let Some(column_name) = node.ref_what_column() {
                     let schema = &self.catalog.borrow().find_table(table_name).unwrap().schema;
-                    let idx = schema.index_of(&column_name).unwrap();
-                    Some(schema.type_at(idx))
+                    schema
+                        .columns
+                        .iter()
+                        .find(|c| c.desc == column_name)
+                        .map(|c| c.data_type)
                 } else {
                     None
                 };
@@ -84,7 +87,7 @@ impl Planner {
                         .borrow()
                         .find_table(table_name)
                         .unwrap()
-                        .get_page_id(),
+                        .page_id(),
                     index_page_id: index.get_page_id(),
                     with_record_id,
                 }));
