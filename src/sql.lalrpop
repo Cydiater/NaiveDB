@@ -148,6 +148,7 @@ pub Statement: Statement = {
     DeleteStmt,
 	LoadFromFileStmt,
 	ShowTables,
+	UpdateStmt,
 }
 
 DropTableStmt: Statement = DROP TABLE <table_name: Identifier> ";" => Statement::DropTable(DropTableStmt { table_name });
@@ -162,6 +163,21 @@ DropIndexStmt: Statement =
 	Statement::DropIndex( DropIndexStmt { 
 		table_name, 
 		exprs, 
+	});
+
+UpdateStmt: Statement = 
+	UPDATE
+		<table_name: Identifier>
+	SET 
+		<set_exprs: Exprs>
+	WHERE 
+		<where_exprs: Exprs>
+	";"
+	=>
+	Statement::Update( UpdateStmt {
+		table_name,
+		set_exprs,
+		where_exprs,
 	});
 
 DropForeignStmt: Statement = 
@@ -187,7 +203,14 @@ DropPrimaryStmt: Statement =
 
 ShowTables: Statement = SHOW TABLES ";" => Statement::ShowTables;
 
-DropDatabaseStmt: Statement = DROP DATABASE <database_name: Identifier> ";" => Statement::DropDatabase(DropDatabaseStmt { database_name });
+DropDatabaseStmt: Statement = 
+	DROP DATABASE 
+		<database_name: Identifier>
+	";" 
+		=> 
+	Statement::DropDatabase(DropDatabaseStmt { 
+		database_name 
+	});
 
 WhereClauses: Vec<ExprNode> = WHERE <exprs: WhereExprs> => exprs;
 
@@ -294,9 +317,15 @@ DeleteStmt: Statement =
 		where_exprs: where_exprs.unwrap_or_else(|| vec![]),
 	});
 
-DescStmt: Statement = "desc" <table_name: Identifier> ";" => Statement::Desc(DescStmt { table_name });
+DescStmt: Statement = DESC <table_name: Identifier> ";" => Statement::Desc(DescStmt { table_name });
 
-CreateDatabaseStmt: Statement = CREATE DATABASE <database_name: Identifier> ";" => Statement::CreateDatabase(CreateDatabaseStmt { database_name });
+CreateDatabaseStmt: Statement = 
+	CREATE DATABASE 
+		<database_name: Identifier> 
+	";" => 
+	Statement::CreateDatabase(CreateDatabaseStmt { 
+		database_name 
+	});
 
 ShowDatabasesStmt: Statement = SHOW DATABASES ";" => Statement::ShowDatabases;
 
@@ -313,7 +342,8 @@ CreateTableStmt: Statement =
 		=> 
 	Statement::CreateTable(CreateTableStmt { 
 		table_name, 
-	fields });
+		fields,
+	});
 
 InsertStmt: Statement = 
 	INSERT INTO
@@ -543,6 +573,21 @@ INTO = {
 VALUES = {
 	"values",
 	"VALUES",
+};
+
+DESC = {
+	"desc",
+	"DESC",
+};
+
+UPDATE = {
+	"update",
+	"UPDATE",
+};
+
+SET = {
+	"set",
+	"SET",
 };
 
 MaxLength = "(" Real ")";

@@ -48,6 +48,16 @@ impl Engine {
                 plan.schema,
                 self.bpm.clone(),
             ))),
+            Plan::Update(plan) => {
+                let table = self.catalog.borrow().find_table(&plan.table_name)?;
+                let child = self.build(*plan.child)?;
+                Ok(ExecutorImpl::Update(UpdateExecutor::new(
+                    plan.idx_with_values,
+                    table.schema.clone(),
+                    self.bpm.clone(),
+                    child,
+                )))
+            }
             Plan::Insert(plan) => {
                 let child = self.build(*plan.child)?;
                 let table = self.catalog.borrow().find_table(&plan.table_name).unwrap();
