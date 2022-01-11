@@ -33,10 +33,10 @@ pub struct SliceMeta {
     pub next_page_id: Option<PageID>,
 }
 
-type SlicePage = SlottedPage<SliceMeta, ()>;
+type SlicePage = SlottedPage<SliceMeta, usize>;
 
 pub struct TupleIter<'page> {
-    key_data_iter: KeyDataIter<'page, ()>,
+    key_data_iter: KeyDataIter<'page, usize>,
     pub next_page_id: Option<PageID>,
     schema: SchemaRef,
 }
@@ -47,7 +47,7 @@ pub struct SlotIter<'page> {
 
 impl<'page> TupleIter<'page> {
     pub fn new(
-        key_data_iter: KeyDataIter<'page, ()>,
+        key_data_iter: KeyDataIter<'page, usize>,
         next_page_id: Option<PageID>,
         schema: SchemaRef,
     ) -> Self {
@@ -99,7 +99,8 @@ impl Slice {
         header: &str,
         message: &str,
     ) -> Result<Self, TableError> {
-        let schema = Schema::from_slice(&[(DataType::new_as_varchar(false), header.to_owned())]);
+        let schema =
+            Schema::from_type_and_names(&[(DataType::new_as_varchar(false), header.to_owned())]);
         let mut slice = Self::new(bpm, Rc::new(schema));
         slice.insert(&[Datum::VarChar(Some(message.to_owned()))])?;
         Ok(slice)
@@ -110,7 +111,8 @@ impl Slice {
         header: &str,
         cnt: usize,
     ) -> Result<Self, TableError> {
-        let schema = Schema::from_slice(&[(DataType::new_as_int(false), header.to_owned())]);
+        let schema =
+            Schema::from_type_and_names(&[(DataType::new_as_int(false), header.to_owned())]);
         let mut slice = Self::new(bpm, Rc::new(schema));
         slice.insert(&[Datum::Int(Some(cnt as i32))])?;
         Ok(slice)
@@ -158,7 +160,7 @@ impl Slice {
     pub fn insert(&mut self, tuple: &[Datum]) -> Result<(usize, usize), TableError> {
         let page_id = self.page_id();
         let slice_page = self.slice_page_mut();
-        let slot_id = slice_page.insert(&(), &Datum::bytes_from_tuple(tuple))?;
+        let slot_id = slice_page.insert(&0, &Datum::bytes_from_tuple(tuple))?;
         Ok((page_id, slot_id))
     }
 
@@ -201,6 +203,7 @@ impl fmt::Display for Slice {
         let mut table = Table::new();
         let header = self
             .schema
+            .columns
             .iter()
             .map(|c| Cell::new(c.desc.as_str()))
             .collect_vec();
@@ -229,7 +232,7 @@ mod tests {
         let filename = {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
-            let schema = Schema::from_slice(&[
+            let schema = Schema::from_type_and_names(&[
                 (DataType::new_as_int(false), "v1".to_string()),
                 (DataType::new_as_varchar(false), "v2".to_string()),
             ]);
@@ -245,7 +248,7 @@ mod tests {
                 slice.page_id()
             };
             // refetch
-            let schema = Schema::from_slice(&[
+            let schema = Schema::from_type_and_names(&[
                 (DataType::new_as_int(false), "v1".to_string()),
                 (DataType::new_as_varchar(false), "v2".to_string()),
             ]);
@@ -264,7 +267,8 @@ mod tests {
         let filename = {
             let bpm = BufferPoolManager::new_random_shared(100);
             let filename = bpm.borrow().filename();
-            let schema = Schema::from_slice(&[(DataType::new_as_int(false), "v1".to_string())]);
+            let schema =
+                Schema::from_type_and_names(&[(DataType::new_as_int(false), "v1".to_string())]);
             let mut slice = Slice::new(bpm, Rc::new(schema));
             slice.insert(&[Datum::Int(Some(1))]).unwrap();
             slice.insert(&[Datum::Int(Some(2))]).unwrap();
@@ -281,7 +285,7 @@ mod tests {
         let filename = {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
-            let schema = Rc::new(Schema::from_slice(&[
+            let schema = Rc::new(Schema::from_type_and_names(&[
                 (DataType::new_as_int(false), "v1".to_string()),
                 (DataType::new_as_varchar(false), "v2".to_string()),
             ]));

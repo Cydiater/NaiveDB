@@ -4,7 +4,7 @@ use crate::execution::{ExecutionError, Executor};
 use crate::expr::ExprImpl;
 use crate::index::BPTIndex;
 use crate::storage::BufferPoolManagerRef;
-use crate::table::{Schema, SchemaRef, Slice};
+use crate::table::{Schema, SchemaError, SchemaRef, Slice};
 use itertools::Itertools;
 use std::rc::Rc;
 
@@ -99,7 +99,7 @@ impl AddForeignExecutor {
 
 impl Executor for AddPrimaryExecutor {
     fn schema(&self) -> SchemaRef {
-        Rc::new(Schema::from_slice(&[(
+        Rc::new(Schema::from_type_and_names(&[(
             DataType::new_as_varchar(false),
             "Add Primary".to_owned(),
         )]))
@@ -110,11 +110,21 @@ impl Executor for AddPrimaryExecutor {
         }
         let mut table = self.catalog.borrow().find_table(&self.table_name)?;
         let mut schema = (*table.schema).clone();
-        for column_name in self.column_names.clone() {
-            schema.set_primary(&column_name).unwrap()
+        if !schema.primary.is_empty() {
+            return Err(SchemaError::DuplicatedPrimary.into());
         }
+        let primary = self
+            .column_names
+            .iter()
+            .map(|column_name| {
+                schema
+                    .index_by_column_name(&column_name)
+                    .ok_or(SchemaError::ColumnNotFound)
+            })
+            .collect::<Result<_, _>>()?;
+        schema.primary = primary;
         table.set_schema(Rc::new(schema));
-        let exprs = table.schema.primary_as_exprs();
+        let exprs = table.schema.project_by_primary();
         let mut index = BPTIndex::new(self.bpm.clone(), exprs.iter().cloned().collect_vec());
         let slices = table.into_slice();
         for slice in slices {
@@ -139,7 +149,7 @@ impl Executor for AddPrimaryExecutor {
 
 impl Executor for AddUniqueExecutor {
     fn schema(&self) -> SchemaRef {
-        Rc::new(Schema::from_slice(&[(
+        Rc::new(Schema::from_type_and_names(&[(
             DataType::new_as_varchar(false),
             "Add Unique".to_owned(),
         )]))
@@ -150,14 +160,13 @@ impl Executor for AddUniqueExecutor {
         }
         let mut table = self.catalog.borrow().find_table(&self.table_name)?;
         let mut schema = (*table.schema).clone();
-        schema.set_unique(self.unique_set.clone());
+        schema.unique.push(self.unique_set.clone());
+        let exprs = schema.project_by(&self.unique_set);
         table.set_schema(Rc::new(schema));
-        let unique_sets = table.schema.unique_as_exprs();
-        let exprs = unique_sets.last().unwrap();
         let mut index = BPTIndex::new(self.bpm.clone(), exprs.iter().cloned().collect_vec());
         let slices = table.into_slice();
         for slice in slices {
-            let rows = ExprImpl::batch_eval(exprs, Some(&slice));
+            let rows = ExprImpl::batch_eval(&exprs, Some(&slice));
             for (idx, row) in rows.iter().enumerate() {
                 let record_id = (slice.page_id(), idx);
                 index.insert(row, record_id).unwrap();
@@ -166,7 +175,7 @@ impl Executor for AddUniqueExecutor {
         let page_id = index.get_page_id();
         self.catalog.borrow_mut().add_index(
             &self.table_name,
-            Rc::new(Schema::from_exprs(exprs)),
+            Rc::new(Schema::from_exprs(&exprs)),
             page_id,
         )?;
         self.executed = true;
@@ -178,7 +187,7 @@ impl Executor for AddUniqueExecutor {
 
 impl Executor for AddForeignExecutor {
     fn schema(&self) -> SchemaRef {
-        Rc::new(Schema::from_slice(&[(
+        Rc::new(Schema::from_type_and_names(&[(
             DataType::new_as_varchar(false),
             "Add Foreign".to_string(),
         )]))
@@ -191,13 +200,23 @@ impl Executor for AddForeignExecutor {
         let mut table = self.catalog.borrow().find_table(&self.table_name)?;
         let mut schema = (*table.schema).clone();
         let ref_table = self.catalog.borrow().find_table(&self.ref_table_name)?;
-        let page_id_of_ref_table = ref_table.get_page_id();
-        for (column_name, ref_column_name) in self.column_names.iter().zip(&self.ref_column_names) {
-            let idx = ref_table.schema.index_of(ref_column_name).unwrap();
-            schema
-                .set_foreign(column_name, page_id_of_ref_table, idx)
-                .unwrap();
-        }
+        let src_and_dst = self
+            .column_names
+            .iter()
+            .zip(self.ref_column_names.iter())
+            .map(|(c, rc)| {
+                let src_idx = table
+                    .schema
+                    .index_by_column_name(c)
+                    .ok_or(SchemaError::ColumnNotFound)?;
+                let dst_idx = ref_table
+                    .schema
+                    .index_by_column_name(rc)
+                    .ok_or(SchemaError::ColumnNotFound)?;
+                Ok((src_idx, dst_idx))
+            })
+            .collect::<Result<Vec<(_, _)>, SchemaError>>()?;
+        schema.foreign.push((ref_table.get_page_id(), src_and_dst));
         table.set_schema(Rc::new(schema));
         Ok(Some(
             Slice::new_as_message(self.bpm.clone(), "Add Foreign", "Ok").unwrap(),
@@ -224,7 +243,7 @@ impl AddIndexExecutor {
 
 impl Executor for AddIndexExecutor {
     fn schema(&self) -> SchemaRef {
-        Rc::new(Schema::from_slice(&[(
+        Rc::new(Schema::from_type_and_names(&[(
             DataType::new_as_int(false),
             "Number Of Indexed Tuple".to_string(),
         )]))

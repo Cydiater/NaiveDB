@@ -7,7 +7,10 @@ pub use create_database::CreateDatabaseExecutor;
 pub use create_table::CreateTableExecutor;
 pub use delete::DeleteExecutor;
 pub use desc::{DescExecutor, ShowTablesExecutor};
-pub use drop::{DropDatabaseExecutor, DropTableExecutor};
+pub use drop::{
+    DropDatabaseExecutor, DropForeignExecuor, DropIndexExecutor, DropPrimaryExecutor,
+    DropTableExecutor,
+};
 pub use filter::FilterExecutor;
 pub use index_scan::IndexScanExecutor;
 pub use insert::InsertExecutor;
@@ -62,6 +65,9 @@ pub enum ExecutorImpl {
     AddForeign(AddForeignExecutor),
     DropTable(DropTableExecutor),
     DropDatabase(DropDatabaseExecutor),
+    DropPrimary(DropPrimaryExecutor),
+    DropForeign(DropForeignExecuor),
+    DropIndex(DropIndexExecutor),
     Delete(DeleteExecutor),
     NestedLoopJoin(NestedLoopJoinExecutor),
     LoadFromFile(LoadFromFileExecutor),
@@ -88,6 +94,9 @@ impl ExecutorImpl {
             Self::IndexScan(executor) => executor.execute(),
             Self::DropTable(executor) => executor.execute(),
             Self::DropDatabase(executor) => executor.execute(),
+            Self::DropPrimary(executor) => executor.execute(),
+            Self::DropForeign(executor) => executor.execute(),
+            Self::DropIndex(executor) => executor.execute(),
             Self::Delete(executor) => executor.execute(),
             Self::NestedLoopJoin(executor) => executor.execute(),
             Self::LoadFromFile(executor) => executor.execute(),
@@ -114,6 +123,9 @@ impl ExecutorImpl {
             Self::IndexScan(executor) => executor.schema(),
             Self::DropTable(executor) => executor.schema(),
             Self::DropDatabase(executor) => executor.schema(),
+            Self::DropPrimary(executor) => executor.schema(),
+            Self::DropForeign(executor) => executor.schema(),
+            Self::DropIndex(executor) => executor.schema(),
             Self::Delete(executor) => executor.schema(),
             Self::NestedLoopJoin(executor) => executor.schema(),
             Self::LoadFromFile(executor) => executor.schema(),

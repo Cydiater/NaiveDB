@@ -221,6 +221,6 @@ impl Executor for AggExecutor {
                 a => (e.return_type(), format!("{}({})", a.to_string(), e)),
             })
             .collect_vec();
-        Rc::new(Schema::from_slice(&type_and_names))
+        Rc::new(Schema::from_type_and_names(&type_and_names))
     }
 }

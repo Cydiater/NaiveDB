@@ -1,6 +1,6 @@
 use crate::parser::ast::{CreateTableStmt, Field};
 use crate::planner::{Plan, PlanError, Planner};
-use crate::table::Schema;
+use crate::table::{Schema, SchemaError};
 use itertools::Itertools;
 
 #[derive(Debug)]
@@ -19,33 +19,40 @@ impl Planner {
                 _ => None,
             })
             .collect_vec();
-        let mut schema = Schema::from_slice(&slice);
+        let mut schema = Schema::from_type_and_names(&slice);
         // primary field
         let primary = stmt.fields.iter().find(|f| matches!(f, Field::Primary(_)));
         if let Some(Field::Primary(primary)) = primary {
-            for column_name in primary.column_names.iter() {
-                schema.set_primary(column_name).unwrap();
-            }
+            schema.primary = primary
+                .column_names
+                .iter()
+                .map(|column_name| {
+                    schema
+                        .index_by_column_name(column_name)
+                        .ok_or(SchemaError::ColumnNotFound)
+                })
+                .collect::<Result<_, _>>()?;
         }
         // foreign field
         for field in &stmt.fields {
             if let Field::Foreign(foreign) = field {
-                let table = self.catalog.borrow().find_table(&foreign.ref_table_name)?;
+                let ref_table = self.catalog.borrow().find_table(&foreign.ref_table_name)?;
+                let mut vec = vec![];
                 for (column_name, ref_column_name) in foreign
                     .column_names
                     .iter()
                     .zip(foreign.ref_column_names.iter())
                 {
-                    let (idx_of_ref_column, _) = table
+                    let idx = schema
+                        .index_by_column_name(column_name)
+                        .ok_or(SchemaError::ColumnNotFound)?;
+                    let ref_idx = ref_table
                         .schema
-                        .iter()
-                        .enumerate()
-                        .find(|(_, column)| &column.desc == ref_column_name)
-                        .unwrap();
-                    schema
-                        .set_foreign(column_name, table.get_page_id(), idx_of_ref_column)
-                        .unwrap();
+                        .index_by_column_name(&ref_column_name)
+                        .ok_or(SchemaError::ColumnNotFound)?;
+                    vec.push((idx, ref_idx))
                 }
+                schema.foreign.push((ref_table.get_page_id(), vec));
             }
         }
         // unique field
@@ -54,9 +61,13 @@ impl Planner {
                 let unique_set = unique
                     .column_names
                     .iter()
-                    .map(|column_name| schema.index_of(column_name).unwrap())
-                    .collect_vec();
-                schema.set_unique(unique_set);
+                    .map(|column_name| {
+                        schema
+                            .index_by_column_name(column_name)
+                            .ok_or(SchemaError::ColumnNotFound)
+                    })
+                    .collect::<Result<_, _>>()?;
+                schema.unique.push(unique_set);
             }
         }
         Ok(Plan::CreateTable(CreateTablePlan {

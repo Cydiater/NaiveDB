@@ -34,10 +34,10 @@ impl Executor for SeqScanExecutor {
         if !self.with_record_id {
             self.schema.clone()
         } else {
-            let mut type_and_names = self.schema.to_vec();
+            let mut type_and_names = self.schema.to_type_and_names();
             type_and_names.push((DataType::new_as_int(false), "_page_id".to_string()));
             type_and_names.push((DataType::new_as_int(false), "_idx".to_string()));
-            Rc::new(Schema::from_slice(&type_and_names))
+            Rc::new(Schema::from_type_and_names(&type_and_names))
         }
     }
     fn execute(&mut self) -> Result<Option<Slice>, ExecutionError> {

@@ -11,7 +11,7 @@ use thiserror::Error;
 mod schema;
 mod slice;
 
-pub use schema::{Column, ColumnConstraint, Schema, SchemaRef};
+pub use schema::{Column, Schema, SchemaError, SchemaRef};
 pub use slice::{Slice, SlotIter, TupleIter};
 
 ///
@@ -38,6 +38,7 @@ impl fmt::Display for Table {
         let mut table = PrintTable::new();
         let header = self
             .schema
+            .columns
             .iter()
             .map(|c| Cell::new(c.desc.as_str()))
             .collect_vec();
@@ -248,7 +249,8 @@ mod tests {
         let filename = {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
-            let schema = Schema::from_slice(&[(DataType::new_as_int(false), "v1".to_string())]);
+            let schema =
+                Schema::from_type_and_names(&[(DataType::new_as_int(false), "v1".to_string())]);
             let mut table = Table::new(Rc::new(schema), bpm);
             // insert
             for idx in 0..1000 {
@@ -273,7 +275,8 @@ mod tests {
         let (filename, page_id) = {
             let bpm = BufferPoolManager::new_random_shared(5);
             let filename = bpm.borrow().filename();
-            let schema = Schema::from_slice(&[(DataType::new_as_varchar(false), "v1".to_string())]);
+            let schema =
+                Schema::from_type_and_names(&[(DataType::new_as_varchar(false), "v1".to_string())]);
             let table = Table::new(Rc::new(schema), bpm);
             (filename, table.get_page_id())
         };
@@ -283,7 +286,7 @@ mod tests {
                 filename.clone(),
             )));
             let table = Table::open(page_id, bpm);
-            assert_eq!(table.schema.len(), 1);
+            assert_eq!(table.schema.columns.len(), 1);
             filename
         };
         remove_file(filename).unwrap();

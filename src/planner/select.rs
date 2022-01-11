@@ -30,6 +30,7 @@ fn pair_table_name_with_filter(
             let table = catalog.borrow().find_table(table_name).unwrap();
             table
                 .schema
+                .columns
                 .iter()
                 .map(|col| (col.desc.to_owned(), table_name.to_owned()))
                 .collect_vec()
@@ -112,7 +113,7 @@ impl Planner {
             })
             .collect_vec();
         let use_table_name = stmt.table_names.len() > 1;
-        let schema = Rc::new(Schema::from_slice(
+        let schema = Rc::new(Schema::from_type_and_names(
             &stmt
                 .table_names
                 .iter()
@@ -120,7 +121,7 @@ impl Planner {
                     let table = self.catalog.borrow().find_table(table_name).unwrap();
                     table
                         .schema
-                        .to_vec()
+                        .to_type_and_names()
                         .into_iter()
                         .map(|(data_type, column_name)| {
                             if use_table_name {

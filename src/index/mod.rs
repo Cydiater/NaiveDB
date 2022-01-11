@@ -284,8 +284,8 @@ impl BPTIndex {
                         as usize;
                 ExprImpl::ColumnRef(ColumnRefExpr::new(
                     column_idx,
-                    table_schema.type_at(column_idx),
-                    table_schema.column_name_at(column_idx),
+                    table_schema.columns[column_idx].data_type,
+                    table_schema.columns[column_idx].desc.clone(),
                 ))
             })
             .collect_vec();

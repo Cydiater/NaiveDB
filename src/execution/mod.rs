@@ -3,7 +3,7 @@ use crate::datum::Datum;
 use crate::index::{BPTIndex, IndexError};
 use crate::planner::Plan;
 use crate::storage::BufferPoolManagerRef;
-use crate::table::{Table, TableError};
+use crate::table::{SchemaError, Table, TableError};
 use itertools::Itertools;
 use log::info;
 use thiserror::Error;
@@ -189,6 +189,23 @@ impl Engine {
                     self.bpm.clone(),
                 )))
             }
+            Plan::DropForeign(plan) => Ok(ExecutorImpl::DropForeign(DropForeignExecuor::new(
+                plan.table_name,
+                plan.column_idxes,
+                self.catalog.clone(),
+                self.bpm.clone(),
+            ))),
+            Plan::DropPrimary(plan) => Ok(ExecutorImpl::DropPrimary(DropPrimaryExecutor::new(
+                plan.table_name,
+                self.catalog.clone(),
+                self.bpm.clone(),
+            ))),
+            Plan::DropIndex(plan) => Ok(ExecutorImpl::DropIndex(DropIndexExecutor::new(
+                plan.table_name,
+                plan.exprs,
+                self.bpm.clone(),
+                self.catalog.clone(),
+            ))),
             Plan::ShowTables => {
                 if self.catalog.borrow().current_database() == None {
                     return Err(ExecutionError::Catalog(CatalogError::NotUsingDatabase));
@@ -198,7 +215,6 @@ impl Engine {
                     self.catalog.clone(),
                 )))
             }
-            _ => todo!(),
         }
     }
     pub fn new(catalog: CatalogManagerRef, bpm: BufferPoolManagerRef) -> Self {
@@ -221,6 +237,8 @@ pub enum ExecutionError {
     Catalog(#[from] CatalogError),
     #[error("TableError: {0}")]
     Table(#[from] TableError),
+    #[error("SchemaError: {0}")]
+    Schema(#[from] SchemaError),
     #[error("IndexError: {0}")]
     Index(#[from] IndexError),
     #[error("Insert Duplicated Key: {0:?}")]

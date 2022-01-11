@@ -22,14 +22,14 @@ pub enum Statement {
     LoadFromFile(LoadFromFileStmt),
     DropDatabase(DropDatabaseStmt),
     DropIndex(DropIndexStmt),
-    DropForeignKey(DropForeignKeyStmt),
+    DropPrimary(DropPrimaryStmt),
+    DropForeign(DropForeignStmt),
 }
 
-#[allow(dead_code)]
 #[derive(Debug)]
-pub struct DropForeignKeyStmt {
-    table_name: String,
-    column_names: Vec<String>,
+pub struct DropForeignStmt {
+    pub table_name: String,
+    pub column_names: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -78,7 +78,12 @@ pub struct DropTableStmt {
 #[derive(Debug)]
 pub struct DropIndexStmt {
     pub table_name: String,
-    pub column_names: Vec<String>,
+    pub exprs: Vec<ExprNode>,
+}
+
+#[derive(Debug)]
+pub struct DropPrimaryStmt {
+    pub table_name: String,
 }
 
 #[derive(Debug, Clone)]
