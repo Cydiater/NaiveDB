@@ -9,6 +9,8 @@ pub enum BinaryOp {
     Equal,
     LessThan,
     GreaterThan,
+    LessThanOrEqual,
+    GreaterThanOrEqual,
 }
 
 impl BinaryOp {
@@ -28,8 +30,22 @@ impl BinaryOp {
                     Datum::Bool(Some(false))
                 }
             },
+            Self::LessThanOrEqual => |l, r| {
+                if l <= r {
+                    Datum::Bool(Some(true))
+                } else {
+                    Datum::Bool(Some(false))
+                }
+            },
             Self::GreaterThan => |l, r| {
                 if l > r {
+                    Datum::Bool(Some(true))
+                } else {
+                    Datum::Bool(Some(false))
+                }
+            },
+            Self::GreaterThanOrEqual => |l, r| {
+                if l >= r {
                     Datum::Bool(Some(true))
                 } else {
                     Datum::Bool(Some(false))
@@ -46,7 +62,9 @@ impl fmt::Display for BinaryExpr {
         match self.op {
             BinaryOp::Equal => write!(f, "{} = {}", lhs, rhs),
             BinaryOp::LessThan => write!(f, "{} < {}", lhs, rhs),
+            BinaryOp::LessThanOrEqual => write!(f, "{} <= {}", lhs, rhs),
             BinaryOp::GreaterThan => write!(f, "{} > {}", lhs, rhs),
+            BinaryOp::GreaterThanOrEqual => write!(f, "{} >= {}", lhs, rhs),
         }
     }
 }
@@ -77,8 +95,8 @@ impl BinaryExpr {
             };
             match self.op {
                 BinaryOp::Equal => (Some(datum.clone()), Some(datum)),
-                BinaryOp::LessThan => (None, Some(datum)),
-                BinaryOp::GreaterThan => (Some(datum), None),
+                BinaryOp::LessThan | BinaryOp::LessThanOrEqual => (None, Some(datum)),
+                BinaryOp::GreaterThan | BinaryOp::GreaterThanOrEqual => (Some(datum), None),
             }
         } else if expr == self.rhs.as_ref() {
             let datum = if let ExprImpl::Constant(c) = self.lhs.as_ref() {
@@ -88,8 +106,8 @@ impl BinaryExpr {
             };
             match self.op {
                 BinaryOp::Equal => (Some(datum.clone()), Some(datum)),
-                BinaryOp::LessThan => (Some(datum), None),
-                BinaryOp::GreaterThan => (None, Some(datum)),
+                BinaryOp::LessThan | BinaryOp::LessThanOrEqual => (Some(datum), None),
+                BinaryOp::GreaterThan | BinaryOp::GreaterThanOrEqual => (None, Some(datum)),
             }
         } else {
             (None, None)
@@ -111,9 +129,11 @@ impl Expr for BinaryExpr {
     }
     fn return_type(&self) -> DataType {
         match self.op {
-            BinaryOp::Equal | BinaryOp::LessThan | BinaryOp::GreaterThan => {
-                DataType::new_as_bool(false)
-            }
+            BinaryOp::Equal
+            | BinaryOp::LessThan
+            | BinaryOp::GreaterThan
+            | BinaryOp::LessThanOrEqual
+            | BinaryOp::GreaterThanOrEqual => DataType::new_as_bool(false),
         }
     }
 }

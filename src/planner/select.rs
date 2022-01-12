@@ -2,7 +2,7 @@ use crate::catalog::CatalogManagerRef;
 use crate::expr::ExprImpl;
 use crate::parser::ast::{ColumnRefExprNode, ExprNode, SelectStmt, Selectors};
 use crate::planner::{Plan, PlanError, Planner};
-use crate::table::Schema;
+use crate::table::{SchemaError, Schema};
 use itertools::Itertools;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -64,8 +64,7 @@ fn pair_table_name_with_filter(
                         .unwrap_or_else(|| &column_to_table[&column_ref.column_name]);
                     let (_, exprs) = table_name_with_exprs
                         .iter_mut()
-                        .find(|(name, _)| name == table_name)
-                        .unwrap();
+                        .find(|(name, _)| name == table_name).ok_or(SchemaError::ColumnNotFound)?;
                     exprs.push(ExprNode::Binary(expr));
                 }
                 _ => todo!(),
@@ -139,15 +138,19 @@ impl Planner {
         let filter_plan = self.plan_filter(&schema, &overall, join_plan);
         match stmt.selectors {
             Selectors::Exprs(exprs) => {
-                let exprs = exprs
+                let exprs: Vec<_> = exprs
                     .into_iter()
                     .map(|node| {
                         let node = match node {
                             ExprNode::ColumnRef(cr) => {
-                                if let Some(table_name) = cr.table_name {
+                                if use_table_name {
                                     ExprNode::ColumnRef(ColumnRefExprNode {
-                                        table_name: None,
-                                        column_name: format!("{}.{}", table_name, cr.column_name),
+                                        table_name: cr.table_name.clone(),
+                                        column_name: format!(
+                                            "{}.{}",
+                                            cr.table_name.unwrap(),
+                                            cr.column_name
+                                        ),
                                     })
                                 } else {
                                     ExprNode::ColumnRef(cr)
@@ -155,9 +158,9 @@ impl Planner {
                             }
                             node => node,
                         };
-                        ExprImpl::from_ast(&node, self.catalog.clone(), &schema, None).unwrap()
+                        ExprImpl::from_ast(&node, self.catalog.clone(), &schema, None)
                     })
-                    .collect_vec();
+                    .collect::<Result<_, _>>()?;
                 Ok(Plan::Project(ProjectPlan {
                     exprs,
                     child: Box::new(filter_plan),

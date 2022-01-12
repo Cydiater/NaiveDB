@@ -248,6 +248,8 @@ pub enum SchemaError {
     DuplicatedPrimary,
     #[error("Primary Not Found")]
     PrimaryNotFound,
+    #[error("Not Match")]
+    NotMatch,
 }
 
 #[cfg(test)]

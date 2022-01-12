@@ -1,4 +1,5 @@
 use crate::catalog::{CatalogError, CatalogManagerRef};
+use crate::expr::ExprError;
 use crate::parser::ast::Statement;
 use crate::table::SchemaError;
 use log::info;
@@ -109,6 +110,8 @@ pub enum PlanError {
     Catalog(#[from] CatalogError),
     #[error("SchemaError: {0}")]
     Schema(#[from] SchemaError),
+    #[error("ExprError: {0}")]
+    Expr(#[from] ExprError),
 }
 
 #[cfg(test)]
