@@ -108,12 +108,12 @@ impl Executor for AddPrimaryExecutor {
         if self.executed {
             return Ok(None);
         }
-        let mut table = self.catalog.borrow().find_table(&self.table_name)?;
+        let table = self.catalog.borrow().find_table(&self.table_name)?;
         let mut schema = (*table.schema).clone();
         if !schema.primary.is_empty() {
             return Err(SchemaError::DuplicatedPrimary.into());
         }
-        let primary = self
+        let primary: Vec<_> = self
             .column_names
             .iter()
             .map(|column_name| {
@@ -122,11 +122,9 @@ impl Executor for AddPrimaryExecutor {
                     .ok_or(SchemaError::ColumnNotFound)
             })
             .collect::<Result<_, _>>()?;
+        let exprs = table.schema.project_by(&primary);
         schema.primary = primary;
-        table.set_schema(Rc::new(schema));
-        let exprs = table.schema.project_by_primary();
         let mut index = BPTIndex::new(self.bpm.clone(), exprs.iter().cloned().collect_vec());
-        table.meta_mut().page_id_of_primary_index = Some(index.get_page_id());
         let slices = table.into_slice();
         for slice in slices {
             let rows = ExprImpl::batch_eval(&exprs, Some(&slice));
@@ -135,6 +133,9 @@ impl Executor for AddPrimaryExecutor {
                 index.insert(row, record_id)?;
             }
         }
+        let mut table = self.catalog.borrow().find_table(&self.table_name)?;
+        table.meta_mut().page_id_of_primary_index = Some(index.get_page_id());
+        table.set_schema(Rc::new(schema));
         let page_id = index.get_page_id();
         self.catalog.borrow_mut().add_index(
             &self.table_name,

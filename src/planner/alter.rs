@@ -2,7 +2,6 @@ use crate::catalog::CatalogError;
 use crate::expr::ExprImpl;
 use crate::parser::ast::{AddForeignStmt, AddIndexStmt, AddPrimaryStmt, AddUniqueStmt};
 use crate::planner::{Plan, PlanError, Planner};
-use itertools::Itertools;
 
 #[derive(Debug)]
 pub struct AddIndexPlan {
@@ -33,14 +32,13 @@ pub struct AddForeignPlan {
 impl Planner {
     pub fn plan_add_index(&self, stmt: AddIndexStmt) -> Result<Plan, PlanError> {
         let table = self.catalog.borrow().find_table(&stmt.table_name).unwrap();
-        let exprs = stmt
+        let exprs: Vec<_> = stmt
             .exprs
             .into_iter()
             .map(|node| {
                 ExprImpl::from_ast(&node, self.catalog.clone(), table.schema.as_ref(), None)
-                    .unwrap()
             })
-            .collect_vec();
+            .collect::<Result<_, _>>()?;
         Ok(Plan::AddIndex(AddIndexPlan {
             table_name: stmt.table_name,
             exprs,
