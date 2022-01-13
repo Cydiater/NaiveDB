@@ -50,7 +50,7 @@ impl Executor for CreateTableExecutor {
                 .find_table(&self.table_name)
                 .is_ok()
             {
-                return Err(ExecutionError::Catalog(CatalogError::Duplicated).into());
+                return Err(ExecutionError::Catalog(CatalogError::Duplicated));
             }
             self.catalog
                 .borrow_mut()

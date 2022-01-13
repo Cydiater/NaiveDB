@@ -227,6 +227,10 @@ mod tests {
                 .unwrap();
             db.run("insert into t values (1), (2), (3);").unwrap();
             assert!(db.run("insert into t values (1);").is_err());
+            db.run("drop table t;").unwrap();
+            db.run("create table t (v1 int);").unwrap();
+            db.run("alter table t add primary key (v1);").unwrap();
+            db.run("desc t;").unwrap();
             filename
         };
         remove_file(filename).unwrap();

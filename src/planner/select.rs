@@ -2,7 +2,7 @@ use crate::catalog::CatalogManagerRef;
 use crate::expr::ExprImpl;
 use crate::parser::ast::{ColumnRefExprNode, ExprNode, SelectStmt, Selectors};
 use crate::planner::{Plan, PlanError, Planner};
-use crate::table::{SchemaError, Schema};
+use crate::table::{Schema, SchemaError};
 use itertools::Itertools;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -64,7 +64,8 @@ fn pair_table_name_with_filter(
                         .unwrap_or_else(|| &column_to_table[&column_ref.column_name]);
                     let (_, exprs) = table_name_with_exprs
                         .iter_mut()
-                        .find(|(name, _)| name == table_name).ok_or(SchemaError::ColumnNotFound)?;
+                        .find(|(name, _)| name == table_name)
+                        .ok_or(SchemaError::ColumnNotFound)?;
                     exprs.push(ExprNode::Binary(expr));
                 }
                 _ => todo!(),

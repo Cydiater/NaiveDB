@@ -125,11 +125,13 @@ impl Table {
         Self { schema, bpm, page }
     }
     pub fn set_schema(&mut self, schema: SchemaRef) {
+        self.page.borrow_mut().is_dirty = true;
         let table_page_mut = self.table_page_mut();
         table_page_mut.remove_at(0).unwrap();
-        table_page_mut.append(&(), &schema.to_bytes()).unwrap();
+        table_page_mut
+            .insert_at(0, &(), &schema.to_bytes())
+            .unwrap();
         self.schema = schema;
-        self.page.borrow_mut().is_dirty = true;
     }
     pub fn page_id(&self) -> PageID {
         self.page.borrow().page_id.unwrap()
