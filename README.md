@@ -1,6 +1,7 @@
 # NaiveDB 设计报告
 
-[TOC]
+[![Rust](https://github.com/Cydiater/NaiveDB/actions/workflows/build.yml/badge.svg)](https://github.com/Cydiater/NaiveDB/actions/workflows/build.yml)
+[![codecov](https://codecov.io/gh/Cydiater/NaiveDB/branch/master/graph/badge.svg?token=KQCQG19VDD)](https://codecov.io/gh/Cydiater/NaiveDB)
 
 ## 快速开始
 
